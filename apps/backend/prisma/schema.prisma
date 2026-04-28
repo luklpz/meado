@@ -1,0 +1,36 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id        String       @id @default(cuid())
+  username  String       @unique
+  avatar    String       @default("default")
+  lastPos   Json?
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+  rooms     RoomMember[]
+}
+
+model Room {
+  id        String       @id @default(cuid())
+  name      String
+  slug      String       @unique
+  createdAt DateTime     @default(now())
+  members   RoomMember[]
+}
+
+model RoomMember {
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId   String
+  room     Room     @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  roomId   String
+  joinedAt DateTime @default(now())
+
+  @@id([userId, roomId])
+}

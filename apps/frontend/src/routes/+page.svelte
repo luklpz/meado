@@ -1,60 +1,71 @@
 <script lang="ts">
-	import welcomeFallback from '$lib/images/svelte-welcome.png';
-	import welcome from '$lib/images/svelte-welcome.webp';
+	import PhaserGame from '$lib/game/PhaserGame.svelte';
+	import { socketStore } from '$lib/socket.js';
 
-	import Counter from './Counter.svelte';
+	const { connected } = socketStore;
 </script>
 
 <svelte:head>
-	<title>Home</title>
-	<meta name="description" content="Svelte demo app" />
+	<title>Meado</title>
 </svelte:head>
 
-<section>
-	<h1>
-		<span class="welcome">
-			<picture>
-				<source srcset={welcome} type="image/webp" />
-				<img src={welcomeFallback} alt="Welcome" />
-			</picture>
+<div class="page">
+	<header class="hud">
+		<span class="logo">meado</span>
+		<span class="status" class:online={$connected}>
+			{$connected ? '● connected' : '○ connecting…'}
 		</span>
+	</header>
 
-		to your new<br />SvelteKit app
-	</h1>
+	<main class="canvas-wrap">
+		<PhaserGame />
+	</main>
 
-	<h2>
-		try editing <strong>src/routes/+page.svelte</strong>
-	</h2>
-
-	<Counter />
-</section>
+	<footer class="controls-hint">
+		WASD / ↑↓←→ to move
+	</footer>
+</div>
 
 <style>
-	section {
+	.page {
 		display: flex;
 		flex-direction: column;
-		justify-content: center;
 		align-items: center;
-		flex: 0.6;
+		gap: 0.75rem;
+		padding: 1rem;
+		min-height: 100vh;
+		background: #050d07;
+		color: #d1fae5;
+		font-family: monospace;
 	}
 
-	h1 {
-		width: 100%;
+	.hud {
+		display: flex;
+		width: 800px;
+		justify-content: space-between;
+		align-items: center;
 	}
 
-	.welcome {
-		display: block;
-		position: relative;
-		width: 100%;
-		height: 0;
-		padding: 0 0 calc(100% * 495 / 2048) 0;
+	.logo {
+		font-size: 1.25rem;
+		font-weight: 700;
+		letter-spacing: 0.15em;
+		color: #22c55e;
 	}
 
-	.welcome img {
-		position: absolute;
-		width: 100%;
-		height: 100%;
-		top: 0;
-		display: block;
+	.status {
+		font-size: 0.75rem;
+		color: #6b7280;
+		transition: color 0.3s;
+	}
+
+	.status.online {
+		color: #22c55e;
+	}
+
+	.controls-hint {
+		font-size: 0.7rem;
+		color: #374151;
+		letter-spacing: 0.1em;
 	}
 </style>
