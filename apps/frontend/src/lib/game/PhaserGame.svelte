@@ -29,7 +29,6 @@
 				);
 				const { token } = await res.json();
 				livekitRoom = await livekitStore.connect(LIVEKIT_URL, token);
-				await livekitStore.enableMic();
 			} catch (e) {
 				console.error('LiveKit connection failed:', e);
 			}
