@@ -1,10 +1,12 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
 	import { socketStore } from '$lib/socket.js';
+	import { livekitStore } from '$lib/livekit.js';
 
 	const CANVAS_W = 800;
 	const CANVAS_H = 600;
 	const BACKEND_URL = import.meta.env.VITE_BACKEND_URL ?? 'http://localhost:3000';
+	const LIVEKIT_URL = import.meta.env.VITE_LIVEKIT_URL ?? '';
 	const ROOM_ID = 'main';
 	const USERNAME = `Guest_${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
 
@@ -18,6 +20,21 @@
 		]);
 
 		const socket = socketStore.connect(BACKEND_URL);
+
+		let livekitRoom: import('livekit-client').Room | undefined;
+		if (LIVEKIT_URL) {
+			try {
+				const res = await fetch(
+					`${BACKEND_URL}/rooms/${ROOM_ID}/livekit-token?username=${USERNAME}`
+				);
+				const { token } = await res.json();
+				livekitRoom = await livekitStore.connect(LIVEKIT_URL, token);
+				await livekitStore.enableMic();
+			} catch (e) {
+				console.error('LiveKit connection failed:', e);
+			}
+		}
+
 		const SceneClass = createGameScene(Phaser, socket, {
 			canvasW: CANVAS_W,
 			canvasH: CANVAS_H,
@@ -25,7 +42,9 @@
 			username: USERNAME,
 			emitIntervalMs: 50,
 			lerpStiffness: 0.001,
-			playerSpeed: 200
+			playerSpeed: 200,
+			livekitRoom,
+			proximityRadius: 200
 		});
 
 		game = new Phaser.Game({
@@ -40,6 +59,7 @@
 
 	onDestroy(() => {
 		socketStore.disconnect();
+		livekitStore.disconnect();
 		game?.destroy(true);
 	});
 </script>

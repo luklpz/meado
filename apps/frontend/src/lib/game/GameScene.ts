@@ -1,4 +1,5 @@
 import type { GameSocket } from '$lib/socket.js';
+import type { Room } from 'livekit-client';
 
 export interface SceneConfig {
 	canvasW: number;
@@ -8,15 +9,24 @@ export interface SceneConfig {
 	emitIntervalMs: number;
 	lerpStiffness: number;
 	playerSpeed: number;
+	livekitRoom?: Room;
+	proximityRadius?: number;
 }
 
 type PhaserType = typeof import('phaser');
 
-// Returns a Phaser.Scene subclass, accepting the Phaser module at runtime
-// so the factory can live at module-level without a top-level Phaser import
-// (which would fail during SSR).
 export function createGameScene(Phaser: PhaserType, socket: GameSocket, cfg: SceneConfig) {
-	const { canvasW, canvasH, roomId, username, emitIntervalMs, lerpStiffness, playerSpeed } = cfg;
+	const {
+		canvasW,
+		canvasH,
+		roomId,
+		username,
+		emitIntervalMs,
+		lerpStiffness,
+		playerSpeed,
+		livekitRoom,
+		proximityRadius = 200,
+	} = cfg;
 
 	return class GameScene extends Phaser.Scene {
 		private local!: Phaser.GameObjects.Rectangle;
@@ -32,6 +42,7 @@ export function createGameScene(Phaser: PhaserType, socket: GameSocket, cfg: Sce
 				label: Phaser.GameObjects.Text;
 				targetX: number;
 				targetY: number;
+				username: string;
 			}
 		>();
 
@@ -89,12 +100,33 @@ export function createGameScene(Phaser: PhaserType, socket: GameSocket, cfg: Sce
 				this.lastEmit = time;
 			}
 
-			// Exponential lerp — approaches target faster at start, gentler at end
 			const alpha = 1 - Math.pow(lerpStiffness, dt);
 			for (const r of this.remote.values()) {
 				r.sprite.x = Phaser.Math.Linear(r.sprite.x, r.targetX, alpha);
 				r.sprite.y = Phaser.Math.Linear(r.sprite.y, r.targetY, alpha);
 				r.label.setPosition(r.sprite.x, r.sprite.y - 26);
+			}
+
+			this.updateProximityVolumes();
+		}
+
+		private updateProximityVolumes() {
+			if (!livekitRoom) return;
+			for (const r of this.remote.values()) {
+				const dist = Phaser.Math.Distance.Between(
+					this.local.x,
+					this.local.y,
+					r.sprite.x,
+					r.sprite.y
+				);
+				const vol = Math.max(0, 1 - dist / proximityRadius);
+				for (const participant of livekitRoom.remoteParticipants.values()) {
+					if (participant.identity === r.username) {
+						for (const pub of participant.audioTrackPublications.values()) {
+							(pub.track as { setVolume?: (v: number) => void } | undefined)?.setVolume?.(vol);
+						}
+					}
+				}
 			}
 		}
 
@@ -116,7 +148,7 @@ export function createGameScene(Phaser: PhaserType, socket: GameSocket, cfg: Sce
 					strokeThickness: 2
 				})
 				.setOrigin(0.5);
-			this.remote.set(id, { sprite, label, targetX: x, targetY: y });
+			this.remote.set(id, { sprite, label, targetX: x, targetY: y, username: name });
 		}
 
 		private despawnRemote(id: string) {
