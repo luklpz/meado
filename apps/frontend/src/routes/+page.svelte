@@ -4,7 +4,7 @@
 	import { livekitStore } from '$lib/livekit.js';
 
 	const { connected } = socketStore;
-	const { micEnabled, status: livekitStatus, errorMessage, audioLevel, micDevices, selectedDeviceId, canPlayAudio, diagnostics, toggleMic, selectDevice, startAudio } =
+	const { micEnabled, status: livekitStatus, errorMessage, audioLevel, micDevices, selectedDeviceId, canPlayAudio, diagnostics, micGain, toggleMic, selectDevice, startAudio, setGain } =
 		livekitStore;
 
 	function playBeep() {
@@ -54,6 +54,20 @@
 							<div class="vu-bar" style="width: {Math.round($audioLevel * 100)}%"></div>
 						</div>
 					{/if}
+
+					<label class="gain-label" title="ganancia del micrófono">
+						gain
+						<input
+							type="range"
+							min="0"
+							max="3"
+							step="0.05"
+							value={$micGain}
+							oninput={(e) => setGain(Number(e.currentTarget.value))}
+							class="gain-slider"
+						/>
+						{$micGain.toFixed(1)}x
+					</label>
 
 					<button class="mic-btn" class:muted={!$micEnabled} onclick={toggleMic}>
 						{$micEnabled ? 'mic on' : 'mic off'}
@@ -163,6 +177,21 @@
 		border-radius: 4px;
 		transition: width 0.05s linear;
 		max-width: 100%;
+	}
+
+	.gain-label {
+		display: flex;
+		align-items: center;
+		gap: 0.35rem;
+		font-size: 0.7rem;
+		color: #4b5563;
+		white-space: nowrap;
+	}
+
+	.gain-slider {
+		width: 70px;
+		accent-color: #22c55e;
+		cursor: pointer;
 	}
 
 	.mic-btn {

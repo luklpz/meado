@@ -137,7 +137,11 @@ export function createGameScene(Phaser: PhaserType, socket: GameSocket, cfg: Sce
 				for (const participant of livekitRoom.remoteParticipants.values()) {
 					if (participant.identity === r.username) {
 						for (const pub of participant.audioTrackPublications.values()) {
-							(pub.track as { setVolume?: (v: number) => void } | undefined)?.setVolume?.(vol);
+							const track = pub.track as any;
+							if (!track) continue;
+							track.setVolume?.(vol);
+							(track.attachedElements as HTMLMediaElement[] | undefined)
+								?.forEach((el) => { el.muted = false; el.volume = vol; });
 						}
 					}
 				}

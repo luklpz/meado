@@ -17,35 +17,31 @@ function createLiveKitStore() {
 	const selectedDeviceId = writable('');
 	const canPlayAudio = writable(false);
 	const diagnostics = writable('');
+	const micGain = writable(1); // 0–3
 
 	let _room: Room | null = null;
 	let _audioCtx: AudioContext | null = null;
+	let _gainNode: GainNode | null = null;
+	let _rawStream: MediaStream | null = null;
 	let _rafId: number | null = null;
 
 	async function connect(url: string, token: string): Promise<Room> {
 		status.set('connecting');
-		const { Room: LiveKitRoom } = await import('livekit-client');
+		const { Room: LiveKitRoom, RoomEvent } = await import('livekit-client');
 		const room = new LiveKitRoom({ adaptiveStream: true, dynacast: true });
 		await room.connect(url, token);
 		_room = room;
 		status.set('connected');
 		canPlayAudio.set(room.canPlaybackAudio);
-		const { RoomEvent } = await import('livekit-client');
 
 		const updateDiag = () => {
 			let tracks = 0;
 			room.remoteParticipants.forEach((p) => {
 				p.audioTrackPublications.forEach((pub) => { if (pub.track) tracks++; });
 			});
-			diagnostics.set(
-				`lk remote:${room.remoteParticipants.size} audio:${tracks} canPlay:${room.canPlaybackAudio}`
-			);
+			diagnostics.set(`lk remote:${room.remoteParticipants.size} audio:${tracks} canPlay:${room.canPlaybackAudio}`);
 		};
-
-		room.on(RoomEvent.AudioPlaybackStatusChanged, () => {
-			canPlayAudio.set(room.canPlaybackAudio);
-			updateDiag();
-		});
+		room.on(RoomEvent.AudioPlaybackStatusChanged, () => { canPlayAudio.set(room.canPlaybackAudio); updateDiag(); });
 		room.on(RoomEvent.ParticipantConnected, updateDiag);
 		room.on(RoomEvent.ParticipantDisconnected, updateDiag);
 		room.on(RoomEvent.TrackSubscribed, updateDiag);
@@ -64,9 +60,7 @@ function createLiveKitStore() {
 				.filter((d) => d.kind === 'audioinput')
 				.map((d, i) => ({ deviceId: d.deviceId, label: d.label || `Micrófono ${i + 1}` }));
 			micDevices.set(inputs);
-			if (inputs.length > 0 && !get(selectedDeviceId)) {
-				selectedDeviceId.set(inputs[0].deviceId);
-			}
+			if (inputs.length > 0 && !get(selectedDeviceId)) selectedDeviceId.set(inputs[0].deviceId);
 		} catch { /* ignore */ }
 	}
 
@@ -79,38 +73,34 @@ function createLiveKitStore() {
 	async function toggleMic(): Promise<void> {
 		if (!_room) { errorMessage.set('LiveKit no conectado'); return; }
 		await startAudio();
-
 		const next = !get(micEnabled);
 		if (next) await _enableMic(); else await _disableMic();
 		micEnabled.set(next);
 	}
 
 	async function _enableMic(): Promise<void> {
+		const { Track } = await import('livekit-client');
 		const deviceId = get(selectedDeviceId);
-		const pub = await _room!.localParticipant.setMicrophoneEnabled(
-			true,
-			deviceId ? { deviceId: { exact: deviceId } } : undefined
-		);
-		// Re-enumerate with labels now that permission is granted
-		await enumerateDevices();
-		// VU meter sobre el track publicado (lectura, no afecta lo publicado)
-		const mst = (pub?.track as any)?.mediaStreamTrack as MediaStreamTrack | undefined;
-		if (mst) _startVuMeter(mst);
-	}
 
-	async function _disableMic(): Promise<void> {
-		_stopVuMeter();
-		await _room!.localParticipant.setMicrophoneEnabled(false);
-	}
-
-	function _startVuMeter(mst: MediaStreamTrack): void {
-		_stopVuMeter();
 		_audioCtx = new AudioContext();
-		const source = _audioCtx.createMediaStreamSource(new MediaStream([mst]));
+		_rawStream = await navigator.mediaDevices.getUserMedia({
+			audio: deviceId ? { deviceId: { exact: deviceId } } : true,
+			video: false,
+		});
+
+		const source = _audioCtx.createMediaStreamSource(_rawStream);
+		_gainNode = _audioCtx.createGain();
+		_gainNode.gain.value = get(micGain);
+
 		const analyser = _audioCtx.createAnalyser();
 		analyser.fftSize = 256;
 		const data = new Uint8Array(analyser.frequencyBinCount);
-		source.connect(analyser);
+
+		const dest = _audioCtx.createMediaStreamDestination();
+		source.connect(_gainNode);
+		_gainNode.connect(dest);
+		_gainNode.connect(analyser);
+
 		const tick = () => {
 			analyser.getByteFrequencyData(data);
 			const avg = data.reduce((a, b) => a + b, 0) / data.length / 255;
@@ -118,25 +108,40 @@ function createLiveKitStore() {
 			_rafId = requestAnimationFrame(tick);
 		};
 		_rafId = requestAnimationFrame(tick);
+
+		await _room!.localParticipant.publishTrack(dest.stream.getAudioTracks()[0], {
+			source: Track.Source.Microphone,
+		});
+
+		await enumerateDevices();
 	}
 
-	function _stopVuMeter(): void {
+	async function _disableMic(): Promise<void> {
 		if (_rafId) { cancelAnimationFrame(_rafId); _rafId = null; }
+		audioLevel.set(0);
+
+		const { Track } = await import('livekit-client');
+		const pub = _room!.localParticipant.getTrackPublication(Track.Source.Microphone);
+		const mst = (pub?.track as any)?.mediaStreamTrack as MediaStreamTrack | undefined;
+		if (mst) await _room!.localParticipant.unpublishTrack(mst);
+
+		_rawStream?.getTracks().forEach((t) => t.stop());
+		_rawStream = null;
 		_audioCtx?.close();
 		_audioCtx = null;
-		audioLevel.set(0);
+		_gainNode = null;
+	}
+
+	function setGain(value: number): void {
+		micGain.set(value);
+		if (_gainNode) _gainNode.gain.value = value;
 	}
 
 	async function selectDevice(deviceId: string): Promise<void> {
 		selectedDeviceId.set(deviceId);
 		if (get(micEnabled) && _room) {
-			_stopVuMeter();
-			await _room.switchActiveDevice('audioinput', deviceId);
-			// Re-enganchamos el VU meter al nuevo track
-			const { Track } = await import('livekit-client');
-			const pub = _room.localParticipant.getTrackPublication(Track.Source.Microphone);
-			const mst = (pub?.track as any)?.mediaStreamTrack as MediaStreamTrack | undefined;
-			if (mst) _startVuMeter(mst);
+			await _disableMic();
+			await _enableMic();
 		}
 	}
 
@@ -146,17 +151,25 @@ function createLiveKitStore() {
 	}
 
 	function disconnect(): void {
-		_stopVuMeter();
+		if (_rafId) cancelAnimationFrame(_rafId);
+		_rawStream?.getTracks().forEach((t) => t.stop());
+		_audioCtx?.close();
 		_room?.disconnect();
 		_room = null;
+		_audioCtx = null;
+		_gainNode = null;
+		_rawStream = null;
+		_rafId = null;
 		micEnabled.set(false);
+		audioLevel.set(0);
 		status.set('idle');
 		errorMessage.set('');
 	}
 
 	return {
-		micEnabled, status, errorMessage, audioLevel, micDevices, selectedDeviceId, canPlayAudio, diagnostics,
-		connect, enumerateDevices, startAudio, toggleMic, selectDevice, setError, disconnect,
+		micEnabled, status, errorMessage, audioLevel, micDevices, selectedDeviceId,
+		canPlayAudio, diagnostics, micGain,
+		connect, enumerateDevices, startAudio, toggleMic, setGain, selectDevice, setError, disconnect,
 	};
 }
 
