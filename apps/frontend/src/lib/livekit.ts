@@ -17,29 +17,49 @@ function createLiveKitStore() {
 	const selectedDeviceId = writable('');
 	const canPlayAudio = writable(false);
 	const diagnostics = writable('');
-	const micGain = writable(1); // 0–3
+	const micGain = writable(1);
 
 	let _room: Room | null = null;
 	let _audioCtx: AudioContext | null = null;
 	let _gainNode: GainNode | null = null;
 	let _rawStream: MediaStream | null = null;
 	let _rafId: number | null = null;
+	let _audioEls: HTMLAudioElement[] = [];
 
 	async function connect(url: string, token: string): Promise<Room> {
 		status.set('connecting');
-		const { Room: LiveKitRoom, RoomEvent } = await import('livekit-client');
-		const room = new LiveKitRoom({ adaptiveStream: true, dynacast: true });
+		const { Room: LiveKitRoom, RoomEvent, Track } = await import('livekit-client');
+
+		// adaptiveStream pauses tracks on hidden elements — disable it
+		const room = new LiveKitRoom({ dynacast: true, adaptiveStream: false });
 		await room.connect(url, token);
 		_room = room;
 		status.set('connected');
 		canPlayAudio.set(room.canPlaybackAudio);
+
+		// Attach incoming audio tracks to DOM <audio> elements so they play
+		room.on(RoomEvent.TrackSubscribed, (track) => {
+			if (track.kind !== Track.Kind.Audio) return;
+			const el = track.attach() as HTMLAudioElement;
+			el.volume = 0; // proximity system controls volume each frame
+			el.style.display = 'none';
+			document.body.appendChild(el);
+			_audioEls.push(el);
+		});
+
+		room.on(RoomEvent.TrackUnsubscribed, (track) => {
+			if (track.kind !== Track.Kind.Audio) return;
+			const detached = track.detach();
+			detached.forEach((el) => el.remove());
+			_audioEls = _audioEls.filter((el) => !detached.includes(el));
+		});
 
 		const updateDiag = () => {
 			let tracks = 0;
 			room.remoteParticipants.forEach((p) => {
 				p.audioTrackPublications.forEach((pub) => { if (pub.track) tracks++; });
 			});
-			diagnostics.set(`lk remote:${room.remoteParticipants.size} audio:${tracks} canPlay:${room.canPlaybackAudio}`);
+			diagnostics.set(`remote:${room.remoteParticipants.size} audio:${tracks} canPlay:${room.canPlaybackAudio}`);
 		};
 		room.on(RoomEvent.AudioPlaybackStatusChanged, () => { canPlayAudio.set(room.canPlaybackAudio); updateDiag(); });
 		room.on(RoomEvent.ParticipantConnected, updateDiag);
@@ -68,6 +88,8 @@ function createLiveKitStore() {
 		if (!_room) return;
 		await _room.startAudio();
 		canPlayAudio.set(_room.canPlaybackAudio);
+		// Unmute any already-attached elements
+		_audioEls.forEach((el) => { el.muted = false; });
 	}
 
 	async function toggleMic(): Promise<void> {
@@ -154,6 +176,8 @@ function createLiveKitStore() {
 		if (_rafId) cancelAnimationFrame(_rafId);
 		_rawStream?.getTracks().forEach((t) => t.stop());
 		_audioCtx?.close();
+		_audioEls.forEach((el) => el.remove());
+		_audioEls = [];
 		_room?.disconnect();
 		_room = null;
 		_audioCtx = null;
