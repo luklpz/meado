@@ -15,6 +15,7 @@ function createLiveKitStore() {
 	const audioLevel = writable(0);
 	const micDevices = writable<AudioDevice[]>([]);
 	const selectedDeviceId = writable('');
+	const canPlayAudio = writable(false);
 
 	let _room: Room | null = null;
 	let _audioCtx: AudioContext | null = null;
@@ -27,7 +28,11 @@ function createLiveKitStore() {
 		await room.connect(url, token);
 		_room = room;
 		status.set('connected');
-		// Enumerate without permission (labels may be empty until mic is granted)
+		canPlayAudio.set(room.canPlaybackAudio);
+		const { RoomEvent } = await import('livekit-client');
+		room.on(RoomEvent.AudioPlaybackStatusChanged, () => {
+			canPlayAudio.set(room.canPlaybackAudio);
+		});
 		await enumerateDevices();
 		return room;
 	}
@@ -45,10 +50,15 @@ function createLiveKitStore() {
 		} catch { /* ignore */ }
 	}
 
+	async function startAudio(): Promise<void> {
+		if (!_room) return;
+		await _room.startAudio();
+		canPlayAudio.set(_room.canPlaybackAudio);
+	}
+
 	async function toggleMic(): Promise<void> {
 		if (!_room) { errorMessage.set('LiveKit no conectado'); return; }
-		// Desbloquea reproducción de audio remoto (requiere gesto de usuario)
-		await _room.startAudio();
+		await startAudio();
 
 		const next = !get(micEnabled);
 		if (next) await _enableMic(); else await _disableMic();
@@ -125,8 +135,8 @@ function createLiveKitStore() {
 	}
 
 	return {
-		micEnabled, status, errorMessage, audioLevel, micDevices, selectedDeviceId,
-		connect, enumerateDevices, toggleMic, selectDevice, setError, disconnect,
+		micEnabled, status, errorMessage, audioLevel, micDevices, selectedDeviceId, canPlayAudio,
+		connect, enumerateDevices, startAudio, toggleMic, selectDevice, setError, disconnect,
 	};
 }
 

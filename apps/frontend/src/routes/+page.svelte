@@ -4,7 +4,7 @@
 	import { livekitStore } from '$lib/livekit.js';
 
 	const { connected } = socketStore;
-	const { micEnabled, status: livekitStatus, errorMessage, audioLevel, micDevices, selectedDeviceId, toggleMic, selectDevice } =
+	const { micEnabled, status: livekitStatus, errorMessage, audioLevel, micDevices, selectedDeviceId, canPlayAudio, toggleMic, selectDevice, startAudio } =
 		livekitStore;
 </script>
 
@@ -52,6 +52,12 @@
 			</span>
 		</div>
 	</header>
+
+	{#if $livekitStatus === 'connected' && !$canPlayAudio}
+		<button class="audio-banner" onclick={startAudio}>
+			▶ click aquí para activar el audio — el navegador bloquea la reproducción automática
+		</button>
+	{/if}
 
 	<main class="canvas-wrap">
 		<PhaserGame />
@@ -178,6 +184,25 @@
 
 	.status.online {
 		color: #22c55e;
+	}
+
+	.audio-banner {
+		width: 800px;
+		padding: 0.5rem 1rem;
+		background: #1a2e1a;
+		border: 1px solid #22c55e;
+		border-radius: 4px;
+		color: #22c55e;
+		font-family: monospace;
+		font-size: 0.75rem;
+		cursor: pointer;
+		text-align: center;
+		animation: pulse 2s ease-in-out infinite;
+	}
+
+	@keyframes pulse {
+		0%, 100% { opacity: 1; }
+		50% { opacity: 0.6; }
 	}
 
 	.controls-hint {
