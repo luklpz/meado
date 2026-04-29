@@ -16,6 +16,7 @@ function createLiveKitStore() {
 	const micDevices = writable<AudioDevice[]>([]);
 	const selectedDeviceId = writable('');
 	const canPlayAudio = writable(false);
+	const diagnostics = writable('');
 
 	let _room: Room | null = null;
 	let _audioCtx: AudioContext | null = null;
@@ -30,9 +31,28 @@ function createLiveKitStore() {
 		status.set('connected');
 		canPlayAudio.set(room.canPlaybackAudio);
 		const { RoomEvent } = await import('livekit-client');
+
+		const updateDiag = () => {
+			let tracks = 0;
+			room.remoteParticipants.forEach((p) => {
+				p.audioTrackPublications.forEach((pub) => { if (pub.track) tracks++; });
+			});
+			diagnostics.set(
+				`lk remote:${room.remoteParticipants.size} audio:${tracks} canPlay:${room.canPlaybackAudio}`
+			);
+		};
+
 		room.on(RoomEvent.AudioPlaybackStatusChanged, () => {
 			canPlayAudio.set(room.canPlaybackAudio);
+			updateDiag();
 		});
+		room.on(RoomEvent.ParticipantConnected, updateDiag);
+		room.on(RoomEvent.ParticipantDisconnected, updateDiag);
+		room.on(RoomEvent.TrackSubscribed, updateDiag);
+		room.on(RoomEvent.TrackUnsubscribed, updateDiag);
+		setInterval(updateDiag, 1000);
+		updateDiag();
+
 		await enumerateDevices();
 		return room;
 	}
@@ -135,7 +155,7 @@ function createLiveKitStore() {
 	}
 
 	return {
-		micEnabled, status, errorMessage, audioLevel, micDevices, selectedDeviceId, canPlayAudio,
+		micEnabled, status, errorMessage, audioLevel, micDevices, selectedDeviceId, canPlayAudio, diagnostics,
 		connect, enumerateDevices, startAudio, toggleMic, selectDevice, setError, disconnect,
 	};
 }

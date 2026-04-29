@@ -4,7 +4,7 @@
 	import { livekitStore } from '$lib/livekit.js';
 
 	const { connected } = socketStore;
-	const { micEnabled, status: livekitStatus, errorMessage, audioLevel, micDevices, selectedDeviceId, canPlayAudio, toggleMic, selectDevice, startAudio } =
+	const { micEnabled, status: livekitStatus, errorMessage, audioLevel, micDevices, selectedDeviceId, canPlayAudio, diagnostics, toggleMic, selectDevice, startAudio } =
 		livekitStore;
 </script>
 
@@ -21,6 +21,7 @@
 			{:else if $livekitStatus === 'connecting'}
 				<span class="lk-dim">livekit: connecting…</span>
 			{:else if $livekitStatus === 'connected'}
+				<span class="lk-dim">{$diagnostics}</span>
 				<div class="audio-controls">
 					{#if $micDevices.length > 1}
 						<select
