@@ -6,6 +6,20 @@
 	const { connected } = socketStore;
 	const { micEnabled, status: livekitStatus, errorMessage, audioLevel, micDevices, selectedDeviceId, canPlayAudio, diagnostics, toggleMic, selectDevice, startAudio } =
 		livekitStore;
+
+	function playBeep() {
+		const ctx = new AudioContext();
+		const osc = ctx.createOscillator();
+		const gain = ctx.createGain();
+		osc.connect(gain);
+		gain.connect(ctx.destination);
+		osc.frequency.value = 880;
+		gain.gain.setValueAtTime(0.3, ctx.currentTime);
+		gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
+		osc.start(ctx.currentTime);
+		osc.stop(ctx.currentTime + 0.4);
+		osc.onended = () => ctx.close();
+	}
 </script>
 
 <svelte:head>
@@ -66,6 +80,7 @@
 
 	<footer class="controls-hint">
 		WASD / ↑↓←→ to move · approach others to hear them
+		<button class="beep-btn" onclick={playBeep}>test audio</button>
 	</footer>
 </div>
 
@@ -207,8 +222,27 @@
 	}
 
 	.controls-hint {
+		display: flex;
+		align-items: center;
+		gap: 1rem;
 		font-size: 0.7rem;
 		color: #374151;
 		letter-spacing: 0.1em;
+	}
+
+	.beep-btn {
+		font-family: monospace;
+		font-size: 0.7rem;
+		padding: 0.15rem 0.5rem;
+		border: 1px solid #374151;
+		border-radius: 3px;
+		background: transparent;
+		color: #4b5563;
+		cursor: pointer;
+	}
+
+	.beep-btn:hover {
+		border-color: #22c55e;
+		color: #22c55e;
 	}
 </style>
