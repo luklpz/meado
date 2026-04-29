@@ -4,7 +4,7 @@
 	import { livekitStore } from '$lib/livekit.js';
 
 	const { connected } = socketStore;
-	const { micEnabled, status: livekitStatus, errorMessage, audioLevel, micGain, toggleMic, setGain } =
+	const { micEnabled, status: livekitStatus, errorMessage, audioLevel, micDevices, selectedDeviceId, toggleMic, selectDevice } =
 		livekitStore;
 </script>
 
@@ -22,22 +22,24 @@
 				<span class="lk-dim">livekit: connecting…</span>
 			{:else if $livekitStatus === 'connected'}
 				<div class="audio-controls">
+					{#if $micDevices.length > 1}
+						<select
+							class="device-select"
+							value={$selectedDeviceId}
+							onchange={(e) => selectDevice(e.currentTarget.value)}
+						>
+							{#each $micDevices as dev}
+								<option value={dev.deviceId}>{dev.label}</option>
+							{/each}
+						</select>
+					{/if}
+
 					{#if $micEnabled}
 						<div class="vu-wrap" title="nivel de micrófono">
 							<div class="vu-bar" style="width: {Math.round($audioLevel * 100)}%"></div>
 						</div>
 					{/if}
-					<label class="gain-wrap">
-						<span class="gain-label">gain {$micGain.toFixed(1)}×</span>
-						<input
-							type="range"
-							min="0"
-							max="3"
-							step="0.05"
-							value={$micGain}
-							oninput={(e) => setGain(Number(e.currentTarget.value))}
-						/>
-					</label>
+
 					<button class="mic-btn" class:muted={!$micEnabled} onclick={toggleMic}>
 						{$micEnabled ? 'mic on' : 'mic off'}
 					</button>
@@ -113,6 +115,18 @@
 		gap: 0.6rem;
 	}
 
+	.device-select {
+		font-family: monospace;
+		font-size: 0.7rem;
+		background: #0a1a0f;
+		color: #d1fae5;
+		border: 1px solid #1a3320;
+		border-radius: 3px;
+		padding: 0.2rem 0.4rem;
+		cursor: pointer;
+		max-width: 180px;
+	}
+
 	.vu-wrap {
 		width: 80px;
 		height: 8px;
@@ -127,27 +141,6 @@
 		border-radius: 4px;
 		transition: width 0.05s linear;
 		max-width: 100%;
-	}
-
-	.gain-wrap {
-		display: flex;
-		align-items: center;
-		gap: 0.4rem;
-		cursor: default;
-	}
-
-	.gain-label {
-		font-size: 0.7rem;
-		color: #6b7280;
-		white-space: nowrap;
-		min-width: 5rem;
-		text-align: right;
-	}
-
-	.gain-wrap input[type='range'] {
-		width: 70px;
-		accent-color: #22c55e;
-		cursor: pointer;
 	}
 
 	.mic-btn {
