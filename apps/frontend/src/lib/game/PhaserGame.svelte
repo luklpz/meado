@@ -47,7 +47,7 @@
 			lerpStiffness: 0.001,
 			playerSpeed: 200,
 			livekitRoom,
-			proximityRadius: 200
+			proximityRadius: 500
 		});
 
 		game = new Phaser.Game({

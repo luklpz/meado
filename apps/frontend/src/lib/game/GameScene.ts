@@ -26,6 +26,7 @@ export function createGameScene(Phaser: PhaserType, socket: GameSocket, cfg: Sce
 		private local!: Phaser.GameObjects.Rectangle;
 		private localLabel!: Phaser.GameObjects.Text;
 		private localIndicator!: Phaser.GameObjects.Arc;
+		private proximityCircle!: Phaser.GameObjects.Arc;
 		private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
 		private wasd!: Record<string, Phaser.Input.Keyboard.Key>;
 		private lastEmit = 0;
@@ -53,6 +54,10 @@ export function createGameScene(Phaser: PhaserType, socket: GameSocket, cfg: Sce
 				})
 				.setOrigin(0.5);
 			this.localIndicator = this.makeIndicator(canvasW / 2, canvasH / 2);
+			this.proximityCircle = this.add.arc(canvasW / 2, canvasH / 2, proximityRadius, 0, 360, false);
+			this.proximityCircle.setStrokeStyle(1, 0x22c55e, 0.25);
+			this.proximityCircle.setFillStyle(0x22c55e, 0.03);
+			this.proximityCircle.setDepth(-1);
 
 			this.cursors = this.input.keyboard!.createCursorKeys();
 			this.wasd = {
@@ -79,6 +84,7 @@ export function createGameScene(Phaser: PhaserType, socket: GameSocket, cfg: Sce
 			this.local.y = Phaser.Math.Clamp(this.local.y + vy * dt, 16, canvasH - 16);
 			this.localLabel.setPosition(this.local.x, this.local.y - 26);
 			this.localIndicator.setPosition(this.local.x - this.localLabel.width / 2 - 10, this.local.y - 26);
+			this.proximityCircle.setPosition(this.local.x, this.local.y);
 
 			if (time - this.lastEmit >= emitIntervalMs && socket.connected) {
 				socket.emit('player:move', { x: Math.round(this.local.x), y: Math.round(this.local.y), roomId });
