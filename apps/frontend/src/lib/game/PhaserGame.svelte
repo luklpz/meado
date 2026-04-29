@@ -27,11 +27,15 @@
 				const res = await fetch(
 					`${BACKEND_URL}/rooms/${ROOM_ID}/livekit-token?username=${USERNAME}`
 				);
+				if (!res.ok) throw new Error(`Token endpoint: ${res.status}`);
 				const { token } = await res.json();
 				livekitRoom = await livekitStore.connect(LIVEKIT_URL, token);
 			} catch (e) {
+				livekitStore.setError(e instanceof Error ? e.message : String(e));
 				console.error('LiveKit connection failed:', e);
 			}
+		} else {
+			livekitStore.setError('VITE_LIVEKIT_URL no configurada');
 		}
 
 		const SceneClass = createGameScene(Phaser, socket, {

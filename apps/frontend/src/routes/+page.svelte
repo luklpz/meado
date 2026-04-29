@@ -4,7 +4,7 @@
 	import { livekitStore } from '$lib/livekit.js';
 
 	const { connected } = socketStore;
-	const { micEnabled, toggleMic } = livekitStore;
+	const { micEnabled, status: livekitStatus, errorMessage, toggleMic } = livekitStore;
 </script>
 
 <svelte:head>
@@ -15,9 +15,17 @@
 	<header class="hud">
 		<span class="logo">meado</span>
 		<div class="hud-right">
-			<button class="mic-btn" class:muted={!$micEnabled} onclick={toggleMic}>
-				{$micEnabled ? 'mic on' : 'mic off'}
-			</button>
+			{#if $livekitStatus === 'error'}
+				<span class="lk-error" title={$errorMessage}>livekit: error — {$errorMessage}</span>
+			{:else if $livekitStatus === 'connecting'}
+				<span class="lk-connecting">livekit: connecting…</span>
+			{:else if $livekitStatus === 'connected'}
+				<button class="mic-btn" class:muted={!$micEnabled} onclick={toggleMic}>
+					{$micEnabled ? 'mic on' : 'mic off'}
+				</button>
+			{:else}
+				<span class="lk-connecting">livekit: idle</span>
+			{/if}
 			<span class="status" class:online={$connected}>
 				{$connected ? '● connected' : '○ connecting…'}
 			</span>
@@ -101,6 +109,16 @@
 
 	.status.online {
 		color: #22c55e;
+	}
+
+	.lk-error {
+		font-size: 0.7rem;
+		color: #ef4444;
+	}
+
+	.lk-connecting {
+		font-size: 0.7rem;
+		color: #6b7280;
 	}
 
 	.controls-hint {
