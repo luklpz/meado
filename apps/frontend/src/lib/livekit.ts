@@ -24,6 +24,7 @@ function createLiveKitStore() {
 	let _gainNode: GainNode | null = null;
 	let _rawStream: MediaStream | null = null;
 	let _rafId: number | null = null;
+	let _diagInterval: ReturnType<typeof setInterval> | null = null;
 	let _audioEls: HTMLAudioElement[] = [];
 
 	async function connect(url: string, token: string): Promise<Room> {
@@ -66,7 +67,7 @@ function createLiveKitStore() {
 		room.on(RoomEvent.ParticipantDisconnected, updateDiag);
 		room.on(RoomEvent.TrackSubscribed, updateDiag);
 		room.on(RoomEvent.TrackUnsubscribed, updateDiag);
-		setInterval(updateDiag, 1000);
+		_diagInterval = setInterval(updateDiag, 1000);
 		updateDiag();
 
 		await enumerateDevices();
@@ -174,6 +175,7 @@ function createLiveKitStore() {
 
 	function disconnect(): void {
 		if (_rafId) cancelAnimationFrame(_rafId);
+		if (_diagInterval) { clearInterval(_diagInterval); _diagInterval = null; }
 		_rawStream?.getTracks().forEach((t) => t.stop());
 		_audioCtx?.close();
 		_audioEls.forEach((el) => el.remove());

@@ -7,30 +7,75 @@ datasource db {
   provider = "postgresql"
 }
 
+enum UserRole {
+  USER
+  ADMIN
+  SUPERADMIN
+}
+
+enum RoomMemberRole {
+  USERROOM
+  MODERATOR
+  ADMINROOM
+}
+
+enum RoomAccess {
+  PUBLIC
+  PASSWORD
+  WHITELIST
+}
+
 model User {
-  id        String       @id @default(cuid())
-  username  String       @unique
-  avatar    String       @default("default")
-  lastPos   Json?
-  createdAt DateTime     @default(now())
-  updatedAt DateTime     @updatedAt
-  rooms     RoomMember[]
+  id            String          @id @default(cuid())
+  username      String          @unique
+  email         String          @unique
+  passwordHash  String
+  emailVerified Boolean         @default(false)
+  role          UserRole        @default(USER)
+  avatar        String          @default("default")
+  lastPos       Json?
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  ownedRooms    Room[]          @relation("RoomOwner")
+  rooms         RoomMember[]
+  whitelist     RoomWhitelist[]
 }
 
 model Room {
-  id        String       @id @default(cuid())
-  name      String
-  slug      String       @unique
-  createdAt DateTime     @default(now())
-  members   RoomMember[]
+  id              String          @id @default(cuid())
+  name            String
+  slug            String          @unique
+  description     String?
+  accessType      RoomAccess      @default(PUBLIC)
+  passwordHash    String?
+  proximityRadius Int             @default(500)
+  maxPlayers      Int             @default(20)
+  isActive        Boolean         @default(true)
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  ownerId         String
+  owner           User            @relation("RoomOwner", fields: [ownerId], references: [id])
+  members         RoomMember[]
+  whitelist       RoomWhitelist[]
 }
 
 model RoomMember {
-  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   userId   String
-  room     Room     @relation(fields: [roomId], references: [id], onDelete: Cascade)
   roomId   String
-  joinedAt DateTime @default(now())
+  role     RoomMemberRole @default(USERROOM)
+  joinedAt DateTime       @default(now())
+  user     User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  room     Room           @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  @@id([userId, roomId])
+}
+
+model RoomWhitelist {
+  userId  String
+  roomId  String
+  addedAt DateTime @default(now())
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  room    Room     @relation(fields: [roomId], references: [id], onDelete: Cascade)
 
   @@id([userId, roomId])
 }

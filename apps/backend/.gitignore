@@ -3,6 +3,13 @@
 /node_modules
 /build
 
+# Prisma config compiled artifacts — confuse Prisma 7 if present alongside .ts source
+prisma.config.js
+prisma.config.d.ts
+prisma.config.js.map
+tsconfig.build.tsbuildinfo
+tsconfig.tsbuildinfo
+
 # Logs
 logs
 *.log
