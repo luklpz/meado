@@ -14,6 +14,14 @@ export interface SceneConfig {
 }
 
 type PhaserType = typeof import('phaser');
+type Direction = 'down' | 'left' | 'right' | 'up' | 'down-right' | 'down-left' | 'up-right' | 'up-left';
+
+const FRAME_W = 16;
+const FRAME_H = 32;
+const SCALE = 2;
+const SPRITE_HALF_W = (FRAME_W * SCALE) / 2;
+const SPRITE_HALF_H = (FRAME_H * SCALE) / 2;
+const LABEL_OFFSET_Y = SPRITE_HALF_H + 8;
 
 export function createGameScene(Phaser: PhaserType, socket: GameSocket, cfg: SceneConfig) {
 	const {
@@ -23,37 +31,49 @@ export function createGameScene(Phaser: PhaserType, socket: GameSocket, cfg: Sce
 	} = cfg;
 
 	return class GameScene extends Phaser.Scene {
-		private local!: Phaser.GameObjects.Rectangle;
+		private local!: Phaser.GameObjects.Sprite;
 		private localLabel!: Phaser.GameObjects.Text;
 		private localIndicator!: Phaser.GameObjects.Arc;
 		private proximityCircle!: Phaser.GameObjects.Arc;
+		private localDir: Direction = 'down';
 		private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
 		private wasd!: Record<string, Phaser.Input.Keyboard.Key>;
 		private lastEmit = 0;
 
 		private remote = new Map<string, {
-			sprite: Phaser.GameObjects.Rectangle;
+			sprite: Phaser.GameObjects.Sprite;
 			label: Phaser.GameObjects.Text;
 			indicator: Phaser.GameObjects.Arc;
 			targetX: number;
 			targetY: number;
 			username: string;
 			speaking: boolean;
+			dir: Direction;
 		}>();
 
 		constructor() { super({ key: 'GameScene' }); }
 
+		preload() {
+			this.load.spritesheet('player', '/assets/character_walk.png', {
+				frameWidth: FRAME_W,
+				frameHeight: FRAME_H,
+			});
+		}
+
 		create() {
 			this.buildGrid();
+			this.createAnims();
 
-			this.local = this.add.rectangle(canvasW / 2, canvasH / 2, 32, 32, 0x22c55e);
+			this.local = this.add.sprite(canvasW / 2, canvasH / 2, 'player').setScale(SCALE);
+			this.local.play('idle-down');
+
 			this.localLabel = this.add
-				.text(canvasW / 2, canvasH / 2 - 26, username, {
+				.text(canvasW / 2, canvasH / 2 - LABEL_OFFSET_Y, username, {
 					fontSize: '11px', color: '#ffffff',
 					stroke: '#000000', strokeThickness: 2,
 				})
 				.setOrigin(0.5);
-			this.localIndicator = this.makeIndicator(canvasW / 2, canvasH / 2);
+			this.localIndicator = this.makeIndicator(canvasW / 2, canvasH / 2 - LABEL_OFFSET_Y);
 			this.proximityCircle = this.add.arc(canvasW / 2, canvasH / 2, proximityRadius, 0, 360, false);
 			this.proximityCircle.setStrokeStyle(1, 0x22c55e, 0.25);
 			this.proximityCircle.setFillStyle(0x22c55e, 0.03);
@@ -72,6 +92,34 @@ export function createGameScene(Phaser: PhaserType, socket: GameSocket, cfg: Sce
 			socket.connected ? join() : socket.once('connect', join);
 		}
 
+		private createAnims() {
+			const fps = 8;
+			// Row 0: down (0–3), Row 1: down-right (4–7), Row 2: right (8–11)
+			// Row 3: up-right (12–15), Row 4: up (16–19)
+			// Left variants reuse right rows with flipX
+			this.anims.create({ key: 'walk-down',       frames: this.anims.generateFrameNumbers('player', { start: 0,  end: 3  }), frameRate: fps, repeat: -1 });
+			this.anims.create({ key: 'walk-down-right',  frames: this.anims.generateFrameNumbers('player', { start: 4,  end: 7  }), frameRate: fps, repeat: -1 });
+			this.anims.create({ key: 'walk-right',       frames: this.anims.generateFrameNumbers('player', { start: 8,  end: 11 }), frameRate: fps, repeat: -1 });
+			this.anims.create({ key: 'walk-up-right',    frames: this.anims.generateFrameNumbers('player', { start: 12, end: 15 }), frameRate: fps, repeat: -1 });
+			this.anims.create({ key: 'walk-up',          frames: this.anims.generateFrameNumbers('player', { start: 16, end: 19 }), frameRate: fps, repeat: -1 });
+			this.anims.create({ key: 'idle-down',        frames: [{ key: 'player', frame: 0  }], frameRate: 1 });
+			this.anims.create({ key: 'idle-down-right',  frames: [{ key: 'player', frame: 4  }], frameRate: 1 });
+			this.anims.create({ key: 'idle-right',       frames: [{ key: 'player', frame: 8  }], frameRate: 1 });
+			this.anims.create({ key: 'idle-up-right',    frames: [{ key: 'player', frame: 12 }], frameRate: 1 });
+			this.anims.create({ key: 'idle-up',          frames: [{ key: 'player', frame: 16 }], frameRate: 1 });
+		}
+
+		private playAnim(sprite: Phaser.GameObjects.Sprite, dir: Direction, moving: boolean) {
+			const mirrorMap: Partial<Record<Direction, Direction>> = {
+				'left': 'right', 'up-left': 'up-right', 'down-left': 'down-right',
+			};
+			const flip = dir in mirrorMap;
+			const effectiveDir = mirrorMap[dir] ?? dir;
+			const key = (moving ? 'walk-' : 'idle-') + effectiveDir;
+			sprite.setFlipX(flip);
+			if (sprite.anims.currentAnim?.key !== key) sprite.play(key);
+		}
+
 		update(time: number, delta: number) {
 			const dt = delta / 1000;
 			let vx = 0, vy = 0;
@@ -80,10 +128,22 @@ export function createGameScene(Phaser: PhaserType, socket: GameSocket, cfg: Sce
 			if (this.cursors.up.isDown    || this.wasd.up.isDown)    vy = -playerSpeed;
 			else if (this.cursors.down.isDown  || this.wasd.down.isDown)  vy = playerSpeed;
 
-			this.local.x = Phaser.Math.Clamp(this.local.x + vx * dt, 16, canvasW - 16);
-			this.local.y = Phaser.Math.Clamp(this.local.y + vy * dt, 16, canvasH - 16);
-			this.localLabel.setPosition(this.local.x, this.local.y - 26);
-			this.localIndicator.setPosition(this.local.x - this.localLabel.width / 2 - 10, this.local.y - 26);
+			if      (vx < 0 && vy < 0) this.localDir = 'up-left';
+			else if (vx > 0 && vy < 0) this.localDir = 'up-right';
+			else if (vx < 0 && vy > 0) this.localDir = 'down-left';
+			else if (vx > 0 && vy > 0) this.localDir = 'down-right';
+			else if (vx < 0) this.localDir = 'left';
+			else if (vx > 0) this.localDir = 'right';
+			else if (vy < 0) this.localDir = 'up';
+			else if (vy > 0) this.localDir = 'down';
+
+			const moving = vx !== 0 || vy !== 0;
+			this.playAnim(this.local, this.localDir, moving);
+
+			this.local.x = Phaser.Math.Clamp(this.local.x + vx * dt, SPRITE_HALF_W, canvasW - SPRITE_HALF_W);
+			this.local.y = Phaser.Math.Clamp(this.local.y + vy * dt, SPRITE_HALF_H, canvasH - SPRITE_HALF_H);
+			this.localLabel.setPosition(this.local.x, this.local.y - LABEL_OFFSET_Y);
+			this.localIndicator.setPosition(this.local.x - this.localLabel.width / 2 - 10, this.local.y - LABEL_OFFSET_Y);
 			this.proximityCircle.setPosition(this.local.x, this.local.y);
 
 			if (time - this.lastEmit >= emitIntervalMs && socket.connected) {
@@ -93,10 +153,32 @@ export function createGameScene(Phaser: PhaserType, socket: GameSocket, cfg: Sce
 
 			const alpha = 1 - Math.pow(lerpStiffness, dt);
 			for (const r of this.remote.values()) {
+				const dx = r.targetX - r.sprite.x;
+				const dy = r.targetY - r.sprite.y;
+				const isMoving = Math.abs(dx) > 0.5 || Math.abs(dy) > 0.5;
+
+				if (isMoving) {
+					const adx = Math.abs(dx), ady = Math.abs(dy);
+					const total = adx + ady;
+					const diag = adx / total > 0.3 && ady / total > 0.3;
+					if (diag) {
+						r.dir = dx > 0 && dy < 0 ? 'up-right'
+							: dx > 0 && dy > 0 ? 'down-right'
+							: dx < 0 && dy < 0 ? 'up-left'
+							: 'down-left';
+					} else if (adx >= ady) {
+						r.dir = dx > 0 ? 'right' : 'left';
+					} else {
+						r.dir = dy > 0 ? 'down' : 'up';
+					}
+				}
+
+				this.playAnim(r.sprite, r.dir, isMoving);
+
 				r.sprite.x = Phaser.Math.Linear(r.sprite.x, r.targetX, alpha);
 				r.sprite.y = Phaser.Math.Linear(r.sprite.y, r.targetY, alpha);
-				r.label.setPosition(r.sprite.x, r.sprite.y - 26);
-				r.indicator.setPosition(r.sprite.x - r.label.width / 2 - 10, r.sprite.y - 26);
+				r.label.setPosition(r.sprite.x, r.sprite.y - LABEL_OFFSET_Y);
+				r.indicator.setPosition(r.sprite.x - r.label.width / 2 - 10, r.sprite.y - LABEL_OFFSET_Y);
 			}
 
 			this.updateProximityVolumes();
@@ -113,11 +195,9 @@ export function createGameScene(Phaser: PhaserType, socket: GameSocket, cfg: Sce
 			if (!livekitRoom) return;
 			const speakers = livekitRoom.activeSpeakers;
 
-			// Local player
 			const localSpeaking = speakers.some((p) => p.identity === username);
 			this.localIndicator.setFillStyle(0x22c55e, localSpeaking ? 1 : 0);
 
-			// Remote players
 			for (const r of this.remote.values()) {
 				const speaking = speakers.some((p) => p.identity === r.username);
 				if (speaking !== r.speaking) {
@@ -157,15 +237,16 @@ export function createGameScene(Phaser: PhaserType, socket: GameSocket, cfg: Sce
 
 		private spawnRemote(id: string, name: string, x: number, y: number) {
 			if (this.remote.has(id)) return;
-			const sprite = this.add.rectangle(x, y, 32, 32, 0x3b82f6);
+			const sprite = this.add.sprite(x, y, 'player').setScale(SCALE);
+			sprite.play('idle-down');
 			const label = this.add
-				.text(x, y - 26, name, {
+				.text(x, y - LABEL_OFFSET_Y, name, {
 					fontSize: '11px', color: '#ffffff',
 					stroke: '#000000', strokeThickness: 2,
 				})
 				.setOrigin(0.5);
-			const indicator = this.makeIndicator(x, y - 26);
-			this.remote.set(id, { sprite, label, indicator, targetX: x, targetY: y, username: name, speaking: false });
+			const indicator = this.makeIndicator(x, y - LABEL_OFFSET_Y);
+			this.remote.set(id, { sprite, label, indicator, targetX: x, targetY: y, username: name, speaking: false, dir: 'down' });
 		}
 
 		private despawnRemote(id: string) {
