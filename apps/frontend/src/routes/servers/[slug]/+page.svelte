@@ -38,6 +38,13 @@
 	let showMembers = $state(false);
 	let members = $state<Member[]>([]);
 	let membersLoading = $state(false);
+	let roles = $state<{ id: string; name: string; color?: string | null; isDefault: boolean }[]>([]);
+
+	// ── Whitelist ──────────────────────────────────────────────────────────
+	let whitelist = $state<{ user: { id: string; username: string; avatarUrl?: string | null } }[]>([]);
+	let whitelistInput = $state('');
+	let whitelistError = $state('');
+	let whitelistLoading = $state(false);
 
 	// ── Channel creation ───────────────────────────────────────────────────
 	let createChannelType = $state<'TEXT' | 'VOICE' | null>(null);
@@ -247,8 +254,12 @@
 	async function loadMembers() {
 		membersLoading = true;
 		try {
-			const res = await fetch(`/api/servers/${server.slug}/members`, { credentials: 'include' });
-			if (res.ok) members = await res.json();
+			const [membersRes, rolesRes] = await Promise.all([
+				fetch(`/api/servers/${server.slug}/members`, { credentials: 'include' }),
+				roles.length === 0 && canManage ? fetch(`/api/servers/${server.slug}/roles`, { credentials: 'include' }) : Promise.resolve(null),
+			]);
+			if (membersRes.ok) members = await membersRes.json();
+			if (rolesRes?.ok) roles = await rolesRes.json();
 		} finally {
 			membersLoading = false;
 		}
@@ -285,13 +296,20 @@
 	}
 
 	// ── Server settings ───────────────────────────────────────────────────
-	function openSettings() {
+	async function openSettings() {
 		settingsName = server.name;
 		settingsDesc = server.description ?? '';
 		settingsAccess = server.accessType as any;
 		settingsPassword = '';
 		settingsError = '';
+		whitelistError = '';
 		showSettings = true;
+		const [rolesRes, wlRes] = await Promise.all([
+			fetch(`/api/servers/${server.slug}/roles`, { credentials: 'include' }),
+			server.accessType === 'WHITELIST' ? fetch(`/api/servers/${server.slug}/whitelist`, { credentials: 'include' }) : Promise.resolve(null),
+		]);
+		if (rolesRes.ok) roles = await rolesRes.json();
+		if (wlRes?.ok) whitelist = await wlRes.json();
 	}
 
 	async function saveSettings(e: SubmitEvent) {
@@ -333,6 +351,53 @@
 		if (!confirm(`¿Eliminar permanentemente "${server.name}"? Esto no se puede deshacer.`)) return;
 		const res = await fetch(`/api/servers/${server.slug}`, { method: 'DELETE', credentials: 'include' });
 		if (res.ok) goto('/servers');
+	}
+
+	// ── Whitelist ─────────────────────────────────────────────────────────
+	async function addToWhitelist() {
+		const username = whitelistInput.trim();
+		if (!username || whitelistLoading) return;
+		whitelistError = '';
+		whitelistLoading = true;
+		try {
+			const res = await fetch(`/api/servers/${server.slug}/whitelist`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				credentials: 'include',
+				body: JSON.stringify({ username }),
+			});
+			if (!res.ok) {
+				const err = await res.json().catch(() => ({}));
+				whitelistError = err.message ?? 'Error.';
+				return;
+			}
+			whitelistInput = '';
+			const wlRes = await fetch(`/api/servers/${server.slug}/whitelist`, { credentials: 'include' });
+			if (wlRes.ok) whitelist = await wlRes.json();
+		} finally {
+			whitelistLoading = false;
+		}
+	}
+
+	async function removeFromWhitelist(userId: string) {
+		await fetch(`/api/servers/${server.slug}/whitelist/${userId}`, { method: 'DELETE', credentials: 'include' });
+		whitelist = whitelist.filter((w) => w.user.id !== userId);
+	}
+
+	// ── Role assignment ───────────────────────────────────────────────────
+	async function assignRole(userId: string, roleId: string | null) {
+		const res = await fetch(`/api/servers/${server.slug}/members/${userId}/role`, {
+			method: 'PATCH',
+			headers: { 'Content-Type': 'application/json' },
+			credentials: 'include',
+			body: JSON.stringify({ roleId }),
+		});
+		if (res.ok) {
+			const role = roleId ? roles.find((r) => r.id === roleId) : null;
+			members = members.map((m) =>
+				m.user.id === userId ? { ...m, role: role ? { id: role.id, name: role.name, color: role.color ?? null } : null } : m
+			);
+		}
 	}
 
 	// ── Profile ───────────────────────────────────────────────────────────
@@ -707,6 +772,43 @@
 						{settingsLoading ? 'Guardando…' : 'Guardar cambios'}
 					</button>
 				</form>
+				{#if settingsAccess === 'WHITELIST'}
+					<div class="settings-whitelist">
+						<p class="settings-section-title">Lista blanca</p>
+						<div class="whitelist-add-row">
+							<input
+								type="text"
+								placeholder="Nombre de usuario"
+								bind:value={whitelistInput}
+								onkeydown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addToWhitelist(); } }}
+							/>
+							<button type="button" class="btn-primary btn-sm" onclick={addToWhitelist} disabled={whitelistLoading}>
+								{whitelistLoading ? '…' : 'Añadir'}
+							</button>
+						</div>
+						{#if whitelistError}<p class="error">{whitelistError}</p>{/if}
+						{#if whitelist.length > 0}
+							<ul class="whitelist-list">
+								{#each whitelist as entry (entry.user.id)}
+									<li class="whitelist-item">
+										<div class="wl-avatar-sm">
+											{#if entry.user.avatarUrl}
+												<img src={entry.user.avatarUrl} class="avatar-xs" alt="" />
+											{:else}
+												<div class="avatar-xs avatar-init">{avatarInitial(entry.user.username)}</div>
+											{/if}
+										</div>
+										<span class="wl-name">{entry.user.username}</span>
+										<button type="button" class="wl-remove-btn" onclick={() => removeFromWhitelist(entry.user.id)}>✕</button>
+									</li>
+								{/each}
+							</ul>
+						{:else}
+							<p class="wl-empty">Ningún usuario en lista blanca.</p>
+						{/if}
+					</div>
+				{/if}
+
 				<div class="settings-danger">
 					<p class="danger-title">Zona de peligro</p>
 					{#if !isOwner}
@@ -737,7 +839,18 @@
 							{/if}
 							<div class="member-info">
 								<span class="member-name">{m.user.username}</span>
-								{#if m.role}
+								{#if canManage && roles.length > 0 && m.user.id !== user.id}
+									<select
+										class="role-select"
+										value={m.role?.id ?? ''}
+										onchange={(e) => assignRole(m.user.id, (e.target as HTMLSelectElement).value || null)}
+									>
+										<option value="">Sin rol</option>
+										{#each roles as r (r.id)}
+											<option value={r.id}>{r.name}</option>
+										{/each}
+									</select>
+								{:else if m.role}
 									<span class="member-role" style="color: {m.role.color ?? 'var(--text-muted)'}">
 										{m.role.name}
 									</span>
@@ -1687,4 +1800,96 @@
 	}
 
 	.btn-danger-solid:hover { background: rgba(239,68,68,0.25); }
+
+	/* ── Role select in members panel ───────────────────────────────────── */
+	.role-select {
+		font-size: 0.65rem;
+		padding: 0.1rem 0.25rem;
+		background: var(--bg-base);
+		border: 1px solid var(--border);
+		border-radius: var(--radius);
+		color: var(--text-muted);
+		outline: none;
+		font-family: inherit;
+		cursor: pointer;
+		max-width: 100%;
+	}
+
+	/* ── Whitelist section in settings ──────────────────────────────────── */
+	.settings-whitelist {
+		padding: 1rem 1.25rem;
+		border-top: 1px solid var(--border);
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+	}
+
+	.settings-section-title {
+		font-size: 0.7rem;
+		font-weight: 700;
+		text-transform: uppercase;
+		letter-spacing: 0.08em;
+		color: var(--text-muted);
+		margin: 0;
+	}
+
+	.whitelist-add-row {
+		display: flex;
+		gap: 0.4rem;
+	}
+
+	.whitelist-add-row input {
+		flex: 1;
+		font-size: 0.82rem;
+		padding: 0.35rem 0.5rem;
+		background: var(--bg-elevated);
+		border: 1px solid var(--border);
+		border-radius: var(--radius);
+		color: var(--text-primary);
+		outline: none;
+		font-family: inherit;
+	}
+
+	.whitelist-add-row input:focus { border-color: var(--border-focus); }
+
+	.btn-sm {
+		padding: 0.3rem 0.7rem;
+		font-size: 0.75rem;
+	}
+
+	.whitelist-list {
+		list-style: none;
+		padding: 0;
+		display: flex;
+		flex-direction: column;
+		gap: 0.25rem;
+	}
+
+	.whitelist-item {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		padding: 0.3rem 0.4rem;
+		border-radius: var(--radius);
+		background: var(--bg-elevated);
+	}
+
+	.wl-avatar-sm { flex-shrink: 0; }
+
+	.wl-name { flex: 1; font-size: 0.82rem; color: var(--text-secondary); }
+
+	.wl-remove-btn {
+		background: transparent;
+		border: none;
+		color: var(--text-muted);
+		cursor: pointer;
+		font-size: 0.65rem;
+		padding: 0.1rem 0.25rem;
+		border-radius: 3px;
+		transition: color var(--transition);
+	}
+
+	.wl-remove-btn:hover { color: var(--error); }
+
+	.wl-empty { font-size: 0.75rem; color: var(--text-muted); margin: 0; }
 </style>

@@ -238,6 +238,15 @@ export class ServersService {
 
   // ── Whitelist ─────────────────────────────────────────────────────────
 
+  async getWhitelist(slug: string) {
+    const server = await this.prisma.server.findUnique({ where: { slug } });
+    if (!server) throw new NotFoundException('Server not found');
+    return this.prisma.serverWhitelist.findMany({
+      where: { serverId: server.id },
+      select: { user: { select: { id: true, username: true, avatarUrl: true } } },
+    });
+  }
+
   async addToWhitelist(slug: string, username: string, requesterId: string, requesterRole: string) {
     const server = await this.assertPermission(slug, requesterId, requesterRole, 'manageMembers');
     const user = await this.prisma.user.findUnique({ where: { username } });

@@ -118,6 +118,11 @@ export class ServersController {
 
   // ── Whitelist ─────────────────────────────────────────────────────────
 
+  @Get(':slug/whitelist')
+  getWhitelist(@Param('slug') slug: string) {
+    return this.serversService.getWhitelist(slug);
+  }
+
   @Post(':slug/whitelist')
   addToWhitelist(
     @Param('slug') slug: string,
