@@ -47,4 +47,44 @@ export class EmailService {
       throw new Error(`Email delivery failed: ${error.message}`);
     }
   }
+
+  async sendPasswordResetEmail(email: string, username: string, token: string): Promise<void> {
+    const link = `${this.frontendUrl}/reset-password?token=${token}`;
+
+    const { error } = await this.resend.emails.send({
+      from: this.from,
+      to: email,
+      subject: 'Restablecer contraseña — Meado',
+      html: `
+        <!DOCTYPE html>
+        <html>
+        <body style="margin:0;padding:0;background:#050d07;font-family:monospace;">
+          <div style="max-width:480px;margin:40px auto;padding:2rem;background:#080f0a;border:1px solid #1a3320;border-radius:8px;">
+            <h1 style="margin:0 0 1.5rem;font-size:1.5rem;font-weight:700;letter-spacing:0.2em;color:#22c55e;">
+              meado
+            </h1>
+            <p style="color:#d1fae5;margin:0 0 0.5rem;">
+              Hola <strong>${username}</strong>,
+            </p>
+            <p style="color:#9ca3af;margin:0 0 1.5rem;font-size:0.9rem;">
+              Haz clic en el botón para restablecer tu contraseña:
+            </p>
+            <a href="${link}"
+               style="display:inline-block;padding:0.65rem 1.4rem;background:#22c55e;color:#050d07;text-decoration:none;border-radius:4px;font-weight:700;font-size:0.9rem;">
+              Restablecer contraseña
+            </a>
+            <p style="color:#374151;font-size:0.75rem;margin:1.5rem 0 0;">
+              El enlace expira en 1 hora. Si no solicitaste esto, ignora este email.
+            </p>
+          </div>
+        </body>
+        </html>
+      `,
+    });
+
+    if (error) {
+      this.logger.error(`Failed to send password reset email to ${email}: ${error.message}`);
+      throw new Error(`Email delivery failed: ${error.message}`);
+    }
+  }
 }

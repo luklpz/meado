@@ -28,12 +28,12 @@ function createAuthStore() {
 		}
 	}
 
-	async function login(username: string, password: string): Promise<AuthUser> {
+	async function login(email: string, password: string): Promise<AuthUser> {
 		const res = await fetch(`${API}/auth/login`, {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
 			credentials: 'include',
-			body: JSON.stringify({ username, password }),
+			body: JSON.stringify({ email, password }),
 		});
 		if (!res.ok) {
 			const err = await res.json().catch(() => ({}));
@@ -65,11 +65,39 @@ function createAuthStore() {
 		_socketToken = null;
 	}
 
+	async function forgotPassword(email: string): Promise<{ message: string }> {
+		const res = await fetch(`${API}/auth/forgot-password`, {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			credentials: 'include',
+			body: JSON.stringify({ email }),
+		});
+		if (!res.ok) {
+			const err = await res.json().catch(() => ({}));
+			throw new Error(err.message ?? 'Error sending reset email');
+		}
+		return res.json();
+	}
+
+	async function resetPassword(token: string, password: string): Promise<{ message: string }> {
+		const res = await fetch(`${API}/auth/reset-password`, {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			credentials: 'include',
+			body: JSON.stringify({ token, password }),
+		});
+		if (!res.ok) {
+			const err = await res.json().catch(() => ({}));
+			throw new Error(err.message ?? 'Error resetting password');
+		}
+		return res.json();
+	}
+
 	function getSocketToken(): string | null {
 		return _socketToken;
 	}
 
-	return { user, init, login, register, logout, getSocketToken };
+	return { user, init, login, register, logout, getSocketToken, forgotPassword, resetPassword };
 }
 
 export const authStore = createAuthStore();

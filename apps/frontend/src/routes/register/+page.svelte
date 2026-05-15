@@ -41,8 +41,6 @@
 				<a href="/login" class="btn-primary">ir al login</a>
 			</div>
 		{:else}
-			<p class="hint">El primer usuario registrado será admin.</p>
-
 			<form onsubmit={handleRegister}>
 				<label>
 					<span>usuario</span>

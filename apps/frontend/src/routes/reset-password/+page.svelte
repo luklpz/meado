@@ -3,76 +3,72 @@
 	import { page } from '$app/stores';
 	import { authStore } from '$lib/auth.js';
 
-	let email = $state('');
 	let password = $state('');
+	let password2 = $state('');
 	let error = $state('');
 	let loading = $state(false);
 
-	const verified = $derived($page.url.searchParams.get('verified') === '1');
-	const tokenError = $derived($page.url.searchParams.get('error') === 'invalid-token');
-	const resetOk = $derived($page.url.searchParams.get('reset') === '1');
+	const token = $derived($page.url.searchParams.get('token') ?? '');
 
-	async function handleLogin(e: SubmitEvent) {
+	async function handleSubmit(e: SubmitEvent) {
 		e.preventDefault();
 		error = '';
+
+		if (password !== password2) {
+			error = 'Las contraseñas no coinciden';
+			return;
+		}
+		if (password.length < 6) {
+			error = 'La contraseña debe tener al menos 6 caracteres';
+			return;
+		}
+		if (!token) {
+			error = 'Enlace inválido';
+			return;
+		}
+
 		loading = true;
 		try {
-			await authStore.login(email, password);
-			goto('/rooms');
+			await authStore.resetPassword(token, password);
+			goto('/login?reset=1');
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'Error al iniciar sesión';
+			error = err instanceof Error ? err.message : 'Error al restablecer la contraseña';
 		} finally {
 			loading = false;
 		}
 	}
 </script>
 
-<svelte:head><title>Meado — Login</title></svelte:head>
+<svelte:head><title>Meado — Nueva contraseña</title></svelte:head>
 
 <div class="page">
 	<div class="card">
 		<h1 class="logo">meado</h1>
+		<p class="subtitle">Introduce tu nueva contraseña.</p>
 
-		{#if verified}
-			<div class="notice notice--ok">
-				✓ Email verificado. Ya puedes iniciar sesión.
-			</div>
+		{#if !token}
+			<div class="notice notice--err">Enlace inválido o expirado.</div>
+			<p class="link"><a href="/forgot-password">solicitar nuevo enlace</a></p>
+		{:else}
+			<form onsubmit={handleSubmit}>
+				<label>
+					<span>nueva contraseña</span>
+					<input type="password" bind:value={password} autocomplete="new-password" required minlength="6" />
+				</label>
+				<label>
+					<span>confirmar contraseña</span>
+					<input type="password" bind:value={password2} autocomplete="new-password" required minlength="6" />
+				</label>
+
+				{#if error}
+					<p class="error">{error}</p>
+				{/if}
+
+				<button type="submit" disabled={loading}>
+					{loading ? 'guardando…' : 'guardar contraseña'}
+				</button>
+			</form>
 		{/if}
-
-		{#if resetOk}
-			<div class="notice notice--ok">
-				✓ Contraseña actualizada. Ya puedes iniciar sesión.
-			</div>
-		{/if}
-
-		{#if tokenError}
-			<div class="notice notice--err">
-				El enlace de verificación no es válido o ha expirado. Regístrate de nuevo.
-			</div>
-		{/if}
-
-		<form onsubmit={handleLogin}>
-			<label>
-				<span>email</span>
-				<input type="email" bind:value={email} autocomplete="email" required />
-			</label>
-			<label>
-				<span>contraseña</span>
-				<input type="password" bind:value={password}
-					autocomplete="current-password" required />
-			</label>
-
-			{#if error}
-				<p class="error">{error}</p>
-			{/if}
-
-			<button type="submit" disabled={loading}>
-				{loading ? 'entrando…' : 'entrar'}
-			</button>
-		</form>
-
-		<p class="link"><a href="/forgot-password">¿Olvidaste tu contraseña?</a></p>
-		<p class="link">¿Sin cuenta? <a href="/register">registrarse</a></p>
 	</div>
 </div>
 
@@ -106,17 +102,17 @@
 		margin: 0;
 	}
 
+	.subtitle {
+		font-size: 0.78rem;
+		color: #6b7280;
+		margin: 0;
+	}
+
 	.notice {
 		font-size: 0.78rem;
 		padding: 0.6rem 0.75rem;
 		border-radius: 3px;
 		line-height: 1.4;
-	}
-
-	.notice--ok {
-		background: #0a1a0f;
-		border: 1px solid #22c55e44;
-		color: #22c55e;
 	}
 
 	.notice--err {

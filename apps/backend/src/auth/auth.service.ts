@@ -16,6 +16,11 @@ export interface PublicUser {
 
 const secret = () => process.env.JWT_SECRET ?? 'dev-secret';
 
+function normalizeEmail(email: string): string {
+  const [local, domain] = email.toLowerCase().split('@');
+  return `${local.replace(/\./g, '')}@${domain}`;
+}
+
 @Injectable()
 export class AuthService {
   constructor(
@@ -24,9 +29,11 @@ export class AuthService {
   ) {}
 
   async register(dto: RegisterDto): Promise<{ message: string }> {
+    const normalizedEmail = normalizeEmail(dto.email);
+
     const [byUsername, byEmail] = await Promise.all([
       this.prisma.user.findUnique({ where: { username: dto.username } }),
-      this.prisma.user.findUnique({ where: { email: dto.email } }),
+      this.prisma.user.findUnique({ where: { email: normalizedEmail } }),
     ]);
     if (byUsername) throw new ConflictException('Username already taken');
     if (byEmail) throw new ConflictException('Email already registered');
@@ -36,7 +43,7 @@ export class AuthService {
     const passwordHash = await bcrypt.hash(dto.password, 12);
 
     const user = await this.prisma.user.create({
-      data: { username: dto.username, email: dto.email, passwordHash, role: role as any },
+      data: { username: dto.username, email: normalizedEmail, passwordHash, role: role as any },
       select: { id: true, username: true, email: true },
     });
 
@@ -49,7 +56,6 @@ export class AuthService {
     try {
       await this.emailService.sendVerificationEmail(user.email, user.username, verifyToken);
     } catch {
-      // Roll back user creation if the email couldn't be delivered
       await this.prisma.user.delete({ where: { id: user.id } });
       throw new BadRequestException('Could not send verification email — check the address and try again');
     }
@@ -58,7 +64,8 @@ export class AuthService {
   }
 
   async login(dto: LoginDto): Promise<{ token: string; user: PublicUser }> {
-    const user = await this.prisma.user.findUnique({ where: { username: dto.username } });
+    const normalizedEmail = normalizeEmail(dto.email);
+    const user = await this.prisma.user.findUnique({ where: { email: normalizedEmail } });
     if (!user) throw new UnauthorizedException('Invalid credentials');
 
     const valid = await bcrypt.compare(dto.password, user.passwordHash);
@@ -87,6 +94,55 @@ export class AuthService {
       where: { id: payload.sub },
       data: { emailVerified: true },
     });
+  }
+
+  async forgotPassword(email: string): Promise<{ message: string }> {
+    const normalizedEmail = normalizeEmail(email);
+    const user = await this.prisma.user.findUnique({ where: { email: normalizedEmail } });
+
+    // Always return success to avoid leaking which emails are registered
+    if (!user || !user.emailVerified) {
+      return { message: 'If that email exists, a reset link has been sent.' };
+    }
+
+    const resetToken = jwt.sign(
+      { sub: user.id, type: 'reset' },
+      secret(),
+      { expiresIn: '1h' },
+    );
+
+    try {
+      await this.emailService.sendPasswordResetEmail(user.email, user.username, resetToken);
+    } catch {
+      throw new BadRequestException('Could not send reset email — try again later');
+    }
+
+    return { message: 'If that email exists, a reset link has been sent.' };
+  }
+
+  async resetPassword(token: string, newPassword: string): Promise<{ message: string }> {
+    let payload: any;
+    try {
+      payload = jwt.verify(token, secret());
+    } catch {
+      throw new BadRequestException('Invalid or expired reset link');
+    }
+
+    if (payload.type !== 'reset') {
+      throw new BadRequestException('Invalid token type');
+    }
+
+    if (!newPassword || newPassword.length < 6) {
+      throw new BadRequestException('Password must be at least 6 characters');
+    }
+
+    const passwordHash = await bcrypt.hash(newPassword, 12);
+    await this.prisma.user.update({
+      where: { id: payload.sub },
+      data: { passwordHash },
+    });
+
+    return { message: 'Password updated successfully' };
   }
 
   getMe(user: PublicUser): PublicUser & { socketToken: string } {

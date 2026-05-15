@@ -1,78 +1,54 @@
 <script lang="ts">
-	import { goto } from '$app/navigation';
-	import { page } from '$app/stores';
 	import { authStore } from '$lib/auth.js';
 
 	let email = $state('');
-	let password = $state('');
 	let error = $state('');
+	let success = $state('');
 	let loading = $state(false);
 
-	const verified = $derived($page.url.searchParams.get('verified') === '1');
-	const tokenError = $derived($page.url.searchParams.get('error') === 'invalid-token');
-	const resetOk = $derived($page.url.searchParams.get('reset') === '1');
-
-	async function handleLogin(e: SubmitEvent) {
+	async function handleSubmit(e: SubmitEvent) {
 		e.preventDefault();
 		error = '';
+		success = '';
 		loading = true;
 		try {
-			await authStore.login(email, password);
-			goto('/rooms');
+			const res = await authStore.forgotPassword(email);
+			success = res.message;
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'Error al iniciar sesión';
+			error = err instanceof Error ? err.message : 'Error al enviar el email';
 		} finally {
 			loading = false;
 		}
 	}
 </script>
 
-<svelte:head><title>Meado — Login</title></svelte:head>
+<svelte:head><title>Meado — Recuperar contraseña</title></svelte:head>
 
 <div class="page">
 	<div class="card">
 		<h1 class="logo">meado</h1>
+		<p class="subtitle">Introduce tu email y te enviaremos un enlace para restablecer tu contraseña.</p>
 
-		{#if verified}
-			<div class="notice notice--ok">
-				✓ Email verificado. Ya puedes iniciar sesión.
-			</div>
+		{#if success}
+			<div class="notice notice--ok">{success}</div>
+		{:else}
+			<form onsubmit={handleSubmit}>
+				<label>
+					<span>email</span>
+					<input type="email" bind:value={email} autocomplete="email" required />
+				</label>
+
+				{#if error}
+					<p class="error">{error}</p>
+				{/if}
+
+				<button type="submit" disabled={loading}>
+					{loading ? 'enviando…' : 'enviar enlace'}
+				</button>
+			</form>
 		{/if}
 
-		{#if resetOk}
-			<div class="notice notice--ok">
-				✓ Contraseña actualizada. Ya puedes iniciar sesión.
-			</div>
-		{/if}
-
-		{#if tokenError}
-			<div class="notice notice--err">
-				El enlace de verificación no es válido o ha expirado. Regístrate de nuevo.
-			</div>
-		{/if}
-
-		<form onsubmit={handleLogin}>
-			<label>
-				<span>email</span>
-				<input type="email" bind:value={email} autocomplete="email" required />
-			</label>
-			<label>
-				<span>contraseña</span>
-				<input type="password" bind:value={password}
-					autocomplete="current-password" required />
-			</label>
-
-			{#if error}
-				<p class="error">{error}</p>
-			{/if}
-
-			<button type="submit" disabled={loading}>
-				{loading ? 'entrando…' : 'entrar'}
-			</button>
-		</form>
-
-		<p class="link"><a href="/forgot-password">¿Olvidaste tu contraseña?</a></p>
-		<p class="link">¿Sin cuenta? <a href="/register">registrarse</a></p>
+		<p class="link"><a href="/login">volver al login</a></p>
 	</div>
 </div>
 
@@ -106,6 +82,13 @@
 		margin: 0;
 	}
 
+	.subtitle {
+		font-size: 0.78rem;
+		color: #6b7280;
+		margin: 0;
+		line-height: 1.5;
+	}
+
 	.notice {
 		font-size: 0.78rem;
 		padding: 0.6rem 0.75rem;
@@ -117,12 +100,6 @@
 		background: #0a1a0f;
 		border: 1px solid #22c55e44;
 		color: #22c55e;
-	}
-
-	.notice--err {
-		background: #1a0a0a;
-		border: 1px solid #ef444444;
-		color: #ef4444;
 	}
 
 	form { display: flex; flex-direction: column; gap: 0.75rem; }
