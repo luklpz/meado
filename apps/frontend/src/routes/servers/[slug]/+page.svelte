@@ -72,6 +72,11 @@
 	let iconUploadError = $state('');
 	let serverIconUrl = $state<string | null>(server.iconUrl ?? null);
 
+	// ── Reactive avatar from auth store ───────────────────────────────────
+	const authUser = authStore.user;
+	let localAvatarUrl = $state(user.avatarUrl ?? null);
+	$effect(() => { if ($authUser?.avatarUrl) localAvatarUrl = $authUser.avatarUrl; });
+
 	// ── Unread counts ──────────────────────────────────────────────────────
 	let unread = $state<Map<string, number>>(new Map());
 
@@ -187,16 +192,51 @@
 	}
 
 	// ── Messages ──────────────────────────────────────────────────────────
+	let hasMore = $state(false);
+	let loadingMore = $state(false);
+	const MSG_LIMIT = 50;
+
 	async function loadMessages(channelId: string) {
 		messagesLoading = true;
 		messages = [];
+		hasMore = false;
 		try {
-			const res = await fetch(`/api/channels/${channelId}/messages`, { credentials: 'include' });
-			if (res.ok) messages = await res.json();
+			const res = await fetch(`/api/channels/${channelId}/messages?limit=${MSG_LIMIT}`, { credentials: 'include' });
+			if (res.ok) {
+				const data = await res.json();
+				messages = data;
+				hasMore = data.length === MSG_LIMIT;
+			}
 		} finally {
 			messagesLoading = false;
 			scrollToBottom();
 		}
+	}
+
+	async function loadMoreMessages() {
+		if (!selectedChannel || loadingMore || !hasMore || messages.length === 0) return;
+		loadingMore = true;
+		const oldest = messages[0].id;
+		try {
+			const res = await fetch(`/api/channels/${selectedChannel.id}/messages?limit=${MSG_LIMIT}&before=${oldest}`, { credentials: 'include' });
+			if (res.ok) {
+				const older = await res.json();
+				if (older.length === 0) { hasMore = false; return; }
+				const el = messagesEl;
+				const prevHeight = el?.scrollHeight ?? 0;
+				messages = [...older, ...messages];
+				hasMore = older.length === MSG_LIMIT;
+				await Promise.resolve();
+				if (el) el.scrollTop = el.scrollHeight - prevHeight;
+			}
+		} finally {
+			loadingMore = false;
+		}
+	}
+
+	function onMessagesScroll() {
+		if (!messagesEl || loadingMore || !hasMore) return;
+		if (messagesEl.scrollTop < 120) loadMoreMessages();
 	}
 
 	async function sendMessage(e?: Event) {
@@ -472,6 +512,14 @@
 	}
 
 	// ── Profile ───────────────────────────────────────────────────────────
+	async function uploadAvatar(e: Event) {
+		const file = (e.target as HTMLInputElement).files?.[0];
+		if (!file) return;
+		showProfile = false;
+		await authStore.updateAvatar(file);
+		(e.target as HTMLInputElement).value = '';
+	}
+
 	async function handleLogout() {
 		socketStore.disconnect();
 		livekitStore.disconnect();
@@ -628,8 +676,8 @@
 			{/if}
 			<div class="user-info-row">
 				<button class="user-info" onclick={() => (showProfile = !showProfile)} title="Perfil">
-					{#if user.avatarUrl}
-						<img src={user.avatarUrl} class="avatar-sm" alt="" />
+					{#if localAvatarUrl}
+						<img src={localAvatarUrl} class="avatar-sm" alt="" />
 					{:else}
 						<div class="avatar-sm avatar-init">{avatarInitial(user.username)}</div>
 					{/if}
@@ -637,6 +685,10 @@
 				</button>
 				{#if showProfile}
 					<div class="profile-menu" role="menu">
+						<label class="profile-menu-item">
+							Cambiar avatar
+							<input type="file" accept="image/jpeg,image/png,image/gif,image/webp" class="hidden-file" onchange={uploadAvatar} />
+						</label>
 						<button class="profile-menu-item danger" onclick={handleLogout}>Cerrar sesión</button>
 					</div>
 				{/if}
@@ -658,7 +710,7 @@
 				</div>
 			</div>
 
-			<div class="messages-area" bind:this={messagesEl}>
+			<div class="messages-area" bind:this={messagesEl} onscroll={onMessagesScroll}>
 				{#if messagesLoading}
 					<div class="loading">Cargando mensajes…</div>
 				{:else if messages.length === 0}
@@ -668,6 +720,11 @@
 						<p>Este es el inicio del canal.</p>
 					</div>
 				{:else}
+					{#if loadingMore}
+						<div class="loading-more">Cargando más…</div>
+					{:else if !hasMore && messages.length > 0}
+						<div class="channel-start">Inicio de #{selectedChannel.name}</div>
+					{/if}
 					{#each messages as msg, i (msg.id)}
 						{@const prevMsg = messages[i - 1]}
 						{@const sameAuthor = prevMsg?.author.id === msg.author.id && (new Date(msg.createdAt).getTime() - new Date(prevMsg.createdAt).getTime()) < 5 * 60 * 1000}
@@ -2118,4 +2175,24 @@
 	}
 
 	.icon-upload-label:hover { background: rgba(99,102,241,0.1); }
+
+	/* ── Load more / channel start ───────────────────────────────────────── */
+	.loading-more {
+		text-align: center;
+		font-size: 0.75rem;
+		color: var(--text-muted);
+		padding: 0.5rem;
+		flex-shrink: 0;
+	}
+
+	.channel-start {
+		text-align: center;
+		font-size: 0.72rem;
+		color: var(--text-muted);
+		padding: 1rem 0 0.5rem;
+		flex-shrink: 0;
+	}
+
+	/* profile menu label as button */
+	label.profile-menu-item { cursor: pointer; }
 </style>
