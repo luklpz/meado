@@ -49,6 +49,18 @@
 	let editingContent = $state('');
 	let hoveredId = $state<string | null>(null);
 
+	// ── Server settings ────────────────────────────────────────────────────
+	let showSettings = $state(false);
+	let settingsName = $state(server.name);
+	let settingsDesc = $state(server.description ?? '');
+	let settingsAccess = $state<'PUBLIC' | 'PASSWORD' | 'WHITELIST'>(server.accessType as any);
+	let settingsPassword = $state('');
+	let settingsLoading = $state(false);
+	let settingsError = $state('');
+
+	// ── Profile dropdown ───────────────────────────────────────────────────
+	let showProfile = $state(false);
+
 	// ── Derived ────────────────────────────────────────────────────────────
 	let textChannels = $derived(channels.filter((c) => c.type === 'TEXT'));
 	let voiceChannels = $derived(channels.filter((c) => c.type === 'VOICE'));
@@ -272,6 +284,65 @@
 		if (textChannels.length > 0) selectChannel(textChannels[0]);
 	}
 
+	// ── Server settings ───────────────────────────────────────────────────
+	function openSettings() {
+		settingsName = server.name;
+		settingsDesc = server.description ?? '';
+		settingsAccess = server.accessType as any;
+		settingsPassword = '';
+		settingsError = '';
+		showSettings = true;
+	}
+
+	async function saveSettings(e: SubmitEvent) {
+		e.preventDefault();
+		settingsError = '';
+		settingsLoading = true;
+		try {
+			const res = await fetch(`/api/servers/${server.slug}`, {
+				method: 'PATCH',
+				headers: { 'Content-Type': 'application/json' },
+				credentials: 'include',
+				body: JSON.stringify({
+					name: settingsName,
+					description: settingsDesc || undefined,
+					accessType: settingsAccess,
+					password: settingsAccess === 'PASSWORD' && settingsPassword ? settingsPassword : undefined,
+				}),
+			});
+			if (!res.ok) {
+				const err = await res.json().catch(() => ({}));
+				settingsError = err.message ?? 'Error al guardar.';
+				return;
+			}
+			showSettings = false;
+		} catch {
+			settingsError = 'Error de red.';
+		} finally {
+			settingsLoading = false;
+		}
+	}
+
+	async function leaveServer() {
+		if (!confirm('¿Salir del servidor?')) return;
+		const res = await fetch(`/api/servers/${server.slug}/leave`, { method: 'POST', credentials: 'include' });
+		if (res.ok) goto('/servers');
+	}
+
+	async function deleteServer() {
+		if (!confirm(`¿Eliminar permanentemente "${server.name}"? Esto no se puede deshacer.`)) return;
+		const res = await fetch(`/api/servers/${server.slug}`, { method: 'DELETE', credentials: 'include' });
+		if (res.ok) goto('/servers');
+	}
+
+	// ── Profile ───────────────────────────────────────────────────────────
+	async function handleLogout() {
+		socketStore.disconnect();
+		livekitStore.disconnect();
+		await authStore.logout();
+		goto('/login');
+	}
+
 	// ── Helpers ───────────────────────────────────────────────────────────
 	function scrollToBottom() {
 		setTimeout(() => { if (messagesEl) messagesEl!.scrollTop = messagesEl!.scrollHeight; }, 50);
@@ -306,7 +377,12 @@
 	<aside class="sidebar">
 		<div class="server-header">
 			<span class="server-name-text">{server.name}</span>
-			<a href="/servers" class="icon-btn" title="Volver">←</a>
+			<div class="server-header-actions">
+				{#if canManage}
+					<button class="icon-btn" title="Configuración" onclick={openSettings}>⚙️</button>
+				{/if}
+				<a href="/servers" class="icon-btn" title="Volver">←</a>
+			</div>
 		</div>
 
 		<nav class="channel-nav">
@@ -411,13 +487,20 @@
 					</div>
 				</div>
 			{/if}
-			<div class="user-info">
-				{#if user.avatarUrl}
-					<img src={user.avatarUrl} class="avatar-sm" alt="" />
-				{:else}
-					<div class="avatar-sm avatar-init">{avatarInitial(user.username)}</div>
+			<div class="user-info-row">
+				<button class="user-info" onclick={() => (showProfile = !showProfile)} title="Perfil">
+					{#if user.avatarUrl}
+						<img src={user.avatarUrl} class="avatar-sm" alt="" />
+					{:else}
+						<div class="avatar-sm avatar-init">{avatarInitial(user.username)}</div>
+					{/if}
+					<span class="username-text">{user.username}</span>
+				</button>
+				{#if showProfile}
+					<div class="profile-menu" role="menu">
+						<button class="profile-menu-item danger" onclick={handleLogout}>Cerrar sesión</button>
+					</div>
 				{/if}
-				<span class="username-text">{user.username}</span>
 			</div>
 		</div>
 	</aside>
@@ -587,6 +670,55 @@
 			</div>
 		{/if}
 	</main>
+
+	<!-- ── Settings modal ───────────────────────────────────────────────── -->
+	{#if showSettings}
+		<div class="modal-overlay" role="presentation" onclick={(e) => { if (e.target === e.currentTarget) showSettings = false; }} onkeydown={(e) => { if (e.key === 'Escape') showSettings = false; }}>
+			<div class="settings-modal">
+				<div class="settings-header">
+					<h3>Configuración de {server.name}</h3>
+					<button class="icon-btn" onclick={() => (showSettings = false)}>✕</button>
+				</div>
+				<form class="settings-body" onsubmit={saveSettings}>
+					<label>
+						Nombre del servidor
+						<input type="text" bind:value={settingsName} required />
+					</label>
+					<label>
+						Descripción
+						<input type="text" bind:value={settingsDesc} placeholder="Opcional" />
+					</label>
+					<label>
+						Acceso
+						<select bind:value={settingsAccess}>
+							<option value="PUBLIC">🌐 Público</option>
+							<option value="PASSWORD">🔒 Contraseña</option>
+							<option value="WHITELIST">📋 Lista blanca</option>
+						</select>
+					</label>
+					{#if settingsAccess === 'PASSWORD'}
+						<label>
+							Nueva contraseña <span class="optional">(dejar vacío para no cambiar)</span>
+							<input type="password" bind:value={settingsPassword} placeholder="Nueva contraseña" />
+						</label>
+					{/if}
+					{#if settingsError}<p class="error">{settingsError}</p>{/if}
+					<button type="submit" class="btn-primary" disabled={settingsLoading}>
+						{settingsLoading ? 'Guardando…' : 'Guardar cambios'}
+					</button>
+				</form>
+				<div class="settings-danger">
+					<p class="danger-title">Zona de peligro</p>
+					{#if !isOwner}
+						<button class="btn-danger-outline" onclick={leaveServer}>Salir del servidor</button>
+					{/if}
+					{#if canManage}
+						<button class="btn-danger-solid" onclick={deleteServer}>Eliminar servidor</button>
+					{/if}
+				</div>
+			</div>
+		</div>
+	{/if}
 
 	<!-- ── Members panel ──────────────────────────────────────────────────── -->
 	{#if showMembers}
@@ -1381,4 +1513,178 @@
 	}
 
 	.btn-primary:hover { opacity: 0.85; }
+	.btn-primary:disabled { opacity: 0.45; cursor: not-allowed; }
+
+	/* ── Server header actions ───────────────────────────────────────────── */
+	.server-header-actions { display: flex; align-items: center; gap: 0.1rem; }
+
+	/* ── Profile ─────────────────────────────────────────────────────────── */
+	.user-info-row { position: relative; }
+
+	.user-info {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		width: 100%;
+		background: transparent;
+		border: none;
+		cursor: pointer;
+		border-radius: var(--radius);
+		padding: 0.3rem 0.4rem;
+		transition: background var(--transition);
+		font-family: inherit;
+	}
+
+	.user-info:hover { background: rgba(255,255,255,0.06); }
+
+	.profile-menu {
+		position: absolute;
+		bottom: calc(100% + 4px);
+		left: 0;
+		right: 0;
+		background: var(--bg-elevated);
+		border: 1px solid var(--border-strong);
+		border-radius: var(--radius-lg);
+		padding: 0.3rem;
+		z-index: 50;
+		display: flex;
+		flex-direction: column;
+		gap: 0.1rem;
+	}
+
+	.profile-menu-item {
+		background: transparent;
+		border: none;
+		padding: 0.45rem 0.75rem;
+		font-size: 0.82rem;
+		text-align: left;
+		border-radius: var(--radius);
+		cursor: pointer;
+		font-family: inherit;
+		color: var(--text-secondary);
+		transition: background var(--transition), color var(--transition);
+	}
+
+	.profile-menu-item:hover { background: rgba(255,255,255,0.06); color: var(--text-primary); }
+	.profile-menu-item.danger { color: #f87171; }
+	.profile-menu-item.danger:hover { background: rgba(239,68,68,0.12); }
+
+	/* ── Settings modal ──────────────────────────────────────────────────── */
+	.modal-overlay {
+		position: fixed;
+		inset: 0;
+		background: rgba(0,0,0,0.65);
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		z-index: 200;
+	}
+
+	.settings-modal {
+		background: var(--bg-surface);
+		border: 1px solid var(--border-strong);
+		border-radius: var(--radius-lg);
+		width: 100%;
+		max-width: 480px;
+		max-height: 90vh;
+		overflow-y: auto;
+		display: flex;
+		flex-direction: column;
+	}
+
+	.settings-header {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		padding: 1rem 1.25rem;
+		border-bottom: 1px solid var(--border);
+		flex-shrink: 0;
+	}
+
+	.settings-header h3 { font-size: 0.9rem; color: var(--text-primary); }
+
+	.settings-body {
+		display: flex;
+		flex-direction: column;
+		gap: 0.75rem;
+		padding: 1.25rem;
+	}
+
+	.settings-body label {
+		display: flex;
+		flex-direction: column;
+		gap: 0.3rem;
+		font-size: 0.72rem;
+		color: var(--text-secondary);
+		font-weight: 600;
+		letter-spacing: 0.04em;
+		text-transform: uppercase;
+	}
+
+	.settings-body input,
+	.settings-body select {
+		font-size: 0.85rem;
+		padding: 0.4rem 0.6rem;
+		background: var(--bg-elevated);
+		border: 1px solid var(--border);
+		border-radius: var(--radius);
+		color: var(--text-primary);
+		outline: none;
+		font-family: inherit;
+		transition: border-color var(--transition);
+	}
+
+	.settings-body input:focus,
+	.settings-body select:focus { border-color: var(--border-focus); }
+
+	.optional { font-weight: 400; text-transform: none; letter-spacing: 0; color: var(--text-muted); }
+
+	.error { font-size: 0.75rem; color: var(--error); }
+
+	.settings-danger {
+		padding: 1rem 1.25rem 1.25rem;
+		border-top: 1px solid var(--border);
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+	}
+
+	.danger-title {
+		font-size: 0.7rem;
+		font-weight: 700;
+		text-transform: uppercase;
+		letter-spacing: 0.08em;
+		color: #f87171;
+		margin: 0 0 0.25rem;
+	}
+
+	.btn-danger-outline {
+		padding: 0.4rem 0.85rem;
+		background: transparent;
+		border: 1px solid rgba(239,68,68,0.4);
+		border-radius: var(--radius);
+		color: #f87171;
+		font-size: 0.82rem;
+		font-family: inherit;
+		cursor: pointer;
+		transition: background var(--transition), border-color var(--transition);
+		text-align: left;
+	}
+
+	.btn-danger-outline:hover { background: rgba(239,68,68,0.1); border-color: #f87171; }
+
+	.btn-danger-solid {
+		padding: 0.4rem 0.85rem;
+		background: rgba(239,68,68,0.15);
+		border: 1px solid rgba(239,68,68,0.4);
+		border-radius: var(--radius);
+		color: #f87171;
+		font-size: 0.82rem;
+		font-family: inherit;
+		cursor: pointer;
+		transition: background var(--transition);
+		text-align: left;
+	}
+
+	.btn-danger-solid:hover { background: rgba(239,68,68,0.25); }
 </style>
