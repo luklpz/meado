@@ -1,0 +1,2 @@
+CREATE TYPE "ServerType" AS ENUM ('DISCORD', 'SPATIAL');
+ALTER TABLE "Server" ADD COLUMN "serverType" "ServerType" NOT NULL DEFAULT 'DISCORD';

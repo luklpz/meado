@@ -12,6 +12,7 @@
 	let newName = $state('');
 	let newSlug = $state('');
 	let newDesc = $state('');
+	let newType = $state<'DISCORD' | 'SPATIAL'>('DISCORD');
 	let newAccess = $state<'PUBLIC' | 'PASSWORD' | 'WHITELIST'>('PUBLIC');
 	let newPassword = $state('');
 
@@ -55,6 +56,7 @@
 					name: newName,
 					slug: newSlug,
 					description: newDesc || undefined,
+					serverType: newType,
 					accessType: newAccess,
 					password: newAccess === 'PASSWORD' ? newPassword : undefined,
 				}),
@@ -101,6 +103,34 @@
 				</label>
 			</div>
 			<label class="full">Descripción<input type="text" bind:value={newDesc} /></label>
+
+			<div class="type-selector">
+				<div class="type-label">Tipo de servidor</div>
+				<div class="type-options">
+					<button
+						type="button"
+						class="type-option"
+						class:selected={newType === 'DISCORD'}
+						onclick={() => (newType = 'DISCORD')}
+					>
+						<span class="type-icon">💬</span>
+						<span class="type-name">Discord</span>
+						<span class="type-desc">Canales de texto y voz</span>
+					</button>
+					<button
+						type="button"
+						class="type-option"
+						class:selected={newType === 'SPATIAL'}
+						onclick={() => (newType = 'SPATIAL')}
+					>
+						<span class="type-icon">🗺️</span>
+						<span class="type-name">Espacial 2D</span>
+						<span class="type-desc">Próximamente</span>
+						<span class="type-badge">WIP</span>
+					</button>
+				</div>
+			</div>
+
 			<div class="form-row">
 				<label>
 					Acceso
@@ -355,4 +385,54 @@
 	}
 
 	.modal-actions { display: flex; gap: 0.5rem; justify-content: flex-end; }
+
+	.type-selector { display: flex; flex-direction: column; gap: 0.4rem; }
+
+	.type-label {
+		font-size: 0.72rem;
+		color: var(--text-secondary);
+		font-weight: 600;
+	}
+
+	.type-options { display: flex; gap: 0.5rem; }
+
+	.type-option {
+		flex: 1;
+		display: flex;
+		flex-direction: column;
+		align-items: flex-start;
+		gap: 0.15rem;
+		padding: 0.65rem 0.85rem;
+		background: var(--bg-elevated);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-lg);
+		cursor: pointer;
+		text-align: left;
+		font-family: inherit;
+		transition: border-color var(--transition), background var(--transition);
+		position: relative;
+	}
+
+	.type-option:hover { border-color: var(--border-strong); }
+	.type-option.selected { border-color: var(--accent); background: rgba(99,102,241,0.08); }
+
+	.type-icon { font-size: 1.1rem; }
+
+	.type-name { font-size: 0.82rem; font-weight: 700; color: var(--text-primary); }
+
+	.type-desc { font-size: 0.7rem; color: var(--text-muted); }
+
+	.type-badge {
+		position: absolute;
+		top: 0.4rem;
+		right: 0.4rem;
+		font-size: 0.6rem;
+		font-weight: 700;
+		padding: 0.1rem 0.35rem;
+		background: rgba(251,191,36,0.15);
+		color: #fbbf24;
+		border: 1px solid rgba(251,191,36,0.3);
+		border-radius: 999px;
+		letter-spacing: 0.05em;
+	}
 </style>

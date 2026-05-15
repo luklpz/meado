@@ -1,5 +1,5 @@
 import {
-  Injectable, NotFoundException, ForbiddenException, ConflictException, BadRequestException,
+  Injectable, NotFoundException, ForbiddenException, ConflictException, BadRequestException, HttpException, HttpStatus,
 } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../prisma/prisma.service';
@@ -22,6 +22,7 @@ export class ServersService {
         slug: true,
         description: true,
         iconUrl: true,
+        serverType: true,
         accessType: true,
         owner: { select: { username: true } },
         _count: { select: { members: true } },
@@ -60,6 +61,10 @@ export class ServersService {
   // ── Create ───────────────────────────────────────────────────────────
 
   async createServer(dto: CreateServerDto, ownerId: string) {
+    if (dto.serverType === 'SPATIAL') {
+      throw new HttpException('Los servidores espaciales 2D aún no están implementados', HttpStatus.NOT_IMPLEMENTED);
+    }
+
     const existing = await this.prisma.server.findUnique({ where: { slug: dto.slug } });
     if (existing) throw new ConflictException('Slug already in use');
 
@@ -74,6 +79,7 @@ export class ServersService {
         name: dto.name,
         slug: dto.slug,
         description: dto.description,
+        serverType: (dto.serverType ?? 'DISCORD') as any,
         accessType: (dto.accessType ?? 'PUBLIC') as any,
         passwordHash,
         ownerId,

@@ -15,6 +15,11 @@ enum UserRole {
   SUPERADMIN
 }
 
+enum ServerType {
+  DISCORD
+  SPATIAL
+}
+
 enum ServerAccess {
   PUBLIC
   PASSWORD
@@ -53,6 +58,7 @@ model Server {
   slug         String            @unique
   description  String?
   iconUrl      String?
+  serverType   ServerType        @default(DISCORD)
   accessType   ServerAccess      @default(PUBLIC)
   passwordHash String?
   createdAt    DateTime          @default(now())
