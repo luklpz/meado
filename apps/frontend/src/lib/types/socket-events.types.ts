@@ -1,38 +1,46 @@
-export interface PlayerState {
-  playerId: string;
+export interface MessageAuthor {
+  id: string;
   username: string;
-  x: number;
-  y: number;
-  roomId: string;
+  avatarUrl?: string | null;
 }
 
-export interface RoomJoinPayload {
-  roomId: string;
+export interface MessageAttachment {
+  id: string;
+  url: string;
+  name: string;
+  size: number;
+  mimeType: string;
+}
+
+export interface MessagePayload {
+  id: string;
+  content: string | null;
+  channelId: string;
+  createdAt: string;
+  editedAt: string | null;
+  author: MessageAuthor;
+  attachments: MessageAttachment[];
+}
+
+export interface VoiceMember {
+  userId: string;
   username: string;
-}
-
-export interface PlayerMovePayload {
-  x: number;
-  y: number;
-  roomId: string;
-}
-
-export interface RoomStatePayload {
-  players: PlayerState[];
-}
-
-export interface PlayerLeftPayload {
-  playerId: string;
+  avatarUrl?: string | null;
 }
 
 export interface ClientToServerEvents {
-  'room:join': (payload: RoomJoinPayload) => void;
-  'player:move': (payload: PlayerMovePayload) => void;
+  'channel:join': (payload: { channelId: string }) => void;
+  'channel:leave': (payload: { channelId: string }) => void;
+  'message:send': (payload: { channelId: string; content: string }) => void;
+  'voice:join': (payload: { channelId: string }) => void;
+  'voice:leave': (payload: { channelId: string }) => void;
 }
 
 export interface ServerToClientEvents {
-  'room:state': (payload: RoomStatePayload) => void;
-  'player:joined': (payload: PlayerState) => void;
-  'player:moved': (payload: PlayerState) => void;
-  'player:left': (payload: PlayerLeftPayload) => void;
+  'message:created': (payload: MessagePayload) => void;
+  'message:updated': (payload: MessagePayload) => void;
+  'message:deleted': (payload: { messageId: string; channelId: string }) => void;
+  'voice:state': (payload: { channelId: string; members: VoiceMember[] }) => void;
+  'voice:joined': (payload: { channelId: string; member: VoiceMember }) => void;
+  'voice:left': (payload: { channelId: string; userId: string }) => void;
 }

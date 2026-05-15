@@ -1,70 +1,45 @@
 import { writable } from 'svelte/store';
 import { io, type Socket } from 'socket.io-client';
-import type {
-	ClientToServerEvents,
-	ServerToClientEvents,
-	PlayerState,
-} from './types/socket-events.types.js';
+import type { ClientToServerEvents, ServerToClientEvents } from './types/socket-events.types.js';
 
-export type GameSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
+export type ChatSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
+export type GameSocket = ChatSocket; // Phase 2 compat
 
 function createSocketStore() {
-	const socket = writable<GameSocket | null>(null);
-	const connected = writable(false);
-	const players = writable<Map<string, PlayerState>>(new Map());
+  const socket = writable<ChatSocket | null>(null);
+  const connected = writable(false);
+  let _socket: ChatSocket | null = null;
 
-	let _socket: GameSocket | null = null;
+  function connect(socketToken: string): ChatSocket {
+    if (_socket?.connected) return _socket;
+    if (_socket) { _socket.removeAllListeners(); _socket.disconnect(); }
 
-	// socketToken: JWT de corta duración para autenticar el handshake de Socket.io
-	function connect(serverUrl: string, socketToken: string): GameSocket {
-		if (_socket?.connected) return _socket;
+    const url = import.meta.env.VITE_SOCKET_URL ?? '';
+    const s: ChatSocket = io(url, {
+      autoConnect: true,
+      transports: ['websocket'],
+      auth: { token: socketToken },
+      withCredentials: true,
+    });
 
-		const s: GameSocket = io(serverUrl, {
-			autoConnect: true,
-			transports: ['websocket'],
-			auth: { token: socketToken },
-			withCredentials: true,
-		});
+    s.on('connect', () => { connected.set(true); socket.set(s); });
+    s.on('disconnect', () => { connected.set(false); });
 
-		s.on('connect', () => { connected.set(true); socket.set(s); });
-		s.on('disconnect', () => { connected.set(false); });
+    _socket = s;
+    socket.set(s);
+    return s;
+  }
 
-		s.on('room:state', ({ players: initial }) => {
-			const map = new Map<string, PlayerState>();
-			initial.forEach((p) => map.set(p.playerId, p));
-			players.set(map);
-		});
+  function disconnect() {
+    _socket?.disconnect();
+    _socket = null;
+    socket.set(null);
+    connected.set(false);
+  }
 
-		s.on('player:joined', (player) => {
-			players.update((map) => new Map(map).set(player.playerId, player));
-		});
+  function raw(): ChatSocket | null { return _socket; }
 
-		s.on('player:moved', (player) => {
-			players.update((map) => new Map(map).set(player.playerId, player));
-		});
-
-		s.on('player:left', ({ playerId }) => {
-			players.update((map) => {
-				const next = new Map(map);
-				next.delete(playerId);
-				return next;
-			});
-		});
-
-		_socket = s;
-		socket.set(s);
-		return s;
-	}
-
-	function disconnect() {
-		_socket?.disconnect();
-		_socket = null;
-		socket.set(null);
-		connected.set(false);
-		players.set(new Map());
-	}
-
-	return { socket, connected, players, connect, disconnect };
+  return { socket, connected, connect, disconnect, raw };
 }
 
 export const socketStore = createSocketStore();

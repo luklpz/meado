@@ -11,7 +11,7 @@ export const handle: Handle = async ({ event, resolve }) => {
 			});
 			if (res.ok) {
 				const data = await res.json();
-				event.locals.user = { id: data.id, username: data.username, role: data.role };
+				event.locals.user = { id: data.id, username: data.username, role: data.role, avatarUrl: data.avatarUrl ?? null };
 			} else {
 				event.locals.user = null;
 			}

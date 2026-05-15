@@ -1,4 +1,5 @@
-import type { GameSocket } from '$lib/socket.js';
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type GameSocket = any; // Phase 2 — socket types updated for Phase 1 chat
 import type { Room } from 'livekit-client';
 
 export interface SceneConfig {
@@ -259,19 +260,19 @@ export function createGameScene(Phaser: PhaserType, socket: GameSocket, cfg: Sce
 		}
 
 		private bindSocketEvents() {
-			socket.on('room:state', ({ players }) => {
-				players.forEach((p) => {
+			socket.on('room:state', ({ players }: { players: any[] }) => {
+				players.forEach((p: any) => {
 					if (p.playerId !== socket.id) this.spawnRemote(p.playerId, p.username, p.x, p.y);
 				});
 			});
-			socket.on('player:joined', (p) => {
+			socket.on('player:joined', (p: any) => {
 				if (p.playerId !== socket.id) this.spawnRemote(p.playerId, p.username, p.x, p.y);
 			});
-			socket.on('player:moved', (p) => {
+			socket.on('player:moved', (p: any) => {
 				const r = this.remote.get(p.playerId);
 				if (r) { r.targetX = p.x; r.targetY = p.y; }
 			});
-			socket.on('player:left', ({ playerId }) => { this.despawnRemote(playerId); });
+			socket.on('player:left', ({ playerId }: { playerId: string }) => { this.despawnRemote(playerId); });
 		}
 	};
 }

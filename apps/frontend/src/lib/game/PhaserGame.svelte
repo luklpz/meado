@@ -37,7 +37,7 @@
 		]);
 
 		const socketUrl = SOCKET_URL || window.location.origin;
-		const socket = socketStore.connect(socketUrl, socketToken);
+		const socket = (socketStore as any).connect(socketUrl, socketToken);
 
 		let livekitRoom: import('livekit-client').Room | undefined;
 		if (LIVEKIT_URL) {

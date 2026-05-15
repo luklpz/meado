@@ -42,7 +42,7 @@ function createLiveKitStore() {
 		room.on(RoomEvent.TrackSubscribed, (track) => {
 			if (track.kind !== Track.Kind.Audio) return;
 			const el = track.attach() as HTMLAudioElement;
-			el.volume = 0; // proximity system controls volume each frame
+			el.volume = 1;
 			el.style.display = 'none';
 			document.body.appendChild(el);
 			_audioEls.push(el);
