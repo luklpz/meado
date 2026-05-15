@@ -1,7 +1,9 @@
 import {
   Controller, Get, Post, Patch, Delete,
-  Param, Body, Req, UseGuards,
+  Param, Body, Req, UseGuards, UseInterceptors, UploadedFile,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { memoryStorage } from 'multer';
 import type { Request } from 'express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
@@ -38,6 +40,17 @@ export class ServersController {
   @Post()
   create(@Body() dto: CreateServerDto, @Req() req: Request) {
     return this.serversService.createServer(dto, user(req).id);
+  }
+
+  @Patch(':slug/icon')
+  @UseInterceptors(FileInterceptor('file', { storage: memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } }))
+  updateIcon(
+    @Param('slug') slug: string,
+    @UploadedFile() file: Express.Multer.File,
+    @Req() req: Request,
+  ) {
+    const { id, role } = user(req);
+    return this.serversService.updateIcon(slug, file, id, role);
   }
 
   @Patch(':slug')

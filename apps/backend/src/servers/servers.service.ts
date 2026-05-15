@@ -125,6 +125,33 @@ export class ServersService {
     return this.getServer(server.slug);
   }
 
+  // ── Icon upload ───────────────────────────────────────────────────────
+
+  async updateIcon(slug: string, file: Express.Multer.File, userId: string, userRole: string): Promise<{ iconUrl: string }> {
+    const allowed = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+    if (!allowed.includes(file.mimetype)) throw new BadRequestException('Tipo no permitido. Usa JPEG, PNG, GIF o WebP.');
+
+    const server = await this.assertPermission(slug, userId, userRole, 'manageServer');
+
+    const supabaseUrl = process.env.SUPABASE_URL;
+    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (!supabaseUrl || !supabaseKey) throw new BadRequestException('Almacenamiento no configurado.');
+
+    const ext = file.mimetype.split('/')[1];
+    const path = `${server.id}/icon.${ext}`;
+
+    const uploadRes = await fetch(`${supabaseUrl}/storage/v1/object/avatars/${path}`, {
+      method: 'PUT',
+      headers: { Authorization: `Bearer ${supabaseKey}`, 'Content-Type': file.mimetype, 'x-upsert': 'true' },
+      body: file.buffer as any,
+    });
+    if (!uploadRes.ok) throw new BadRequestException('Error al subir la imagen.');
+
+    const iconUrl = `${supabaseUrl}/storage/v1/object/public/avatars/${path}`;
+    await this.prisma.server.update({ where: { id: server.id }, data: { iconUrl } });
+    return { iconUrl };
+  }
+
   // ── Update / Delete ───────────────────────────────────────────────────
 
   async updateServer(slug: string, data: Partial<CreateServerDto>, userId: string, userRole: string) {

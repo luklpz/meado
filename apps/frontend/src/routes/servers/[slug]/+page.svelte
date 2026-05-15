@@ -68,6 +68,10 @@
 	// ── Profile dropdown ───────────────────────────────────────────────────
 	let showProfile = $state(false);
 
+	// ── Icon upload ────────────────────────────────────────────────────────
+	let iconUploadError = $state('');
+	let serverIconUrl = $state<string | null>(server.iconUrl ?? null);
+
 	// ── Unread counts ──────────────────────────────────────────────────────
 	let unread = $state<Map<string, number>>(new Map());
 
@@ -323,6 +327,25 @@
 		]);
 		if (rolesRes.ok) roles = await rolesRes.json();
 		if (wlRes?.ok) whitelist = await wlRes.json();
+	}
+
+	async function uploadIcon(e: Event) {
+		const file = (e.target as HTMLInputElement).files?.[0];
+		if (!file) return;
+		iconUploadError = '';
+		const fd = new FormData();
+		fd.append('file', file);
+		const res = await fetch(`/api/servers/${server.slug}/icon`, {
+			method: 'PATCH', credentials: 'include', body: fd,
+		});
+		if (res.ok) {
+			const { iconUrl } = await res.json();
+			serverIconUrl = iconUrl;
+		} else {
+			const err = await res.json().catch(() => ({}));
+			iconUploadError = err.message ?? 'Error al subir.';
+		}
+		(e.target as HTMLInputElement).value = '';
 	}
 
 	async function saveSettings(e: SubmitEvent) {
@@ -794,6 +817,20 @@
 				<div class="settings-header">
 					<h3>Configuración de {server.name}</h3>
 					<button class="icon-btn" onclick={() => (showSettings = false)}>✕</button>
+				</div>
+				<div class="settings-icon-section">
+					<div class="server-icon-preview">
+						{#if serverIconUrl}
+							<img src={serverIconUrl} alt="" class="server-icon-img" />
+						{:else}
+							<span class="server-icon-initial">{server.name[0].toUpperCase()}</span>
+						{/if}
+					</div>
+					<label class="icon-upload-label">
+						<input type="file" accept="image/jpeg,image/png,image/gif,image/webp" class="hidden-file" onchange={uploadIcon} />
+						Cambiar icono
+					</label>
+					{#if iconUploadError}<p class="error">{iconUploadError}</p>{/if}
 				</div>
 				<form class="settings-body" onsubmit={saveSettings}>
 					<label>
@@ -2044,4 +2081,41 @@
 	}
 
 	.role-name-input:focus { border-color: var(--border-focus); }
+
+	/* ── Settings icon section ───────────────────────────────────────────── */
+	.settings-icon-section {
+		display: flex;
+		align-items: center;
+		gap: 1rem;
+		padding: 1rem 1.25rem;
+		border-bottom: 1px solid var(--border);
+	}
+
+	.server-icon-preview {
+		width: 64px;
+		height: 64px;
+		border-radius: var(--radius-lg);
+		background: var(--bg-elevated);
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		overflow: hidden;
+		flex-shrink: 0;
+	}
+
+	.server-icon-img { width: 100%; height: 100%; object-fit: cover; }
+
+	.server-icon-initial { font-size: 1.5rem; font-weight: 700; color: var(--text-muted); }
+
+	.icon-upload-label {
+		font-size: 0.8rem;
+		color: var(--accent);
+		cursor: pointer;
+		padding: 0.35rem 0.75rem;
+		border: 1px solid var(--accent);
+		border-radius: var(--radius);
+		transition: background var(--transition);
+	}
+
+	.icon-upload-label:hover { background: rgba(99,102,241,0.1); }
 </style>
