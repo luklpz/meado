@@ -10,6 +10,7 @@ import { ServersService } from './servers.service';
 import { CreateServerDto } from './dto/create-server.dto';
 import { JoinServerDto } from './dto/join-server.dto';
 import { CreateRoleDto } from './dto/create-role.dto';
+import { CreateChannelDto } from './dto/create-channel.dto';
 
 function user(req: Request) {
   return (req as any).user as { id: string; username: string; role: string };
@@ -88,6 +89,31 @@ export class ServersController {
   ) {
     const { id, role } = user(req);
     return this.serversService.assignRole(slug, userId, roleId, id, role);
+  }
+
+  // ── Channels ──────────────────────────────────────────────────────────
+
+  @Post(':slug/channels')
+  createChannel(@Param('slug') slug: string, @Body() dto: CreateChannelDto, @Req() req: Request) {
+    const { id, role } = user(req);
+    return this.serversService.createChannel(slug, dto, id, role);
+  }
+
+  @Patch(':slug/channels/:channelId')
+  updateChannel(
+    @Param('slug') slug: string,
+    @Param('channelId') channelId: string,
+    @Body() dto: Partial<CreateChannelDto>,
+    @Req() req: Request,
+  ) {
+    const { id, role } = user(req);
+    return this.serversService.updateChannel(slug, channelId, dto, id, role);
+  }
+
+  @Delete(':slug/channels/:channelId')
+  deleteChannel(@Param('slug') slug: string, @Param('channelId') channelId: string, @Req() req: Request) {
+    const { id, role } = user(req);
+    return this.serversService.deleteChannel(slug, channelId, id, role);
   }
 
   // ── Whitelist ─────────────────────────────────────────────────────────

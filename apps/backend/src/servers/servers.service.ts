@@ -5,6 +5,7 @@ import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../prisma/prisma.service';
 import type { CreateServerDto } from './dto/create-server.dto';
 import type { CreateRoleDto } from './dto/create-role.dto';
+import type { CreateChannelDto } from './dto/create-channel.dto';
 import { DEFAULT_PERMISSIONS, ADMIN_PERMISSIONS, type ServerPermissions } from '../shared/types/permissions';
 
 @Injectable()
@@ -305,6 +306,35 @@ export class ServersService {
     if (!role) throw new NotFoundException('Role not found');
     if (role.isDefault) throw new ForbiddenException('Cannot delete the @everyone role');
     await this.prisma.serverRole.delete({ where: { id: roleId } });
+    return { ok: true };
+  }
+
+  // ── Channels ──────────────────────────────────────────────────────────
+
+  async createChannel(slug: string, dto: CreateChannelDto, requesterId: string, requesterRole: string) {
+    const server = await this.assertPermission(slug, requesterId, requesterRole, 'manageChannels');
+    return this.prisma.channel.create({
+      data: { name: dto.name, type: dto.type as any, position: dto.position ?? 0, serverId: server.id },
+      select: { id: true, name: true, type: true, position: true },
+    });
+  }
+
+  async updateChannel(slug: string, channelId: string, dto: Partial<CreateChannelDto>, requesterId: string, requesterRole: string) {
+    const server = await this.assertPermission(slug, requesterId, requesterRole, 'manageChannels');
+    const channel = await this.prisma.channel.findFirst({ where: { id: channelId, serverId: server.id } });
+    if (!channel) throw new NotFoundException('Channel not found');
+    return this.prisma.channel.update({
+      where: { id: channelId },
+      data: { name: dto.name ?? undefined, position: dto.position ?? undefined },
+      select: { id: true, name: true, type: true, position: true },
+    });
+  }
+
+  async deleteChannel(slug: string, channelId: string, requesterId: string, requesterRole: string) {
+    const server = await this.assertPermission(slug, requesterId, requesterRole, 'manageChannels');
+    const channel = await this.prisma.channel.findFirst({ where: { id: channelId, serverId: server.id } });
+    if (!channel) throw new NotFoundException('Channel not found');
+    await this.prisma.channel.delete({ where: { id: channelId } });
     return { ok: true };
   }
 
