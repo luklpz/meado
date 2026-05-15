@@ -72,6 +72,15 @@
 	let iconUploadError = $state('');
 	let serverIconUrl = $state<string | null>(server.iconUrl ?? null);
 
+	// ── Toast ─────────────────────────────────────────────────────────────
+	let toast = $state('');
+	let toastTimer: ReturnType<typeof setTimeout>;
+	function showToast(msg: string) {
+		toast = msg;
+		clearTimeout(toastTimer);
+		toastTimer = setTimeout(() => (toast = ''), 2500);
+	}
+
 	// ── Reactive avatar from auth store ───────────────────────────────────
 	const authUser = authStore.user;
 	let localAvatarUrl = $state(user.avatarUrl ?? null);
@@ -104,6 +113,7 @@
 				scrollToBottom();
 			} else {
 				unread = new Map(unread).set(msg.channelId, (unread.get(msg.channelId) ?? 0) + 1);
+				playNotificationSound();
 			}
 		});
 		socket.on('message:updated', (msg) => {
@@ -216,9 +226,9 @@
 	async function loadMoreMessages() {
 		if (!selectedChannel || loadingMore || !hasMore || messages.length === 0) return;
 		loadingMore = true;
-		const oldest = messages[0].id;
+		const oldest = messages[0].createdAt;
 		try {
-			const res = await fetch(`/api/channels/${selectedChannel.id}/messages?limit=${MSG_LIMIT}&before=${oldest}`, { credentials: 'include' });
+			const res = await fetch(`/api/channels/${selectedChannel.id}/messages?limit=${MSG_LIMIT}&before=${encodeURIComponent(oldest)}`, { credentials: 'include' });
 			if (res.ok) {
 				const older = await res.json();
 				if (older.length === 0) { hasMore = false; return; }
@@ -528,6 +538,29 @@
 	}
 
 	// ── Helpers ───────────────────────────────────────────────────────────
+	async function copyInviteLink() {
+		const url = `${location.origin}/servers/${server.slug}`;
+		await navigator.clipboard.writeText(url).catch(() => {});
+		showToast('Enlace copiado');
+	}
+
+	function playNotificationSound() {
+		try {
+			const ctx = new AudioContext();
+			const osc = ctx.createOscillator();
+			const gain = ctx.createGain();
+			osc.connect(gain);
+			gain.connect(ctx.destination);
+			osc.frequency.value = 880;
+			osc.type = 'sine';
+			gain.gain.setValueAtTime(0.08, ctx.currentTime);
+			gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.18);
+			osc.start(ctx.currentTime);
+			osc.stop(ctx.currentTime + 0.18);
+			osc.onended = () => ctx.close();
+		} catch { /* AudioContext blocked */ }
+	}
+
 	function scrollToBottom() {
 		setTimeout(() => { if (messagesEl) messagesEl!.scrollTop = messagesEl!.scrollHeight; }, 50);
 	}
@@ -562,6 +595,7 @@
 		<div class="server-header">
 			<span class="server-name-text">{server.name}</span>
 			<div class="server-header-actions">
+				<button class="icon-btn" title="Copiar enlace" onclick={copyInviteLink}>🔗</button>
 				{#if canManage}
 					<button class="icon-btn" title="Configuración" onclick={openSettings}>⚙️</button>
 				{/if}
@@ -1034,6 +1068,10 @@
 				</ul>
 			{/if}
 		</aside>
+	{/if}
+
+	{#if toast}
+		<div class="toast">{toast}</div>
 	{/if}
 </div>
 
@@ -2195,4 +2233,26 @@
 
 	/* profile menu label as button */
 	label.profile-menu-item { cursor: pointer; }
+
+	/* ── Toast ───────────────────────────────────────────────────────────── */
+	.toast {
+		position: fixed;
+		bottom: 1.5rem;
+		left: 50%;
+		transform: translateX(-50%);
+		background: var(--bg-elevated);
+		border: 1px solid var(--border-strong);
+		color: var(--text-primary);
+		font-size: 0.82rem;
+		padding: 0.5rem 1.25rem;
+		border-radius: 999px;
+		z-index: 500;
+		pointer-events: none;
+		animation: toast-in 0.15s ease;
+	}
+
+	@keyframes toast-in {
+		from { opacity: 0; transform: translateX(-50%) translateY(8px); }
+		to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+	}
 </style>
