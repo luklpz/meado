@@ -1,7 +1,9 @@
 import {
-  Controller, Post, Get, Body, Res, Req, Query,
-  HttpCode, UseGuards,
+  Controller, Post, Get, Patch, Body, Res, Req, Query,
+  HttpCode, UseGuards, UseInterceptors, UploadedFile,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { memoryStorage } from 'multer';
 import type { Request, Response } from 'express';
 import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
@@ -60,6 +62,19 @@ export class AuthController {
   @HttpCode(200)
   async resetPassword(@Body() body: { token: string; password: string }) {
     return this.authService.resetPassword(body.token, body.password);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Patch('avatar')
+  @UseInterceptors(FileInterceptor('file', {
+    storage: memoryStorage(),
+    limits: { fileSize: 10 * 1024 * 1024 },
+  }))
+  async uploadAvatar(
+    @UploadedFile() file: Express.Multer.File,
+    @Req() req: Request,
+  ) {
+    return this.authService.updateAvatar((req as any).user.id, file);
   }
 
   @Post('logout')

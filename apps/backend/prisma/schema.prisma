@@ -32,7 +32,7 @@ model User {
   passwordHash  String
   emailVerified Boolean         @default(false)
   role          UserRole        @default(USER)
-  avatar        String          @default("default")
+  avatarUrl     String?
   lastPos       Json?
   createdAt     DateTime        @default(now())
   updatedAt     DateTime        @updatedAt

@@ -12,9 +12,12 @@ export interface PublicUser {
   id: string;
   username: string;
   role: string;
+  avatarUrl?: string | null;
 }
 
 const secret = () => process.env.JWT_SECRET ?? 'dev-secret';
+
+const ALLOWED_AVATAR_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
 
 function normalizeEmail(email: string): string {
   const [local, domain] = email.toLowerCase().split('@');
@@ -75,7 +78,9 @@ export class AuthService {
       throw new UnauthorizedException('Please verify your email before logging in');
     }
 
-    return this.buildResult({ id: user.id, username: user.username, role: user.role as string });
+    return this.buildResult({
+      id: user.id, username: user.username, role: user.role as string, avatarUrl: user.avatarUrl,
+    });
   }
 
   async verifyEmail(token: string): Promise<void> {
@@ -100,7 +105,6 @@ export class AuthService {
     const normalizedEmail = normalizeEmail(email);
     const user = await this.prisma.user.findUnique({ where: { email: normalizedEmail } });
 
-    // Always return success to avoid leaking which emails are registered
     if (!user || !user.emailVerified) {
       return { message: 'If that email exists, a reset link has been sent.' };
     }
@@ -128,30 +132,66 @@ export class AuthService {
       throw new BadRequestException('Invalid or expired reset link');
     }
 
-    if (payload.type !== 'reset') {
-      throw new BadRequestException('Invalid token type');
-    }
-
+    if (payload.type !== 'reset') throw new BadRequestException('Invalid token type');
     if (!newPassword || newPassword.length < 6) {
       throw new BadRequestException('Password must be at least 6 characters');
     }
 
     const passwordHash = await bcrypt.hash(newPassword, 12);
-    await this.prisma.user.update({
-      where: { id: payload.sub },
-      data: { passwordHash },
-    });
+    await this.prisma.user.update({ where: { id: payload.sub }, data: { passwordHash } });
 
     return { message: 'Password updated successfully' };
   }
 
-  getMe(user: PublicUser): PublicUser & { socketToken: string } {
+  async updateAvatar(userId: string, file: Express.Multer.File): Promise<{ avatarUrl: string }> {
+    if (!ALLOWED_AVATAR_TYPES.includes(file.mimetype)) {
+      throw new BadRequestException('Tipo de archivo no permitido. Usa JPEG, PNG, GIF o WebP.');
+    }
+
+    const supabaseUrl = process.env.SUPABASE_URL;
+    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+    if (!supabaseUrl || !supabaseKey) {
+      throw new BadRequestException('Almacenamiento no configurado.');
+    }
+
+    const ext = file.mimetype.split('/')[1];
+    const path = `${userId}/avatar.${ext}`;
+
+    const uploadRes = await fetch(`${supabaseUrl}/storage/v1/object/avatars/${path}`, {
+      method: 'PUT',
+      headers: {
+        Authorization: `Bearer ${supabaseKey}`,
+        'Content-Type': file.mimetype,
+        'x-upsert': 'true',
+      },
+      body: file.buffer as any,
+    });
+
+    if (!uploadRes.ok) {
+      throw new BadRequestException('Error al subir la imagen. Inténtalo de nuevo.');
+    }
+
+    const avatarUrl = `${supabaseUrl}/storage/v1/object/public/avatars/${path}`;
+
+    await this.prisma.user.update({ where: { id: userId }, data: { avatarUrl } });
+
+    return { avatarUrl };
+  }
+
+  async getMe(user: PublicUser): Promise<PublicUser & { socketToken: string }> {
+    const dbUser = await this.prisma.user.findUnique({
+      where: { id: user.id },
+      select: { avatarUrl: true },
+    });
+
     const socketToken = jwt.sign(
       { sub: user.id, username: user.username, role: user.role },
       secret(),
       { expiresIn: '1h' },
     );
-    return { ...user, socketToken };
+
+    return { ...user, avatarUrl: dbUser?.avatarUrl, socketToken };
   }
 
   private buildResult(user: PublicUser): { token: string; user: PublicUser } {

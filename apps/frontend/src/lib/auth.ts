@@ -4,24 +4,24 @@ export interface AuthUser {
 	id: string;
 	username: string;
 	role: string;
+	avatarUrl?: string | null;
 }
 
-// API base: '/api' proxied en dev, reescrito en prod por Vercel
 const API = '/api';
 
 function createAuthStore() {
 	const user = writable<AuthUser | null>(null);
 	let _socketToken: string | null = null;
 
-	// Llama a /api/auth/me para sincronizar el estado con la sesión actual
 	async function init(): Promise<AuthUser | null> {
 		try {
 			const res = await fetch(`${API}/auth/me`, { credentials: 'include' });
 			if (!res.ok) { user.set(null); return null; }
 			const data = await res.json();
-			user.set({ id: data.id, username: data.username, role: data.role });
+			const u: AuthUser = { id: data.id, username: data.username, role: data.role, avatarUrl: data.avatarUrl };
+			user.set(u);
 			_socketToken = data.socketToken ?? null;
-			return { id: data.id, username: data.username, role: data.role };
+			return u;
 		} catch {
 			user.set(null);
 			return null;
@@ -41,7 +41,7 @@ function createAuthStore() {
 		}
 		const data = await res.json();
 		user.set(data);
-		await init(); // fetch socketToken
+		await init();
 		return data;
 	}
 
@@ -93,11 +93,27 @@ function createAuthStore() {
 		return res.json();
 	}
 
+	async function updateAvatar(file: File): Promise<void> {
+		const formData = new FormData();
+		formData.append('file', file);
+		const res = await fetch(`${API}/auth/avatar`, {
+			method: 'PATCH',
+			credentials: 'include',
+			body: formData,
+		});
+		if (!res.ok) {
+			const err = await res.json().catch(() => ({}));
+			throw new Error(err.message ?? 'Error al subir la imagen.');
+		}
+		const data = await res.json();
+		user.update(u => u ? { ...u, avatarUrl: data.avatarUrl } : u);
+	}
+
 	function getSocketToken(): string | null {
 		return _socketToken;
 	}
 
-	return { user, init, login, register, logout, getSocketToken, forgotPassword, resetPassword };
+	return { user, init, login, register, logout, getSocketToken, forgotPassword, resetPassword, updateAvatar };
 }
 
 export const authStore = createAuthStore();

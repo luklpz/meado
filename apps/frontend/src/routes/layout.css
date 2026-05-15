@@ -4,105 +4,105 @@
 :root {
   --font-mono: 'Fira Mono', 'JetBrains Mono', 'Cascadia Code', ui-monospace, monospace;
   --radius-sm: 3px;
-  --radius: 4px;
-  --radius-lg: 6px;
-  --transition: 0.15s ease;
+  --radius: 5px;
+  --radius-lg: 8px;
+  --transition: 0.12s ease;
 }
 
-/* ── Dark (default) ── */
+/* ── Dark (neutral, no tint) ── */
 [data-theme="dark"] {
-  --bg-base: #080e09;
-  --bg-surface: #0e1710;
-  --bg-elevated: #132018;
-  --bg-hover: #1a2e1f;
-  --border: #1e3526;
-  --border-strong: #2d4a38;
+  --bg-base: #0d0d0f;
+  --bg-surface: #18181b;
+  --bg-elevated: #232327;
+  --bg-hover: #2d2d32;
+  --border: #2e2e34;
+  --border-strong: #3f3f46;
   --border-focus: #22c55e;
-  --text-primary: #e2f5ea;
-  --text-secondary: #7ea68a;
-  --text-muted: #3d5947;
+  --text-primary: #fafafa;
+  --text-secondary: #a1a1aa;
+  --text-muted: #52525b;
   --accent: #22c55e;
-  --accent-dim: rgba(34, 197, 94, 0.1);
+  --accent-dim: rgba(34, 197, 94, 0.12);
   --accent-hover: #16a34a;
   --accent-text: #050d07;
   --error: #f87171;
-  --error-surface: #1f0808;
-  --error-border: rgba(248, 113, 113, 0.25);
+  --error-surface: #1c0a0a;
+  --error-border: rgba(248, 113, 113, 0.2);
   --success: #22c55e;
-  --success-surface: rgba(34, 197, 94, 0.08);
+  --success-surface: rgba(34, 197, 94, 0.1);
   --success-border: rgba(34, 197, 94, 0.25);
 }
 
 /* ── Light ── */
 [data-theme="light"] {
-  --bg-base: #f4fdf6;
+  --bg-base: #f9f9f9;
   --bg-surface: #ffffff;
-  --bg-elevated: #edf7f0;
-  --bg-hover: #dff0e6;
-  --border: #c5e0ce;
-  --border-strong: #a8ceb5;
+  --bg-elevated: #f4f4f5;
+  --bg-hover: #e4e4e7;
+  --border: #d4d4d8;
+  --border-strong: #a1a1aa;
   --border-focus: #16a34a;
-  --text-primary: #1a3022;
-  --text-secondary: #4a7558;
-  --text-muted: #8eb09a;
+  --text-primary: #09090b;
+  --text-secondary: #52525b;
+  --text-muted: #a1a1aa;
   --accent: #16a34a;
   --accent-dim: rgba(22, 163, 74, 0.1);
   --accent-hover: #15803d;
   --accent-text: #ffffff;
   --error: #dc2626;
   --error-surface: #fef2f2;
-  --error-border: rgba(220, 38, 38, 0.2);
+  --error-border: rgba(220, 38, 38, 0.15);
   --success: #16a34a;
   --success-surface: rgba(22, 163, 74, 0.08);
-  --success-border: rgba(22, 163, 74, 0.25);
+  --success-border: rgba(22, 163, 74, 0.2);
 }
 
-/* ── Blue ── */
+/* ── Blue (GitHub Dark inspired) ── */
 [data-theme="blue"] {
-  --bg-base: #080c16;
-  --bg-surface: #0d1222;
-  --bg-elevated: #13192e;
-  --bg-hover: #1a2440;
-  --border: #1e2d4a;
-  --border-strong: #2d4270;
-  --border-focus: #60a5fa;
-  --text-primary: #dde8ff;
-  --text-secondary: #7090c0;
-  --text-muted: #374870;
-  --accent: #60a5fa;
-  --accent-dim: rgba(96, 165, 250, 0.1);
-  --accent-hover: #3b82f6;
-  --accent-text: #080c16;
-  --error: #f87171;
-  --error-surface: #1f0808;
-  --error-border: rgba(248, 113, 113, 0.25);
-  --success: #60a5fa;
-  --success-surface: rgba(96, 165, 250, 0.08);
-  --success-border: rgba(96, 165, 250, 0.25);
+  --bg-base: #0d1117;
+  --bg-surface: #161b22;
+  --bg-elevated: #21262d;
+  --bg-hover: #2d333b;
+  --border: #30363d;
+  --border-strong: #444c56;
+  --border-focus: #58a6ff;
+  --text-primary: #e6edf3;
+  --text-secondary: #8b949e;
+  --text-muted: #484f58;
+  --accent: #58a6ff;
+  --accent-dim: rgba(88, 166, 255, 0.12);
+  --accent-hover: #1f6feb;
+  --accent-text: #0d1117;
+  --error: #f85149;
+  --error-surface: #160c10;
+  --error-border: rgba(248, 81, 73, 0.2);
+  --success: #3fb950;
+  --success-surface: rgba(63, 185, 80, 0.08);
+  --success-border: rgba(63, 185, 80, 0.2);
 }
 
 /* ── Purple ── */
 [data-theme="purple"] {
-  --bg-base: #0c0816;
-  --bg-surface: #120e22;
-  --bg-elevated: #18132e;
-  --bg-hover: #211840;
-  --border: #2d1e4a;
-  --border-strong: #422d6a;
-  --border-focus: #c084fc;
-  --text-primary: #f0e8ff;
-  --text-secondary: #9870c0;
-  --text-muted: #4a3870;
-  --accent: #c084fc;
-  --accent-dim: rgba(192, 132, 252, 0.1);
-  --accent-hover: #a855f7;
-  --accent-text: #0c0816;
+  --bg-base: #0f0e17;
+  --bg-surface: #1a1828;
+  --bg-elevated: #22203a;
+  --bg-hover: #2e2b4e;
+  --border: #34315a;
+  --border-strong: #4a466e;
+  --border-focus: #a78bfa;
+  --text-primary: #fffffe;
+  --text-secondary: #a7a3c2;
+  --text-muted: #5c5882;
+  --accent: #a78bfa;
+  --accent-dim: rgba(167, 139, 250, 0.12);
+  --accent-hover: #7c3aed;
+  --accent-text: #0f0e17;
   --error: #f87171;
-  --error-surface: #1f0808;
-  --error-border: rgba(248, 113, 113, 0.25);
-  --success: #c084fc;
-  --success-surface: rgba(192, 132, 252, 0.08);
-  --success-border: rgba(192, 132, 252, 0.25);
+  --error-surface: #1c0a0a;
+  --error-border: rgba(248, 113, 113, 0.2);
+  --success: #a78bfa;
+  --success-surface: rgba(167, 139, 250, 0.08);
+  --success-border: rgba(167, 139, 250, 0.2);
 }
 
 /* ── Resets ── */
