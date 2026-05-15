@@ -186,7 +186,7 @@ export class AuthService {
     });
 
     const socketToken = jwt.sign(
-      { sub: user.id, username: user.username, role: user.role },
+      { type: 'socket', id: user.id, username: user.username, role: user.role, avatarUrl: dbUser?.avatarUrl ?? null },
       secret(),
       { expiresIn: '1h' },
     );
