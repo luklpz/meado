@@ -88,6 +88,7 @@
 
 	// ── Unread counts ──────────────────────────────────────────────────────
 	let unread = $state<Map<string, number>>(new Map());
+	let totalUnread = $derived([...unread.values()].reduce((a, b) => a + b, 0));
 
 	// ── Roles management ───────────────────────────────────────────────────
 	let newRoleName = $state('');
@@ -587,7 +588,7 @@
 	function canDeleteMsg(msg: MessagePayload) { return msg.author.id === user.id || canManage; }
 </script>
 
-<svelte:head><title>{server.name} — Meado</title></svelte:head>
+<svelte:head><title>{totalUnread > 0 ? `(${totalUnread}) ` : ''}{server.name} — Meado</title></svelte:head>
 
 <div class="discord-layout" class:show-members={showMembers}>
 	<!-- ── Sidebar ───────────────────────────────────────────────────────── -->

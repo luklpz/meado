@@ -24,7 +24,9 @@ export interface AttachmentInput {
 export class MessagesService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async getMessages(channelId: string, before?: string, limit = 50) {
+  async getMessages(channelId: string, userId: string, before?: string, limit = 50) {
+    const isMember = await this.verifyChannelMember(channelId, userId);
+    if (!isMember) throw new ForbiddenException('Not a member of this server');
     const msgs = await this.prisma.message.findMany({
       where: {
         channelId,

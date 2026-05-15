@@ -18,7 +18,7 @@
 		loading = true;
 		try {
 			await authStore.login(email, password);
-			goto('/rooms');
+			goto('/servers');
 		} catch (err) {
 			error = err instanceof Error ? err.message : 'Error al iniciar sesión.';
 		} finally {

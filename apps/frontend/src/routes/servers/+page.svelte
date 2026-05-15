@@ -191,9 +191,13 @@
 								<span>· {srv._count.members} miembro{srv._count.members !== 1 ? 's' : ''}</span>
 							</div>
 						</div>
-						<button class="btn-primary btn-sm" onclick={() => handleJoin(srv.slug, srv.accessType)}>
-							Entrar
-						</button>
+						{#if srv.isMember}
+							<a href="/servers/{srv.slug}" class="btn-primary btn-sm btn-open">Abrir</a>
+						{:else}
+							<button class="btn-primary btn-sm" onclick={() => handleJoin(srv.slug, srv.accessType)}>
+								Entrar
+							</button>
+						{/if}
 					</div>
 				{/each}
 			</div>
@@ -346,6 +350,7 @@
 	.btn-primary:hover:not(:disabled) { opacity: 0.85; }
 	.btn-primary:disabled { opacity: 0.45; cursor: not-allowed; }
 	.btn-sm { padding: 0.3rem 0.7rem; font-size: 0.75rem; }
+	.btn-open { text-decoration: none; display: inline-flex; align-items: center; }
 
 	.btn-ghost {
 		font-size: 0.8rem;

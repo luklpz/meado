@@ -26,8 +26,8 @@ export class ServersController {
   // ── Servers ───────────────────────────────────────────────────────────
 
   @Get()
-  list() {
-    return this.serversService.listServers();
+  list(@Req() req: Request) {
+    return this.serversService.listServers(user(req).id);
   }
 
   @Get(':slug')

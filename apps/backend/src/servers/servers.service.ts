@@ -14,8 +14,8 @@ export class ServersService {
 
   // ── List ─────────────────────────────────────────────────────────────
 
-  listServers() {
-    return this.prisma.server.findMany({
+  async listServers(userId: string) {
+    const servers = await this.prisma.server.findMany({
       select: {
         id: true,
         name: true,
@@ -26,9 +26,11 @@ export class ServersService {
         accessType: true,
         owner: { select: { username: true } },
         _count: { select: { members: true } },
+        members: { where: { userId }, select: { userId: true }, take: 1 },
       },
       orderBy: { createdAt: 'asc' },
     });
+    return servers.map(({ members, ...s }) => ({ ...s, isMember: members.length > 0 }));
   }
 
   async getServer(slug: string) {

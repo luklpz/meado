@@ -45,11 +45,12 @@ export class MessagesController {
 
   @Get(':channelId/messages')
   getMessages(
+    @Req() req: Request,
     @Param('channelId') channelId: string,
     @Query('before') before?: string,
     @Query('limit') limit?: string,
   ) {
-    return this.messagesService.getMessages(channelId, before, limit ? parseInt(limit, 10) : 50);
+    return this.messagesService.getMessages(channelId, authUser(req).id, before, limit ? parseInt(limit, 10) : 50);
   }
 
   @Post(':channelId/messages')
