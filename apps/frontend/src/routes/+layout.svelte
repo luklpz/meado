@@ -1,18 +1,9 @@
 <script lang="ts">
+	import './layout.css';
+	import ProfileMenu from '$lib/components/ProfileMenu.svelte';
+
 	let { children } = $props();
 </script>
 
+<ProfileMenu />
 {@render children()}
-
-<style>
-	:global(*) {
-		box-sizing: border-box;
-		margin: 0;
-		padding: 0;
-	}
-
-	:global(body) {
-		background: #050d07;
-		overflow-x: hidden;
-	}
-</style>

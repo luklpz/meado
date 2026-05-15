@@ -12,20 +12,20 @@
 	async function handleRegister(e: SubmitEvent) {
 		e.preventDefault();
 		error = '';
-		if (password !== password2) { error = 'Las contraseñas no coinciden'; return; }
+		if (password !== password2) { error = 'Las contraseñas no coinciden.'; return; }
 		loading = true;
 		try {
 			await authStore.register(username, email, password);
 			success = true;
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'Error al registrarse';
+			error = err instanceof Error ? err.message : 'Error al registrarse.';
 		} finally {
 			loading = false;
 		}
 	}
 </script>
 
-<svelte:head><title>Meado — Registro</title></svelte:head>
+<svelte:head><title>Meado — Crear cuenta</title></svelte:head>
 
 <div class="page">
 	<div class="card">
@@ -36,28 +36,28 @@
 				<p class="success-title">¡Cuenta creada!</p>
 				<p class="success-body">
 					Te hemos enviado un email de verificación a <strong>{email}</strong>.
-					Haz clic en el enlace del email para activar tu cuenta.
+					Haz clic en el enlace para activar tu cuenta.
 				</p>
-				<a href="/login" class="btn-primary">ir al login</a>
+				<a href="/login" class="btn-primary">Ir al inicio de sesión</a>
 			</div>
 		{:else}
 			<form onsubmit={handleRegister}>
 				<label>
-					<span>usuario</span>
+					<span>Nombre de usuario</span>
 					<input type="text" bind:value={username} autocomplete="username"
 						required minlength="3" maxlength="24" />
 				</label>
 				<label>
-					<span>email</span>
+					<span>Email</span>
 					<input type="email" bind:value={email} autocomplete="email" required />
 				</label>
 				<label>
-					<span>contraseña</span>
+					<span>Contraseña</span>
 					<input type="password" bind:value={password}
 						autocomplete="new-password" required minlength="6" />
 				</label>
 				<label>
-					<span>repetir contraseña</span>
+					<span>Repetir contraseña</span>
 					<input type="password" bind:value={password2}
 						autocomplete="new-password" required />
 				</label>
@@ -67,11 +67,11 @@
 				{/if}
 
 				<button type="submit" disabled={loading}>
-					{loading ? 'registrando…' : 'crear cuenta'}
+					{loading ? 'Creando cuenta…' : 'Crear cuenta'}
 				</button>
 			</form>
 
-			<p class="link">¿Ya tienes cuenta? <a href="/login">iniciar sesión</a></p>
+			<p class="link">¿Ya tienes cuenta? <a href="/login">Inicia sesión</a></p>
 		{/if}
 	</div>
 </div>
@@ -82,8 +82,7 @@
 		align-items: center;
 		justify-content: center;
 		min-height: 100vh;
-		background: #050d07;
-		font-family: monospace;
+		padding: 1rem;
 	}
 
 	.card {
@@ -91,22 +90,20 @@
 		flex-direction: column;
 		gap: 1.25rem;
 		padding: 2rem;
-		border: 1px solid #1a3320;
-		border-radius: 6px;
-		background: #080f0a;
-		width: 340px;
+		border: 1px solid var(--border);
+		border-radius: var(--radius-lg);
+		background: var(--bg-surface);
+		width: 100%;
+		max-width: 360px;
 	}
 
 	.logo {
 		font-size: 1.5rem;
 		font-weight: 700;
 		letter-spacing: 0.2em;
-		color: #22c55e;
+		color: var(--accent);
 		text-align: center;
-		margin: 0;
 	}
-
-	.hint { font-size: 0.7rem; color: #6b7280; text-align: center; margin: 0; }
 
 	form { display: flex; flex-direction: column; gap: 0.75rem; }
 
@@ -115,82 +112,80 @@
 		flex-direction: column;
 		gap: 0.3rem;
 		font-size: 0.75rem;
-		color: #6b7280;
+		color: var(--text-secondary);
 	}
 
 	input {
-		font-family: monospace;
 		font-size: 0.85rem;
-		padding: 0.45rem 0.6rem;
-		background: #0a1a0f;
-		border: 1px solid #1a3320;
-		border-radius: 3px;
-		color: #d1fae5;
+		padding: 0.5rem 0.65rem;
+		background: var(--bg-elevated);
+		border: 1px solid var(--border);
+		border-radius: var(--radius);
+		color: var(--text-primary);
 		outline: none;
-		transition: border-color 0.15s;
+		transition: border-color var(--transition);
 	}
 
-	input:focus { border-color: #22c55e; }
+	input:focus { border-color: var(--border-focus); }
 
 	button {
-		font-family: monospace;
 		font-size: 0.85rem;
-		padding: 0.55rem;
-		background: #22c55e;
-		color: #050d07;
+		padding: 0.6rem;
+		background: var(--accent);
+		color: var(--accent-text);
 		border: none;
-		border-radius: 3px;
+		border-radius: var(--radius);
 		cursor: pointer;
 		font-weight: 700;
-		transition: opacity 0.15s;
+		transition: opacity var(--transition);
 		margin-top: 0.25rem;
 	}
 
-	button:disabled { opacity: 0.5; cursor: not-allowed; }
+	button:hover:not(:disabled) { opacity: 0.88; }
+	button:disabled { opacity: 0.45; cursor: not-allowed; }
 
-	.error { font-size: 0.75rem; color: #ef4444; margin: 0; }
+	.error { font-size: 0.75rem; color: var(--error); }
 
-	.link { font-size: 0.75rem; color: #6b7280; text-align: center; margin: 0; }
-	.link a { color: #22c55e; text-decoration: none; }
+	.link { font-size: 0.75rem; color: var(--text-muted); text-align: center; }
+	.link a { color: var(--accent); }
 
 	.success-box {
 		display: flex;
 		flex-direction: column;
 		gap: 0.75rem;
 		padding: 1rem;
-		border: 1px solid #22c55e44;
-		border-radius: 4px;
-		background: #0a1a0f;
+		border: 1px solid var(--success-border);
+		border-radius: var(--radius);
+		background: var(--success-surface);
 	}
 
 	.success-title {
 		font-size: 0.9rem;
-		color: #22c55e;
+		color: var(--success);
 		font-weight: 700;
-		margin: 0;
 	}
 
 	.success-body {
 		font-size: 0.8rem;
-		color: #9ca3af;
-		margin: 0;
+		color: var(--text-secondary);
 		line-height: 1.5;
 	}
 
-	.success-body strong { color: #d1fae5; }
+	.success-body strong { color: var(--text-primary); }
 
 	.btn-primary {
-		display: inline-block;
+		display: block;
 		text-align: center;
-		font-family: monospace;
-		font-size: 0.8rem;
-		padding: 0.45rem;
-		background: #22c55e;
-		color: #050d07;
+		font-size: 0.82rem;
+		padding: 0.5rem;
+		background: var(--accent);
+		color: var(--accent-text);
 		border: none;
-		border-radius: 3px;
+		border-radius: var(--radius);
 		cursor: pointer;
 		font-weight: 700;
-		text-decoration: none;
+		transition: opacity var(--transition);
 	}
+
+	.btn-primary:hover { opacity: 0.88; text-decoration: none; }
 </style>

@@ -15,7 +15,7 @@
 			const res = await authStore.forgotPassword(email);
 			success = res.message;
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'Error al enviar el email';
+			error = err instanceof Error ? err.message : 'Error al enviar el email.';
 		} finally {
 			loading = false;
 		}
@@ -31,10 +31,11 @@
 
 		{#if success}
 			<div class="notice notice--ok">{success}</div>
+			<a href="/login" class="back-link">Volver al inicio de sesión</a>
 		{:else}
 			<form onsubmit={handleSubmit}>
 				<label>
-					<span>email</span>
+					<span>Email</span>
 					<input type="email" bind:value={email} autocomplete="email" required />
 				</label>
 
@@ -43,12 +44,12 @@
 				{/if}
 
 				<button type="submit" disabled={loading}>
-					{loading ? 'enviando…' : 'enviar enlace'}
+					{loading ? 'Enviando…' : 'Enviar enlace'}
 				</button>
 			</form>
-		{/if}
 
-		<p class="link"><a href="/login">volver al login</a></p>
+			<a href="/login" class="back-link">Volver al inicio de sesión</a>
+		{/if}
 	</div>
 </div>
 
@@ -58,8 +59,7 @@
 		align-items: center;
 		justify-content: center;
 		min-height: 100vh;
-		background: #050d07;
-		font-family: monospace;
+		padding: 1rem;
 	}
 
 	.card {
@@ -67,39 +67,38 @@
 		flex-direction: column;
 		gap: 1.25rem;
 		padding: 2rem;
-		border: 1px solid #1a3320;
-		border-radius: 6px;
-		background: #080f0a;
-		width: 320px;
+		border: 1px solid var(--border);
+		border-radius: var(--radius-lg);
+		background: var(--bg-surface);
+		width: 100%;
+		max-width: 340px;
 	}
 
 	.logo {
 		font-size: 1.5rem;
 		font-weight: 700;
 		letter-spacing: 0.2em;
-		color: #22c55e;
+		color: var(--accent);
 		text-align: center;
-		margin: 0;
 	}
 
 	.subtitle {
 		font-size: 0.78rem;
-		color: #6b7280;
-		margin: 0;
-		line-height: 1.5;
+		color: var(--text-secondary);
+		line-height: 1.55;
 	}
 
 	.notice {
 		font-size: 0.78rem;
 		padding: 0.6rem 0.75rem;
-		border-radius: 3px;
-		line-height: 1.4;
+		border-radius: var(--radius);
+		line-height: 1.5;
 	}
 
 	.notice--ok {
-		background: #0a1a0f;
-		border: 1px solid #22c55e44;
-		color: #22c55e;
+		background: var(--success-surface);
+		border: 1px solid var(--success-border);
+		color: var(--success);
 	}
 
 	form { display: flex; flex-direction: column; gap: 0.75rem; }
@@ -109,41 +108,47 @@
 		flex-direction: column;
 		gap: 0.3rem;
 		font-size: 0.75rem;
-		color: #6b7280;
+		color: var(--text-secondary);
 	}
 
 	input {
-		font-family: monospace;
 		font-size: 0.85rem;
-		padding: 0.45rem 0.6rem;
-		background: #0a1a0f;
-		border: 1px solid #1a3320;
-		border-radius: 3px;
-		color: #d1fae5;
+		padding: 0.5rem 0.65rem;
+		background: var(--bg-elevated);
+		border: 1px solid var(--border);
+		border-radius: var(--radius);
+		color: var(--text-primary);
 		outline: none;
-		transition: border-color 0.15s;
+		transition: border-color var(--transition);
 	}
 
-	input:focus { border-color: #22c55e; }
+	input:focus { border-color: var(--border-focus); }
 
 	button {
-		font-family: monospace;
 		font-size: 0.85rem;
-		padding: 0.55rem;
-		background: #22c55e;
-		color: #050d07;
+		padding: 0.6rem;
+		background: var(--accent);
+		color: var(--accent-text);
 		border: none;
-		border-radius: 3px;
+		border-radius: var(--radius);
 		cursor: pointer;
 		font-weight: 700;
-		transition: opacity 0.15s;
+		transition: opacity var(--transition);
 		margin-top: 0.25rem;
 	}
 
-	button:disabled { opacity: 0.5; cursor: not-allowed; }
+	button:hover:not(:disabled) { opacity: 0.88; }
+	button:disabled { opacity: 0.45; cursor: not-allowed; }
 
-	.error { font-size: 0.75rem; color: #ef4444; margin: 0; }
+	.error { font-size: 0.75rem; color: var(--error); }
 
-	.link { font-size: 0.75rem; color: #6b7280; text-align: center; margin: 0; }
-	.link a { color: #22c55e; text-decoration: none; }
+	.back-link {
+		font-size: 0.75rem;
+		color: var(--text-muted);
+		text-align: center;
+		display: block;
+		transition: color var(--transition);
+	}
+
+	.back-link:hover { color: var(--accent); text-decoration: none; }
 </style>

@@ -10,7 +10,6 @@
 	let createError = $state('');
 	let createLoading = $state(false);
 
-	// Campos del formulario de crear sala
 	let newName = $state('');
 	let newSlug = $state('');
 	let newDesc = $state('');
@@ -19,21 +18,12 @@
 	let newRadius = $state(500);
 	let newMaxPlayers = $state(20);
 
-	// Formulario de join con contraseña
 	let joinSlug = $state('');
 	let joinPassword = $state('');
 	let joinError = $state('');
 
-	async function handleLogout() {
-		await authStore.logout();
-		goto('/login');
-	}
-
 	async function handleJoin(slug: string, accessType: string) {
-		if (accessType === 'PASSWORD') {
-			joinSlug = slug;
-			return;
-		}
+		if (accessType === 'PASSWORD') { joinSlug = slug; return; }
 		await doJoin(slug);
 	}
 
@@ -48,12 +38,12 @@
 			});
 			if (!res.ok) {
 				const err = await res.json().catch(() => ({}));
-				joinError = err.message ?? 'No se pudo acceder a la sala';
+				joinError = err.message ?? 'No se pudo acceder a la sala.';
 				return;
 			}
 			goto(`/rooms/${slug}`);
 		} catch {
-			joinError = 'Error de red';
+			joinError = 'Error de red.';
 		}
 	}
 
@@ -78,7 +68,7 @@
 			});
 			if (!res.ok) {
 				const err = await res.json().catch(() => ({}));
-				createError = err.message ?? 'Error al crear la sala';
+				createError = err.message ?? 'Error al crear la sala.';
 				return;
 			}
 			const created = await res.json();
@@ -86,16 +76,16 @@
 			showCreate = false;
 			newName = ''; newSlug = ''; newDesc = ''; newAccess = 'PUBLIC'; newPassword = '';
 		} catch {
-			createError = 'Error de red';
+			createError = 'Error de red.';
 		} finally {
 			createLoading = false;
 		}
 	}
 
 	const ACCESS_LABEL: Record<string, string> = {
-		PUBLIC: 'pública',
-		PASSWORD: 'contraseña',
-		WHITELIST: 'whitelist',
+		PUBLIC: 'Pública',
+		PASSWORD: 'Contraseña',
+		WHITELIST: 'Whitelist',
 	};
 </script>
 
@@ -104,65 +94,58 @@
 <div class="page">
 	<header class="hud">
 		<span class="logo">meado</span>
-		<div class="hud-right">
-			<span class="username">{user.username}</span>
-			{#if user.role === 'ADMIN' || user.role === 'SUPERADMIN'}
-				<span class="badge">admin</span>
-			{/if}
-			<button class="btn-ghost" onclick={handleLogout}>salir</button>
-		</div>
 	</header>
 
 	<main class="content">
 		<div class="section-header">
-			<h2>salas</h2>
+			<h2>Salas</h2>
 			{#if user.role === 'ADMIN' || user.role === 'SUPERADMIN'}
 				<button class="btn-primary" onclick={() => (showCreate = !showCreate)}>
-					{showCreate ? 'cancelar' : '+ nueva sala'}
+					{showCreate ? 'Cancelar' : '+ Nueva sala'}
 				</button>
 			{/if}
 		</div>
 
 		{#if showCreate}
 			<form class="create-form" onsubmit={handleCreate}>
-				<h3>crear sala</h3>
+				<h3>Crear sala</h3>
 				<div class="form-row">
-					<label>nombre<input type="text" bind:value={newName} required /></label>
-					<label>slug<input type="text" bind:value={newSlug} required pattern="[a-z0-9-]+" placeholder="mi-sala" /></label>
+					<label>Nombre<input type="text" bind:value={newName} required /></label>
+					<label>Slug<input type="text" bind:value={newSlug} required pattern="[a-z0-9-]+" placeholder="mi-sala" /></label>
 				</div>
-				<label class="full">descripción<input type="text" bind:value={newDesc} /></label>
+				<label class="full">Descripción<input type="text" bind:value={newDesc} /></label>
 				<div class="form-row">
 					<label>
-						acceso
+						Acceso
 						<select bind:value={newAccess}>
-							<option value="PUBLIC">pública</option>
-							<option value="PASSWORD">contraseña</option>
-							<option value="WHITELIST">whitelist</option>
+							<option value="PUBLIC">Pública</option>
+							<option value="PASSWORD">Contraseña</option>
+							<option value="WHITELIST">Whitelist</option>
 						</select>
 					</label>
 					{#if newAccess === 'PASSWORD'}
-						<label>contraseña sala<input type="password" bind:value={newPassword} required /></label>
+						<label>Contraseña de sala<input type="password" bind:value={newPassword} required /></label>
 					{/if}
 				</div>
 				<div class="form-row">
-					<label>radio proximidad (px)<input type="number" bind:value={newRadius} min="100" max="2000" /></label>
-					<label>máx. jugadores<input type="number" bind:value={newMaxPlayers} min="2" max="100" /></label>
+					<label>Radio de proximidad (px)<input type="number" bind:value={newRadius} min="100" max="2000" /></label>
+					<label>Máx. jugadores<input type="number" bind:value={newMaxPlayers} min="2" max="100" /></label>
 				</div>
 				{#if createError}<p class="error">{createError}</p>{/if}
 				<button type="submit" class="btn-primary" disabled={createLoading}>
-					{createLoading ? 'creando…' : 'crear'}
+					{createLoading ? 'Creando…' : 'Crear sala'}
 				</button>
 			</form>
 		{/if}
 
 		{#if joinSlug}
 			<div class="join-modal">
-				<p>Contraseña para <strong>{joinSlug}</strong></p>
-				<input type="password" bind:value={joinPassword} placeholder="contraseña" />
+				<p>Contraseña para <strong>{joinSlug}</strong>.</p>
+				<input type="password" bind:value={joinPassword} placeholder="Contraseña" />
 				{#if joinError}<p class="error">{joinError}</p>{/if}
 				<div class="join-modal-actions">
-					<button class="btn-ghost" onclick={() => { joinSlug = ''; joinPassword = ''; joinError = ''; }}>cancelar</button>
-					<button class="btn-primary" onclick={() => doJoin(joinSlug, joinPassword)}>entrar</button>
+					<button class="btn-ghost" onclick={() => { joinSlug = ''; joinPassword = ''; joinError = ''; }}>Cancelar</button>
+					<button class="btn-primary" onclick={() => doJoin(joinSlug, joinPassword)}>Entrar</button>
 				</div>
 			</div>
 		{/if}
@@ -179,11 +162,11 @@
 								<span class="room-desc">{room.description}</span>
 							{/if}
 							<span class="room-meta">
-								{ACCESS_LABEL[room.accessType]} · {room.proximityRadius}px · máx {room.maxPlayers}
+								{ACCESS_LABEL[room.accessType]} · {room.proximityRadius}px · máx. {room.maxPlayers}
 							</span>
 						</div>
 						<button class="btn-primary btn-sm" onclick={() => handleJoin(room.slug, room.accessType)}>
-							{room.accessType === 'WHITELIST' ? 'entrar' : room.accessType === 'PASSWORD' ? '🔒 entrar' : 'entrar'}
+							{room.accessType === 'PASSWORD' ? '🔒 Entrar' : 'Entrar'}
 						</button>
 					</li>
 				{/each}
@@ -198,9 +181,6 @@
 		flex-direction: column;
 		min-height: 100vh;
 		padding: 1rem;
-		background: #050d07;
-		color: #d1fae5;
-		font-family: monospace;
 		align-items: center;
 	}
 
@@ -213,22 +193,20 @@
 		margin-bottom: 1.5rem;
 	}
 
-	.hud-right { display: flex; align-items: center; gap: 0.75rem; }
-
-	.logo { font-size: 1.25rem; font-weight: 700; letter-spacing: 0.15em; color: #22c55e; }
-
-	.username { font-size: 0.8rem; color: #9ca3af; }
-
-	.badge {
-		font-size: 0.65rem;
-		padding: 0.1rem 0.4rem;
-		border: 1px solid #22c55e;
-		border-radius: 2px;
-		color: #22c55e;
-		letter-spacing: 0.05em;
+	.logo {
+		font-size: 1.25rem;
+		font-weight: 700;
+		letter-spacing: 0.15em;
+		color: var(--accent);
 	}
 
-	.content { width: 100%; max-width: 700px; display: flex; flex-direction: column; gap: 1rem; }
+	.content {
+		width: 100%;
+		max-width: 700px;
+		display: flex;
+		flex-direction: column;
+		gap: 1rem;
+	}
 
 	.section-header {
 		display: flex;
@@ -236,47 +214,56 @@
 		align-items: center;
 	}
 
-	h2 { font-size: 0.85rem; letter-spacing: 0.1em; color: #6b7280; }
-	h3 { font-size: 0.9rem; color: #9ca3af; margin-bottom: 0.5rem; }
+	h2 {
+		font-size: 0.8rem;
+		letter-spacing: 0.12em;
+		color: var(--text-muted);
+		text-transform: uppercase;
+	}
+
+	h3 {
+		font-size: 0.9rem;
+		color: var(--text-secondary);
+		margin-bottom: 0.25rem;
+	}
 
 	.btn-primary {
-		font-family: monospace;
 		font-size: 0.8rem;
-		padding: 0.35rem 0.75rem;
-		background: #22c55e;
-		color: #050d07;
+		padding: 0.38rem 0.8rem;
+		background: var(--accent);
+		color: var(--accent-text);
 		border: none;
-		border-radius: 3px;
+		border-radius: var(--radius);
 		cursor: pointer;
 		font-weight: 700;
-		transition: opacity 0.15s;
+		transition: opacity var(--transition);
 	}
 
-	.btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
-	.btn-sm { padding: 0.25rem 0.6rem; font-size: 0.75rem; }
+	.btn-primary:hover:not(:disabled) { opacity: 0.88; }
+	.btn-primary:disabled { opacity: 0.45; cursor: not-allowed; }
+	.btn-sm { padding: 0.28rem 0.65rem; font-size: 0.75rem; }
 
 	.btn-ghost {
-		font-family: monospace;
 		font-size: 0.8rem;
-		padding: 0.3rem 0.6rem;
+		padding: 0.32rem 0.65rem;
 		background: transparent;
-		border: 1px solid #374151;
-		border-radius: 3px;
-		color: #6b7280;
+		border: 1px solid var(--border-strong);
+		border-radius: var(--radius);
+		color: var(--text-muted);
 		cursor: pointer;
-		transition: border-color 0.15s, color 0.15s;
+		transition: border-color var(--transition), color var(--transition);
 	}
 
-	.btn-ghost:hover { border-color: #22c55e; color: #22c55e; }
+	.btn-ghost:hover { border-color: var(--accent); color: var(--accent); }
 
 	.create-form {
 		display: flex;
 		flex-direction: column;
 		gap: 0.75rem;
-		padding: 1rem;
-		border: 1px solid #1a3320;
-		border-radius: 4px;
-		background: #080f0a;
+		padding: 1.25rem;
+		border: 1px solid var(--border);
+		border-radius: var(--radius-lg);
+		background: var(--bg-surface);
 	}
 
 	.form-row { display: flex; gap: 0.75rem; flex-wrap: wrap; }
@@ -284,9 +271,9 @@
 	label {
 		display: flex;
 		flex-direction: column;
-		gap: 0.25rem;
-		font-size: 0.7rem;
-		color: #6b7280;
+		gap: 0.28rem;
+		font-size: 0.72rem;
+		color: var(--text-secondary);
 		flex: 1;
 		min-width: 140px;
 	}
@@ -294,17 +281,19 @@
 	label.full { flex: 1 1 100%; }
 
 	input, select {
-		font-family: monospace;
-		font-size: 0.8rem;
-		padding: 0.35rem 0.5rem;
-		background: #0a1a0f;
-		border: 1px solid #1a3320;
-		border-radius: 3px;
-		color: #d1fae5;
+		font-size: 0.82rem;
+		padding: 0.38rem 0.5rem;
+		background: var(--bg-elevated);
+		border: 1px solid var(--border);
+		border-radius: var(--radius);
+		color: var(--text-primary);
 		outline: none;
+		transition: border-color var(--transition);
 	}
 
-	input:focus, select:focus { border-color: #22c55e; }
+	input:focus, select:focus { border-color: var(--border-focus); }
+
+	select option { background: var(--bg-elevated); }
 
 	.room-list { list-style: none; display: flex; flex-direction: column; gap: 0.5rem; }
 
@@ -312,39 +301,39 @@
 		display: flex;
 		justify-content: space-between;
 		align-items: center;
-		padding: 0.75rem 1rem;
-		border: 1px solid #1a3320;
-		border-radius: 4px;
-		background: #080f0a;
-		transition: border-color 0.15s;
+		padding: 0.85rem 1.1rem;
+		border: 1px solid var(--border);
+		border-radius: var(--radius-lg);
+		background: var(--bg-surface);
+		transition: border-color var(--transition);
 	}
 
-	.room-card:hover { border-color: #22c55e33; }
+	.room-card:hover { border-color: var(--border-strong); }
 
-	.room-info { display: flex; flex-direction: column; gap: 0.2rem; }
+	.room-info { display: flex; flex-direction: column; gap: 0.22rem; }
 
-	.room-name { font-size: 0.9rem; color: #d1fae5; font-weight: 600; }
+	.room-name { font-size: 0.9rem; color: var(--text-primary); font-weight: 600; }
 
-	.room-desc { font-size: 0.75rem; color: #6b7280; }
+	.room-desc { font-size: 0.75rem; color: var(--text-secondary); }
 
-	.room-meta { font-size: 0.65rem; color: #374151; letter-spacing: 0.05em; }
+	.room-meta { font-size: 0.65rem; color: var(--text-muted); letter-spacing: 0.05em; }
 
-	.empty { font-size: 0.8rem; color: #374151; }
+	.empty { font-size: 0.8rem; color: var(--text-muted); }
 
-	.error { font-size: 0.75rem; color: #ef4444; }
+	.error { font-size: 0.75rem; color: var(--error); }
 
 	.join-modal {
 		display: flex;
 		flex-direction: column;
 		gap: 0.75rem;
-		padding: 1rem;
-		border: 1px solid #22c55e44;
-		border-radius: 4px;
-		background: #080f0a;
+		padding: 1.1rem;
+		border: 1px solid var(--border-focus);
+		border-radius: var(--radius-lg);
+		background: var(--bg-surface);
 		font-size: 0.85rem;
 	}
 
-	.join-modal strong { color: #22c55e; }
+	.join-modal strong { color: var(--accent); }
 
 	.join-modal-actions { display: flex; gap: 0.5rem; }
 </style>
