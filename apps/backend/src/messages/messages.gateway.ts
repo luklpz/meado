@@ -3,6 +3,7 @@ import {
   WebSocketGateway, WebSocketServer,
   SubscribeMessage, OnGatewayConnection, OnGatewayDisconnect,
 } from '@nestjs/websockets';
+import { SkipThrottle } from '@nestjs/throttler';
 import type { Server, Socket } from 'socket.io';
 import { MessagesService } from './messages.service';
 
@@ -15,6 +16,7 @@ const voiceRooms = new Map<string, Map<string, { userId: string; username: strin
 // channelId → Map<userId, username>
 const typingUsers = new Map<string, Map<string, string>>();
 
+@SkipThrottle()
 @WebSocketGateway({
   cors: { origin: process.env.CORS_ORIGIN?.split(',') ?? '*', credentials: true },
 })
