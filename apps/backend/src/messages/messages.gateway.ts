@@ -140,6 +140,17 @@ export class MessagesGateway implements OnGatewayConnection, OnGatewayDisconnect
     client.leave(`voice:${payload.channelId}`);
   }
 
+  // ── Reactions ─────────────────────────────────────────────────────────
+
+  @SubscribeMessage('reaction:toggle')
+  async handleReactionToggle(client: AuthSocket, payload: { messageId: string; emoji: string }) {
+    if (!client.user) return;
+    try {
+      const result = await this.messagesService.toggleReaction(payload.messageId, client.user.id, payload.emoji);
+      this.server.to(`channel:${result.channelId}`).emit('reaction:updated', result);
+    } catch { /* ignore */ }
+  }
+
   // ── Helpers (called from controller after REST ops) ───────────────────
 
   broadcastMessageUpdated(channelId: string, message: any) {

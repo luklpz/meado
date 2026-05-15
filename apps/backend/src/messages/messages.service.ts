@@ -11,7 +11,19 @@ const MSG_SELECT = {
   channelId: true,
   author: { select: { id: true, username: true, avatarUrl: true } },
   attachments: { select: { id: true, url: true, name: true, size: true, mimeType: true } },
+  reactions: { select: { userId: true, emoji: true } },
 } as const;
+
+function formatReactions(raw: { userId: string; emoji: string }[], userId: string) {
+  const map = new Map<string, { count: number; me: boolean }>();
+  for (const r of raw) {
+    const entry = map.get(r.emoji) ?? { count: 0, me: false };
+    entry.count++;
+    if (r.userId === userId) entry.me = true;
+    map.set(r.emoji, entry);
+  }
+  return Array.from(map.entries()).map(([emoji, { count, me }]) => ({ emoji, count, me }));
+}
 
 export interface AttachmentInput {
   url: string;
@@ -36,14 +48,14 @@ export class MessagesService {
       take: Math.min(limit, 100),
       select: MSG_SELECT,
     });
-    return msgs.reverse();
+    return msgs.reverse().map(m => ({ ...m, reactions: formatReactions(m.reactions, userId) }));
   }
 
   async createMessage(channelId: string, authorId: string, content?: string, attachments?: AttachmentInput[]) {
     if (!content?.trim() && (!attachments || attachments.length === 0)) {
       throw new BadRequestException('Message must have content or attachment');
     }
-    return this.prisma.message.create({
+    const msg = await this.prisma.message.create({
       data: {
         channelId,
         authorId,
@@ -52,6 +64,36 @@ export class MessagesService {
       },
       select: MSG_SELECT,
     });
+    return { ...msg, reactions: [] };
+  }
+
+  async toggleReaction(messageId: string, userId: string, emoji: string) {
+    const ALLOWED = ['👍', '❤️', '😂', '😮', '😢'];
+    if (!ALLOWED.includes(emoji)) throw new BadRequestException('Invalid emoji');
+    const msg = await this.prisma.message.findUnique({
+      where: { id: messageId },
+      select: { channelId: true },
+    });
+    if (!msg) throw new NotFoundException('Message not found');
+    const isMember = await this.verifyChannelMember(msg.channelId, userId);
+    if (!isMember) throw new ForbiddenException('Not a member');
+
+    const existing = await this.prisma.messageReaction.findUnique({
+      where: { messageId_userId_emoji: { messageId, userId, emoji } },
+    });
+    if (existing) {
+      await this.prisma.messageReaction.delete({
+        where: { messageId_userId_emoji: { messageId, userId, emoji } },
+      });
+    } else {
+      await this.prisma.messageReaction.create({ data: { messageId, userId, emoji } });
+    }
+
+    const reactions = await this.prisma.messageReaction.findMany({
+      where: { messageId },
+      select: { userId: true, emoji: true },
+    });
+    return { messageId, channelId: msg.channelId, reactions: formatReactions(reactions, userId) };
   }
 
   async editMessage(messageId: string, userId: string, content: string) {

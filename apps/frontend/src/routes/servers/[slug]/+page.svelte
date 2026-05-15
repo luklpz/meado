@@ -4,7 +4,7 @@
 	import { authStore } from '$lib/auth.js';
 	import { socketStore } from '$lib/socket.js';
 	import { livekitStore } from '$lib/livekit.js';
-	import type { MessagePayload, VoiceMember } from '$lib/types/socket-events.types.js';
+	import type { MessagePayload, VoiceMember, MessageReaction } from '$lib/types/socket-events.types.js';
 
 	let { data } = $props();
 	const { user, server } = data;
@@ -152,6 +152,9 @@
 			if (channelId !== selectedChannel?.id) return;
 			typingUsernames = usernames.filter((u) => u !== user.username);
 		});
+		socket.on('reaction:updated', ({ messageId, reactions }) => {
+			messages = messages.map((m) => m.id === messageId ? { ...m, reactions } : m);
+		});
 		socket.on('disconnect', () => { socketConnected = false; });
 		socket.on('connect', () => { socketConnected = true; });
 
@@ -177,6 +180,7 @@
 		selectedChannel = ch;
 		unread = new Map(unread).set(ch.id, 0);
 		typingUsernames = [];
+		sidebarOpen = false;
 		socket.emit('channel:join', { channelId: ch.id });
 		if (ch.type === 'TEXT') await loadMessages(ch.id);
 	}
@@ -276,8 +280,17 @@
 		if (!socket) return;
 		sendingMsg = true;
 		msgInput = '';
+		clearTimeout(typingTimer);
+		socket.emit('typing:stop', { channelId: selectedChannel.id });
+		lastTypingEmit = 0;
 		socket.emit('message:send', { channelId: selectedChannel.id, content });
 		sendingMsg = false;
+	}
+
+	function toggleReaction(msg: MessagePayload, emoji: string) {
+		const socket = socketStore.raw();
+		if (!socket) return;
+		socket.emit('reaction:toggle', { messageId: msg.id, emoji });
 	}
 
 	async function sendFile(file: File) {
@@ -851,6 +864,13 @@
 											{/if}
 										</div>
 									{/each}
+									{#if msg.reactions?.length > 0}
+										<div class="reactions">
+											{#each msg.reactions as r (r.emoji)}
+												<button class="reaction-pill" class:reacted={r.me} onclick={() => toggleReaction(msg, r.emoji)}>{r.emoji} {r.count}</button>
+											{/each}
+										</div>
+									{/if}
 								</div>
 							{:else}
 								<div class="avatar-col compact-spacer">
@@ -879,12 +899,24 @@
 											{/if}
 										</div>
 									{/each}
+									{#if msg.reactions?.length > 0}
+										<div class="reactions">
+											{#each msg.reactions as r (r.emoji)}
+												<button class="reaction-pill" class:reacted={r.me} onclick={() => toggleReaction(msg, r.emoji)}>{r.emoji} {r.count}</button>
+											{/each}
+										</div>
+									{/if}
 								</div>
 							{/if}
 
 							<!-- Hover actions -->
 							{#if hoveredId === msg.id && editingId !== msg.id}
 								<div class="msg-actions">
+									<div class="emoji-picker">
+										{#each ['👍','❤️','😂','😮','😢'] as emoji}
+											<button class="emoji-pick-btn" onclick={() => toggleReaction(msg, emoji)}>{emoji}</button>
+										{/each}
+									</div>
 									{#if canEditMsg(msg)}<button class="msg-action-btn" title="Editar" onclick={() => startEdit(msg)}>✏️</button>{/if}
 									{#if canDeleteMsg(msg)}<button class="msg-action-btn danger" title="Eliminar" onclick={() => deleteMsg(msg)}>🗑️</button>{/if}
 								</div>
@@ -1548,6 +1580,47 @@
 
 	.msg-action-btn:hover { background: var(--bg-surface); border-color: var(--border-strong); }
 	.msg-action-btn.danger:hover { border-color: var(--error); }
+
+	.emoji-picker {
+		display: flex;
+		gap: 0.1rem;
+		align-items: center;
+	}
+
+	.emoji-pick-btn {
+		background: none;
+		border: none;
+		cursor: pointer;
+		font-size: 0.9rem;
+		padding: 0.15rem 0.2rem;
+		border-radius: var(--radius);
+		line-height: 1;
+		transition: background var(--transition);
+	}
+	.emoji-pick-btn:hover { background: var(--bg-surface); }
+
+	.reactions {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.25rem;
+		margin-top: 0.2rem;
+	}
+
+	.reaction-pill {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.25rem;
+		background: var(--bg-elevated);
+		border: 1px solid var(--border);
+		border-radius: 1rem;
+		padding: 0.1rem 0.45rem;
+		font-size: 0.8rem;
+		cursor: pointer;
+		transition: background var(--transition), border-color var(--transition);
+		line-height: 1.4;
+	}
+	.reaction-pill:hover { background: var(--bg-surface); border-color: var(--border-strong); }
+	.reaction-pill.reacted { background: rgba(99,102,241,0.15); border-color: var(--accent); }
 
 	/* Edit box */
 	.edit-box {

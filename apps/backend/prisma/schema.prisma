@@ -48,6 +48,7 @@ model User {
   servers       ServerMember[]
   whitelist     ServerWhitelist[]
   messages      Message[]
+  reactions     MessageReaction[]
 }
 
 // ── Server ───────────────────────────────────────────────────────────────────
@@ -141,9 +142,10 @@ model Message {
   createdAt   DateTime     @default(now())
   editedAt    DateTime?
 
-  channel     Channel      @relation(fields: [channelId], references: [id], onDelete: Cascade)
-  author      User         @relation(fields: [authorId], references: [id])
+  channel     Channel           @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  author      User              @relation(fields: [authorId], references: [id])
   attachments Attachment[]
+  reactions   MessageReaction[]
 }
 
 model Attachment {
@@ -155,4 +157,15 @@ model Attachment {
   messageId String
 
   message   Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+}
+
+model MessageReaction {
+  messageId String
+  userId    String
+  emoji     String
+
+  message   Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([messageId, userId, emoji])
 }
