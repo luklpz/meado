@@ -72,6 +72,17 @@
 	let iconUploadError = $state('');
 	let serverIconUrl = $state<string | null>(server.iconUrl ?? null);
 
+	// ── Connection status ─────────────────────────────────────────────────
+	let socketConnected = $state(true);
+
+	// ── Typing ────────────────────────────────────────────────────────────
+	let typingUsernames = $state<string[]>([]);
+	let typingTimer: ReturnType<typeof setTimeout>;
+	let lastTypingEmit = 0;
+
+	// ── Mobile sidebar ────────────────────────────────────────────────────
+	let sidebarOpen = $state(false);
+
 	// ── Toast ─────────────────────────────────────────────────────────────
 	let toast = $state('');
 	let toastTimer: ReturnType<typeof setTimeout>;
@@ -137,6 +148,12 @@
 			const prev = voiceMembers.get(channelId) ?? [];
 			voiceMembers = new Map(voiceMembers).set(channelId, prev.filter((m) => m.userId !== userId));
 		});
+		socket.on('typing:update', ({ channelId, usernames }) => {
+			if (channelId !== selectedChannel?.id) return;
+			typingUsernames = usernames.filter((u) => u !== user.username);
+		});
+		socket.on('disconnect', () => { socketConnected = false; });
+		socket.on('connect', () => { socketConnected = true; });
 
 		if (textChannels.length > 0) selectChannel(textChannels[0]);
 
@@ -159,6 +176,7 @@
 		if (selectedChannel?.id !== ch.id) socket.emit('channel:leave', { channelId: selectedChannel?.id ?? '' });
 		selectedChannel = ch;
 		unread = new Map(unread).set(ch.id, 0);
+		typingUsernames = [];
 		socket.emit('channel:join', { channelId: ch.id });
 		if (ch.type === 'TEXT') await loadMessages(ch.id);
 	}
@@ -309,8 +327,24 @@
 		if (files?.[0]) { sendFile(files[0]); (e.target as HTMLInputElement).value = ''; }
 	}
 
+	function onTyping() {
+		if (!selectedChannel) return;
+		const socket = socketStore.raw();
+		if (!socket) return;
+		const now = Date.now();
+		if (now - lastTypingEmit > 2000) {
+			lastTypingEmit = now;
+			socket.emit('typing:start', { channelId: selectedChannel.id });
+		}
+		clearTimeout(typingTimer);
+		typingTimer = setTimeout(() => {
+			if (selectedChannel) socket.emit('typing:stop', { channelId: selectedChannel.id });
+		}, 3000);
+	}
+
 	function onKeydown(e: KeyboardEvent) {
-		if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+		if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); return; }
+		onTyping();
 	}
 
 	// ── Members ───────────────────────────────────────────────────────────
@@ -590,7 +624,14 @@
 
 <svelte:head><title>{totalUnread > 0 ? `(${totalUnread}) ` : ''}{server.name} — Meado</title></svelte:head>
 
-<div class="discord-layout" class:show-members={showMembers}>
+<div class="discord-layout" class:show-members={showMembers} class:sidebar-open={sidebarOpen}>
+	{#if !socketConnected}
+		<div class="reconnect-banner">Conexión perdida — reconectando…</div>
+	{/if}
+
+	{#if sidebarOpen}
+		<div class="sidebar-overlay" role="presentation" onclick={() => (sidebarOpen = false)}></div>
+	{/if}
 	<!-- ── Sidebar ───────────────────────────────────────────────────────── -->
 	<aside class="sidebar">
 		<div class="server-header">
@@ -738,6 +779,7 @@
 
 		{:else if selectedChannel.type === 'TEXT'}
 			<div class="content-header">
+				<button class="hamburger-btn" onclick={() => (sidebarOpen = true)} title="Canales">☰</button>
 				<span class="header-prefix">#</span>
 				<strong class="header-name">{selectedChannel.name}</strong>
 				<div class="header-actions">
@@ -852,6 +894,20 @@
 				{/if}
 			</div>
 
+			{#if typingUsernames.length > 0}
+				<div class="typing-indicator">
+					<span class="typing-dots"><span></span><span></span><span></span></span>
+					<span class="typing-text">
+						{#if typingUsernames.length === 1}
+							<strong>{typingUsernames[0]}</strong> está escribiendo…
+						{:else if typingUsernames.length === 2}
+							<strong>{typingUsernames[0]}</strong> y <strong>{typingUsernames[1]}</strong> están escribiendo…
+						{:else}
+							Varios usuarios están escribiendo…
+						{/if}
+					</span>
+				</div>
+			{/if}
 			<div class="input-area">
 				<div class="input-box">
 					<button class="attach-btn" title="Adjuntar archivo" onclick={() => fileInput?.click()}>+</button>
@@ -863,6 +919,7 @@
 
 		{:else if selectedChannel.type === 'VOICE'}
 			<div class="content-header">
+				<button class="hamburger-btn" onclick={() => (sidebarOpen = true)} title="Canales">☰</button>
 				<span class="header-prefix">🔊</span>
 				<strong class="header-name">{selectedChannel.name}</strong>
 				<div class="header-actions">
@@ -2255,5 +2312,109 @@
 	@keyframes toast-in {
 		from { opacity: 0; transform: translateX(-50%) translateY(8px); }
 		to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+	}
+
+	/* ── Reconnect banner ────────────────────────────────────────────────── */
+	.reconnect-banner {
+		position: fixed;
+		top: 0; left: 0; right: 0;
+		background: #b45309;
+		color: #fef3c7;
+		text-align: center;
+		font-size: 0.78rem;
+		padding: 0.4rem;
+		z-index: 1000;
+		font-weight: 600;
+	}
+
+	/* ── Typing indicator ────────────────────────────────────────────────── */
+	.typing-indicator {
+		display: flex;
+		align-items: center;
+		gap: 0.4rem;
+		padding: 0.2rem 1.25rem 0;
+		min-height: 20px;
+		flex-shrink: 0;
+	}
+
+	.typing-text { font-size: 0.72rem; color: var(--text-muted); }
+	.typing-text strong { color: var(--text-secondary); font-weight: 600; }
+
+	.typing-dots {
+		display: flex;
+		gap: 2px;
+		align-items: flex-end;
+	}
+
+	.typing-dots span {
+		width: 4px; height: 4px;
+		border-radius: 50%;
+		background: var(--text-muted);
+		animation: bounce 1.2s infinite;
+	}
+
+	.typing-dots span:nth-child(2) { animation-delay: 0.2s; }
+	.typing-dots span:nth-child(3) { animation-delay: 0.4s; }
+
+	@keyframes bounce {
+		0%, 60%, 100% { transform: translateY(0); }
+		30% { transform: translateY(-4px); }
+	}
+
+	/* ── Hamburger (mobile only) ─────────────────────────────────────────── */
+	.hamburger-btn {
+		display: none;
+		background: transparent;
+		border: none;
+		color: var(--text-muted);
+		font-size: 1.1rem;
+		cursor: pointer;
+		padding: 0.2rem 0.4rem;
+		border-radius: var(--radius);
+		transition: color var(--transition);
+		flex-shrink: 0;
+	}
+
+	.hamburger-btn:hover { color: var(--text-primary); }
+
+	.sidebar-overlay {
+		display: none;
+		position: fixed;
+		inset: 0;
+		background: rgba(0,0,0,0.5);
+		z-index: 98;
+	}
+
+	/* ── Mobile responsive ───────────────────────────────────────────────── */
+	@media (max-width: 768px) {
+		.discord-layout {
+			grid-template-columns: 1fr !important;
+		}
+
+		.sidebar {
+			position: fixed;
+			top: 0; left: 0; bottom: 0;
+			width: 260px;
+			z-index: 99;
+			transform: translateX(-100%);
+			transition: transform 0.22s ease;
+		}
+
+		.discord-layout.sidebar-open .sidebar {
+			transform: translateX(0);
+		}
+
+		.discord-layout.sidebar-open .sidebar-overlay {
+			display: block;
+		}
+
+		.members-panel {
+			position: fixed;
+			top: 0; right: 0; bottom: 0;
+			width: 220px;
+			z-index: 99;
+		}
+
+		.hamburger-btn { display: flex; }
 	}
 </style>

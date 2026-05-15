@@ -10,8 +10,10 @@ interface AuthSocket extends Socket {
   user?: { id: string; username: string; role: string; avatarUrl?: string | null };
 }
 
-// channelId → Set of { userId, username, avatarUrl }
+// channelId → Map<userId, { username, avatarUrl }>
 const voiceRooms = new Map<string, Map<string, { userId: string; username: string; avatarUrl?: string | null }>>();
+// channelId → Map<userId, username>
+const typingUsers = new Map<string, Map<string, string>>();
 
 @WebSocketGateway({
   cors: { origin: process.env.CORS_ORIGIN?.split(',') ?? '*', credentials: true },
@@ -37,13 +39,19 @@ export class MessagesGateway implements OnGatewayConnection, OnGatewayDisconnect
 
   handleDisconnect(client: AuthSocket) {
     if (!client.user) return;
-    // Remove from all voice rooms on disconnect
     for (const [channelId, members] of voiceRooms.entries()) {
       if (members.has(client.user.id)) {
         members.delete(client.user.id);
         this.server.to(`voice:${channelId}`).emit('voice:left', { channelId, userId: client.user.id });
         client.leave(`voice:${channelId}`);
         if (members.size === 0) voiceRooms.delete(channelId);
+      }
+    }
+    for (const [channelId, typers] of typingUsers.entries()) {
+      if (typers.has(client.user.id)) {
+        typers.delete(client.user.id);
+        this.server.to(`channel:${channelId}`).emit('typing:update', { channelId, usernames: Array.from(typers.values()) });
+        if (typers.size === 0) typingUsers.delete(channelId);
       }
     }
   }
@@ -72,6 +80,28 @@ export class MessagesGateway implements OnGatewayConnection, OnGatewayDisconnect
       const message = await this.messagesService.createMessage(payload.channelId, client.user.id, payload.content);
       this.server.to(`channel:${payload.channelId}`).emit('message:created', message);
     } catch { /* invalid message — ignore */ }
+  }
+
+  // ── Typing ────────────────────────────────────────────────────────────
+
+  @SubscribeMessage('typing:start')
+  handleTypingStart(client: AuthSocket, payload: { channelId: string }) {
+    if (!client.user) return;
+    if (!typingUsers.has(payload.channelId)) typingUsers.set(payload.channelId, new Map());
+    typingUsers.get(payload.channelId)!.set(client.user.id, client.user.username);
+    const usernames = Array.from(typingUsers.get(payload.channelId)!.values());
+    client.to(`channel:${payload.channelId}`).emit('typing:update', { channelId: payload.channelId, usernames });
+  }
+
+  @SubscribeMessage('typing:stop')
+  handleTypingStop(client: AuthSocket, payload: { channelId: string }) {
+    if (!client.user) return;
+    const typers = typingUsers.get(payload.channelId);
+    if (!typers) return;
+    typers.delete(client.user.id);
+    if (typers.size === 0) typingUsers.delete(payload.channelId);
+    const usernames = typers ? Array.from(typers.values()) : [];
+    client.to(`channel:${payload.channelId}`).emit('typing:update', { channelId: payload.channelId, usernames });
   }
 
   // ── Voice channel ─────────────────────────────────────────────────────

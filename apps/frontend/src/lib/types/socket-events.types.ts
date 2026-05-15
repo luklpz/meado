@@ -34,6 +34,8 @@ export interface ClientToServerEvents {
   'message:send': (payload: { channelId: string; content: string }) => void;
   'voice:join': (payload: { channelId: string }) => void;
   'voice:leave': (payload: { channelId: string }) => void;
+  'typing:start': (payload: { channelId: string }) => void;
+  'typing:stop': (payload: { channelId: string }) => void;
 }
 
 export interface ServerToClientEvents {
@@ -43,4 +45,5 @@ export interface ServerToClientEvents {
   'voice:state': (payload: { channelId: string; members: VoiceMember[] }) => void;
   'voice:joined': (payload: { channelId: string; member: VoiceMember }) => void;
   'voice:left': (payload: { channelId: string; userId: string }) => void;
+  'typing:update': (payload: { channelId: string; usernames: string[] }) => void;
 }
