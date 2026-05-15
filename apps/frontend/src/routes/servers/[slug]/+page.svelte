@@ -11,8 +11,19 @@
 
 	// ── Types ──────────────────────────────────────────────────────────────
 	interface Channel { id: string; name: string; type: 'TEXT' | 'VOICE'; position: number; }
+	interface Member {
+		joinedAt: string;
+		user: { id: string; username: string; avatarUrl?: string | null };
+		role?: { id: string; name: string; color?: string | null } | null;
+	}
+
+	// ── Permissions ────────────────────────────────────────────────────────
+	const isOwner = server.ownerId === user.id;
+	const isSuperAdmin = user.role === 'SUPERADMIN';
+	const canManage = isOwner || isSuperAdmin;
 
 	// ── State ──────────────────────────────────────────────────────────────
+	let channels = $state<Channel[]>([...server.channels]);
 	let selectedChannel = $state<Channel | null>(null);
 	let messages = $state<MessagePayload[]>([]);
 	let messagesLoading = $state(false);
@@ -23,9 +34,24 @@
 	let fileInput = $state<HTMLInputElement | null>(null);
 	let messagesEl = $state<HTMLDivElement | null>(null);
 
+	// ── Members panel ──────────────────────────────────────────────────────
+	let showMembers = $state(false);
+	let members = $state<Member[]>([]);
+	let membersLoading = $state(false);
+
+	// ── Channel creation ───────────────────────────────────────────────────
+	let createChannelType = $state<'TEXT' | 'VOICE' | null>(null);
+	let newChannelName = $state('');
+	let createChannelLoading = $state(false);
+
+	// ── Message editing ────────────────────────────────────────────────────
+	let editingId = $state<string | null>(null);
+	let editingContent = $state('');
+	let hoveredId = $state<string | null>(null);
+
 	// ── Derived ────────────────────────────────────────────────────────────
-	let textChannels = $derived((server.channels as Channel[]).filter((c) => c.type === 'TEXT'));
-	let voiceChannels = $derived((server.channels as Channel[]).filter((c) => c.type === 'VOICE'));
+	let textChannels = $derived(channels.filter((c) => c.type === 'TEXT'));
+	let voiceChannels = $derived(channels.filter((c) => c.type === 'VOICE'));
 	let currentVoiceMembers = $derived(voiceChannelId ? (voiceMembers.get(voiceChannelId) ?? []) : []);
 	const micEnabledStore = livekitStore.micEnabled;
 
@@ -40,33 +66,27 @@
 			messages = [...messages, msg];
 			scrollToBottom();
 		});
-
 		socket.on('message:updated', (msg) => {
 			if (msg.channelId !== selectedChannel?.id) return;
 			messages = messages.map((m) => (m.id === msg.id ? msg : m));
 		});
-
 		socket.on('message:deleted', ({ messageId, channelId }) => {
 			if (channelId !== selectedChannel?.id) return;
 			messages = messages.filter((m) => m.id !== messageId);
 		});
-
-		socket.on('voice:state', ({ channelId, members }) => {
-			voiceMembers = new Map(voiceMembers).set(channelId, members);
+		socket.on('voice:state', ({ channelId, members: m }) => {
+			voiceMembers = new Map(voiceMembers).set(channelId, m);
 		});
-
 		socket.on('voice:joined', ({ channelId, member }) => {
 			const prev = voiceMembers.get(channelId) ?? [];
 			if (prev.find((m) => m.userId === member.userId)) return;
 			voiceMembers = new Map(voiceMembers).set(channelId, [...prev, member]);
 		});
-
 		socket.on('voice:left', ({ channelId, userId }) => {
 			const prev = voiceMembers.get(channelId) ?? [];
 			voiceMembers = new Map(voiceMembers).set(channelId, prev.filter((m) => m.userId !== userId));
 		});
 
-		// Select first text channel
 		if (textChannels.length > 0) selectChannel(textChannels[0]);
 
 		return () => {
@@ -77,10 +97,7 @@
 			socket.off('voice:joined');
 			socket.off('voice:left');
 			if (selectedChannel) socket.emit('channel:leave', { channelId: selectedChannel.id });
-			if (voiceChannelId) {
-				socket.emit('voice:leave', { channelId: voiceChannelId });
-				livekitStore.disconnect();
-			}
+			if (voiceChannelId) { socket.emit('voice:leave', { channelId: voiceChannelId }); livekitStore.disconnect(); }
 		};
 	});
 
@@ -88,13 +105,48 @@
 	async function selectChannel(ch: Channel) {
 		const socket = socketStore.raw();
 		if (!socket) return;
-
-		if (selectedChannel) socket.emit('channel:leave', { channelId: selectedChannel.id });
+		if (selectedChannel?.id !== ch.id) socket.emit('channel:leave', { channelId: selectedChannel?.id ?? '' });
 		selectedChannel = ch;
 		socket.emit('channel:join', { channelId: ch.id });
+		if (ch.type === 'TEXT') await loadMessages(ch.id);
+	}
 
-		if (ch.type === 'TEXT') {
-			await loadMessages(ch.id);
+	// ── Channel CRUD ──────────────────────────────────────────────────────
+	async function createChannel() {
+		const name = newChannelName.trim();
+		if (!name || !createChannelType || createChannelLoading) return;
+		createChannelLoading = true;
+		try {
+			const res = await fetch(`/api/servers/${server.slug}/channels`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				credentials: 'include',
+				body: JSON.stringify({ name, type: createChannelType }),
+			});
+			if (res.ok) {
+				const ch: Channel = await res.json();
+				channels = [...channels, ch];
+				newChannelName = '';
+				createChannelType = null;
+				if (ch.type === 'TEXT') selectChannel(ch);
+			}
+		} finally {
+			createChannelLoading = false;
+		}
+	}
+
+	async function deleteChannel(ch: Channel) {
+		if (!confirm(`¿Eliminar #${ch.name}?`)) return;
+		const res = await fetch(`/api/servers/${server.slug}/channels/${ch.id}`, {
+			method: 'DELETE',
+			credentials: 'include',
+		});
+		if (res.ok) {
+			channels = channels.filter((c) => c.id !== ch.id);
+			if (selectedChannel?.id === ch.id) {
+				const next = textChannels.find((c) => c.id !== ch.id);
+				if (next) selectChannel(next); else selectedChannel = null;
+			}
 		}
 	}
 
@@ -115,10 +167,8 @@
 		e?.preventDefault();
 		const content = msgInput.trim();
 		if (!content || !selectedChannel || sendingMsg) return;
-
 		const socket = socketStore.raw();
 		if (!socket) return;
-
 		sendingMsg = true;
 		msgInput = '';
 		socket.emit('message:send', { channelId: selectedChannel.id, content });
@@ -132,10 +182,39 @@
 		if (msgInput.trim()) fd.append('content', msgInput.trim());
 		msgInput = '';
 		await fetch(`/api/channels/${selectedChannel.id}/messages`, {
-			method: 'POST',
-			credentials: 'include',
-			body: fd,
+			method: 'POST', credentials: 'include', body: fd,
 		});
+	}
+
+	function startEdit(msg: MessagePayload) {
+		editingId = msg.id;
+		editingContent = msg.content ?? '';
+	}
+
+	function cancelEdit() { editingId = null; editingContent = ''; }
+
+	async function submitEdit(msg: MessagePayload) {
+		const content = editingContent.trim();
+		if (!content || !selectedChannel) return;
+		const res = await fetch(`/api/channels/${selectedChannel.id}/messages/${msg.id}`, {
+			method: 'PATCH',
+			headers: { 'Content-Type': 'application/json' },
+			credentials: 'include',
+			body: JSON.stringify({ content }),
+		});
+		if (res.ok) cancelEdit();
+	}
+
+	async function deleteMsg(msg: MessagePayload) {
+		if (!selectedChannel) return;
+		await fetch(`/api/channels/${selectedChannel.id}/messages/${msg.id}`, {
+			method: 'DELETE', credentials: 'include',
+		});
+	}
+
+	function onEditKeydown(e: KeyboardEvent, msg: MessagePayload) {
+		if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submitEdit(msg); }
+		if (e.key === 'Escape') cancelEdit();
 	}
 
 	function onFileChange(e: Event) {
@@ -144,27 +223,43 @@
 	}
 
 	function onKeydown(e: KeyboardEvent) {
-		if (e.key === 'Enter' && !e.shiftKey) {
-			e.preventDefault();
-			sendMessage();
+		if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+	}
+
+	// ── Members ───────────────────────────────────────────────────────────
+	async function toggleMembers() {
+		showMembers = !showMembers;
+		if (showMembers && members.length === 0) await loadMembers();
+	}
+
+	async function loadMembers() {
+		membersLoading = true;
+		try {
+			const res = await fetch(`/api/servers/${server.slug}/members`, { credentials: 'include' });
+			if (res.ok) members = await res.json();
+		} finally {
+			membersLoading = false;
 		}
+	}
+
+	async function kickMember(userId: string, username: string) {
+		if (!confirm(`¿Expulsar a ${username}?`)) return;
+		const res = await fetch(`/api/servers/${server.slug}/members/${userId}`, {
+			method: 'DELETE', credentials: 'include',
+		});
+		if (res.ok) members = members.filter((m) => m.user.id !== userId);
 	}
 
 	// ── Voice ─────────────────────────────────────────────────────────────
 	async function joinVoiceChannel(ch: Channel) {
 		if (voiceChannelId) await leaveVoice();
-
 		const res = await fetch(`/api/channels/${ch.id}/livekit-token`, { credentials: 'include' });
 		if (!res.ok) return;
 		const { token, url } = await res.json();
-
 		const socket = socketStore.raw();
 		socket?.emit('voice:join', { channelId: ch.id });
-
 		voiceChannelId = ch.id;
 		await livekitStore.connect(url, token);
-
-		// Select the voice channel as the visible view
 		selectedChannel = ch;
 	}
 
@@ -174,7 +269,6 @@
 		socket?.emit('voice:leave', { channelId: voiceChannelId });
 		livekitStore.disconnect();
 		voiceChannelId = null;
-		// Go back to first text channel
 		if (textChannels.length > 0) selectChannel(textChannels[0]);
 	}
 
@@ -183,19 +277,17 @@
 		setTimeout(() => { if (messagesEl) messagesEl!.scrollTop = messagesEl!.scrollHeight; }, 50);
 	}
 
-	function formatTime(iso: string): string {
+	function formatTime(iso: string) {
 		return new Date(iso).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
 	}
 
-	function formatDate(iso: string): string {
+	function formatDate(iso: string) {
 		return new Date(iso).toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' });
 	}
 
-	function avatarInitial(username: string): string {
-		return username[0].toUpperCase();
-	}
+	const avatarInitial = (u: string) => u[0].toUpperCase();
 
-	function fileSize(bytes: number): string {
+	function fileSize(bytes: number) {
 		if (bytes < 1024) return `${bytes} B`;
 		if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
 		return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
@@ -203,63 +295,107 @@
 
 	const isImage = (mime: string) => mime.startsWith('image/');
 
+	function canEditMsg(msg: MessagePayload) { return msg.author.id === user.id; }
+	function canDeleteMsg(msg: MessagePayload) { return msg.author.id === user.id || canManage; }
 </script>
 
 <svelte:head><title>{server.name} — Meado</title></svelte:head>
 
-<div class="discord-layout">
-	<!-- ── Sidebar ─────────────────────────────────────────────────────── -->
+<div class="discord-layout" class:show-members={showMembers}>
+	<!-- ── Sidebar ───────────────────────────────────────────────────────── -->
 	<aside class="sidebar">
 		<div class="server-header">
 			<span class="server-name-text">{server.name}</span>
-			<a href="/servers" class="back-btn" title="Volver a servidores">←</a>
+			<a href="/servers" class="icon-btn" title="Volver">←</a>
 		</div>
 
 		<nav class="channel-nav">
-			{#if textChannels.length > 0}
-				<div class="channel-category">TEXTO</div>
-				{#each textChannels as ch (ch.id)}
-					<button
-						class="channel-btn"
-						class:active={selectedChannel?.id === ch.id && selectedChannel.type === 'TEXT'}
-						onclick={() => selectChannel(ch)}
-					>
+			<!-- TEXT -->
+			<div class="channel-category">
+				<span>TEXTO</span>
+				{#if canManage}
+					<button class="cat-add-btn" title="Crear canal de texto" onclick={() => { createChannelType = 'TEXT'; newChannelName = ''; }}>+</button>
+				{/if}
+			</div>
+
+			{#if createChannelType === 'TEXT'}
+				<div class="create-channel-inline">
+					<input
+						class="create-ch-input"
+						placeholder="nombre-canal"
+						bind:value={newChannelName}
+						onkeydown={(e) => { if (e.key === 'Enter') createChannel(); if (e.key === 'Escape') createChannelType = null; }}
+						autofocus
+					/>
+					<div class="create-ch-actions">
+						<button class="ch-action-cancel" onclick={() => (createChannelType = null)}>Esc</button>
+						<button class="ch-action-ok" onclick={createChannel} disabled={createChannelLoading}>✓</button>
+					</div>
+				</div>
+			{/if}
+
+			{#each textChannels as ch (ch.id)}
+				<div class="channel-row" class:active={selectedChannel?.id === ch.id}>
+					<button class="channel-btn" onclick={() => selectChannel(ch)}>
 						<span class="ch-prefix">#</span>
 						<span class="ch-name">{ch.name}</span>
 					</button>
-				{/each}
+					{#if canManage}
+						<button class="ch-del-btn" title="Eliminar canal" onclick={() => deleteChannel(ch)}>✕</button>
+					{/if}
+				</div>
+			{/each}
+
+			<!-- VOICE -->
+			<div class="channel-category">
+				<span>VOZ</span>
+				{#if canManage}
+					<button class="cat-add-btn" title="Crear canal de voz" onclick={() => { createChannelType = 'VOICE'; newChannelName = ''; }}>+</button>
+				{/if}
+			</div>
+
+			{#if createChannelType === 'VOICE'}
+				<div class="create-channel-inline">
+					<input
+						class="create-ch-input"
+						placeholder="nombre-canal"
+						bind:value={newChannelName}
+						onkeydown={(e) => { if (e.key === 'Enter') createChannel(); if (e.key === 'Escape') createChannelType = null; }}
+						autofocus
+					/>
+					<div class="create-ch-actions">
+						<button class="ch-action-cancel" onclick={() => (createChannelType = null)}>Esc</button>
+						<button class="ch-action-ok" onclick={createChannel} disabled={createChannelLoading}>✓</button>
+					</div>
+				</div>
 			{/if}
 
-			{#if voiceChannels.length > 0}
-				<div class="channel-category">VOZ</div>
-				{#each voiceChannels as ch (ch.id)}
-					<button
-						class="channel-btn voice-ch"
-						class:active={voiceChannelId === ch.id}
-						onclick={() => joinVoiceChannel(ch)}
-					>
+			{#each voiceChannels as ch (ch.id)}
+				<div class="channel-row" class:active={voiceChannelId === ch.id}>
+					<button class="channel-btn" onclick={() => joinVoiceChannel(ch)}>
 						<span class="ch-prefix">🔊</span>
 						<span class="ch-name">{ch.name}</span>
-						{#if voiceChannelId === ch.id}
-							<span class="voice-dot"></span>
-						{/if}
+						{#if voiceChannelId === ch.id}<span class="voice-dot"></span>{/if}
 					</button>
-					{#if (voiceMembers.get(ch.id) ?? []).length > 0}
-						<div class="voice-participants-sidebar">
-							{#each voiceMembers.get(ch.id) ?? [] as m (m.userId)}
-								<div class="voice-participant-item">
-									{#if m.avatarUrl}
-										<img src={m.avatarUrl} class="avatar-xs" alt="" />
-									{:else}
-										<div class="avatar-xs avatar-init">{avatarInitial(m.username)}</div>
-									{/if}
-									<span class="vp-name">{m.username}</span>
-								</div>
-							{/each}
-						</div>
+					{#if canManage}
+						<button class="ch-del-btn" title="Eliminar canal" onclick={() => deleteChannel(ch)}>✕</button>
 					{/if}
-				{/each}
-			{/if}
+				</div>
+				{#if (voiceMembers.get(ch.id) ?? []).length > 0}
+					<div class="voice-participants-sidebar">
+						{#each voiceMembers.get(ch.id) ?? [] as m (m.userId)}
+							<div class="voice-participant-item">
+								{#if m.avatarUrl}
+									<img src={m.avatarUrl} class="avatar-xs" alt="" />
+								{:else}
+									<div class="avatar-xs avatar-init">{avatarInitial(m.username)}</div>
+								{/if}
+								<span class="vp-name">{m.username}</span>
+							</div>
+						{/each}
+					</div>
+				{/if}
+			{/each}
 		</nav>
 
 		<!-- User area -->
@@ -268,12 +404,7 @@
 				<div class="voice-status">
 					<span class="voice-status-label">🟢 En voz</span>
 					<div class="voice-status-actions">
-						<button
-							class="ctrl-btn"
-							class:active={$micEnabledStore}
-							title={$micEnabledStore ? 'Silenciar' : 'Activar micro'}
-							onclick={() => livekitStore.toggleMic()}
-						>
+						<button class="ctrl-btn" class:active={$micEnabledStore} title={$micEnabledStore ? 'Silenciar' : 'Activar micro'} onclick={() => livekitStore.toggleMic()}>
 							{$micEnabledStore ? '🎙️' : '🔇'}
 						</button>
 						<button class="ctrl-btn danger" title="Desconectar" onclick={leaveVoice}>📵</button>
@@ -291,19 +422,20 @@
 		</div>
 	</aside>
 
-	<!-- ── Main content ────────────────────────────────────────────────── -->
+	<!-- ── Main content ───────────────────────────────────────────────────── -->
 	<main class="main-content">
 		{#if !selectedChannel}
 			<div class="empty-state">Selecciona un canal</div>
 
 		{:else if selectedChannel.type === 'TEXT'}
-			<!-- Channel header -->
 			<div class="content-header">
 				<span class="header-prefix">#</span>
 				<strong class="header-name">{selectedChannel.name}</strong>
+				<div class="header-actions">
+					<button class="icon-btn" class:active={showMembers} title="Miembros" onclick={toggleMembers}>👥</button>
+				</div>
 			</div>
 
-			<!-- Messages -->
 			<div class="messages-area" bind:this={messagesEl}>
 				{#if messagesLoading}
 					<div class="loading">Cargando mensajes…</div>
@@ -317,13 +449,18 @@
 					{#each messages as msg, i (msg.id)}
 						{@const prevMsg = messages[i - 1]}
 						{@const sameAuthor = prevMsg?.author.id === msg.author.id && (new Date(msg.createdAt).getTime() - new Date(prevMsg.createdAt).getTime()) < 5 * 60 * 1000}
-						{@const isOwn = msg.author.id === user.id}
 
 						{#if !prevMsg || formatDate(prevMsg.createdAt) !== formatDate(msg.createdAt)}
 							<div class="date-divider"><span>{formatDate(msg.createdAt)}</span></div>
 						{/if}
 
-						<div class="message" class:compact={sameAuthor} class:own={isOwn}>
+						<div
+							class="message"
+							class:compact={sameAuthor}
+							role="listitem"
+							onmouseenter={() => (hoveredId = msg.id)}
+							onmouseleave={() => (hoveredId = null)}
+						>
 							{#if !sameAuthor}
 								<div class="avatar-col">
 									{#if msg.author.avatarUrl}
@@ -338,34 +475,62 @@
 										<span class="msg-time">{formatTime(msg.createdAt)}</span>
 										{#if msg.editedAt}<span class="msg-edited">(editado)</span>{/if}
 									</div>
-									{#if msg.content}<p class="msg-content">{msg.content}</p>{/if}
+									{#if editingId === msg.id}
+										<div class="edit-box">
+											<textarea class="edit-input" bind:value={editingContent} onkeydown={(e) => onEditKeydown(e, msg)} rows="2" autofocus></textarea>
+											<div class="edit-actions">
+												<button class="edit-cancel" onclick={cancelEdit}>Cancelar</button>
+												<button class="edit-save" onclick={() => submitEdit(msg)}>Guardar</button>
+											</div>
+										</div>
+									{:else}
+										{#if msg.content}<p class="msg-content">{msg.content}</p>{/if}
+									{/if}
 									{#each msg.attachments as att (att.id)}
 										<div class="attachment">
 											{#if isImage(att.mimeType)}
 												<img src={att.url} class="att-img" alt={att.name} />
 											{:else}
-												<a href={att.url} target="_blank" class="att-file">
-													📎 {att.name} <span class="att-size">({fileSize(att.size)})</span>
-												</a>
+												<a href={att.url} target="_blank" class="att-file">📎 {att.name} <span class="att-size">({fileSize(att.size)})</span></a>
 											{/if}
 										</div>
 									{/each}
 								</div>
 							{:else}
-								<div class="avatar-col compact-spacer"></div>
+								<div class="avatar-col compact-spacer">
+									{#if hoveredId === msg.id}
+										<span class="compact-time">{formatTime(msg.createdAt)}</span>
+									{/if}
+								</div>
 								<div class="msg-body">
-									{#if msg.content}<p class="msg-content">{msg.content}</p>{/if}
+									{#if editingId === msg.id}
+										<div class="edit-box">
+											<textarea class="edit-input" bind:value={editingContent} onkeydown={(e) => onEditKeydown(e, msg)} rows="2" autofocus></textarea>
+											<div class="edit-actions">
+												<button class="edit-cancel" onclick={cancelEdit}>Cancelar</button>
+												<button class="edit-save" onclick={() => submitEdit(msg)}>Guardar</button>
+											</div>
+										</div>
+									{:else}
+										{#if msg.content}<p class="msg-content">{msg.content}</p>{/if}
+									{/if}
 									{#each msg.attachments as att (att.id)}
 										<div class="attachment">
 											{#if isImage(att.mimeType)}
 												<img src={att.url} class="att-img" alt={att.name} />
 											{:else}
-												<a href={att.url} target="_blank" class="att-file">
-													📎 {att.name} <span class="att-size">({fileSize(att.size)})</span>
-												</a>
+												<a href={att.url} target="_blank" class="att-file">📎 {att.name} <span class="att-size">({fileSize(att.size)})</span></a>
 											{/if}
 										</div>
 									{/each}
+								</div>
+							{/if}
+
+							<!-- Hover actions -->
+							{#if hoveredId === msg.id && editingId !== msg.id}
+								<div class="msg-actions">
+									{#if canEditMsg(msg)}<button class="msg-action-btn" title="Editar" onclick={() => startEdit(msg)}>✏️</button>{/if}
+									{#if canDeleteMsg(msg)}<button class="msg-action-btn danger" title="Eliminar" onclick={() => deleteMsg(msg)}>🗑️</button>{/if}
 								</div>
 							{/if}
 						</div>
@@ -373,37 +538,22 @@
 				{/if}
 			</div>
 
-			<!-- Message input -->
 			<div class="input-area">
 				<div class="input-box">
 					<button class="attach-btn" title="Adjuntar archivo" onclick={() => fileInput?.click()}>+</button>
-					<input
-						class="hidden-file"
-						type="file"
-						accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.zip,.rar"
-						bind:this={fileInput}
-						onchange={onFileChange}
-					/>
-					<textarea
-						class="msg-input"
-						placeholder="Escribir en #{selectedChannel.name}"
-						bind:value={msgInput}
-						onkeydown={onKeydown}
-						rows="1"
-					></textarea>
-					<button
-						class="send-btn"
-						disabled={!msgInput.trim() || sendingMsg}
-						onclick={() => sendMessage()}
-					>↑</button>
+					<input class="hidden-file" type="file" accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.zip,.rar" bind:this={fileInput} onchange={onFileChange} />
+					<textarea class="msg-input" placeholder="Escribir en #{selectedChannel.name}" bind:value={msgInput} onkeydown={onKeydown} rows="1"></textarea>
+					<button class="send-btn" disabled={!msgInput.trim() || sendingMsg} onclick={() => sendMessage()}>↑</button>
 				</div>
 			</div>
 
 		{:else if selectedChannel.type === 'VOICE'}
-			<!-- Voice channel view -->
 			<div class="content-header">
 				<span class="header-prefix">🔊</span>
 				<strong class="header-name">{selectedChannel.name}</strong>
+				<div class="header-actions">
+					<button class="icon-btn" class:active={showMembers} title="Miembros" onclick={toggleMembers}>👥</button>
+				</div>
 			</div>
 
 			<div class="voice-view">
@@ -412,9 +562,7 @@
 						<div class="voice-icon-big">🔊</div>
 						<h3>{selectedChannel.name}</h3>
 						<p>{(voiceMembers.get(selectedChannel.id) ?? []).length} participante(s)</p>
-						<button class="btn-primary" onclick={() => selectedChannel && joinVoiceChannel(selectedChannel)}>
-							Unirse al canal de voz
-						</button>
+						<button class="btn-primary" onclick={() => selectedChannel && joinVoiceChannel(selectedChannel)}>Unirse al canal de voz</button>
 					</div>
 				{:else}
 					<div class="voice-participants-grid">
@@ -429,33 +577,63 @@
 							</div>
 						{/each}
 					</div>
-
 					<div class="voice-controls-bar">
-						<button
-							class="ctrl-btn-lg"
-							class:active={$micEnabledStore}
-							onclick={() => livekitStore.toggleMic()}
-						>
+						<button class="ctrl-btn-lg" class:active={$micEnabledStore} onclick={() => livekitStore.toggleMic()}>
 							{$micEnabledStore ? '🎙️ Micro activo' : '🔇 Micro silenciado'}
 						</button>
-						<button class="ctrl-btn-lg danger" onclick={leaveVoice}>
-							📵 Desconectar
-						</button>
+						<button class="ctrl-btn-lg danger" onclick={leaveVoice}>📵 Desconectar</button>
 					</div>
 				{/if}
 			</div>
 		{/if}
 	</main>
+
+	<!-- ── Members panel ──────────────────────────────────────────────────── -->
+	{#if showMembers}
+		<aside class="members-panel">
+			<div class="members-header">Miembros — {members.length}</div>
+			{#if membersLoading}
+				<div class="members-loading">Cargando…</div>
+			{:else}
+				<ul class="members-list">
+					{#each members as m (m.user.id)}
+						<li class="member-item">
+							{#if m.user.avatarUrl}
+								<img src={m.user.avatarUrl} class="avatar-sm" alt="" />
+							{:else}
+								<div class="avatar-sm avatar-init">{avatarInitial(m.user.username)}</div>
+							{/if}
+							<div class="member-info">
+								<span class="member-name">{m.user.username}</span>
+								{#if m.role}
+									<span class="member-role" style="color: {m.role.color ?? 'var(--text-muted)'}">
+										{m.role.name}
+									</span>
+								{/if}
+							</div>
+							{#if canManage && m.user.id !== user.id}
+								<button class="kick-btn" title="Expulsar" onclick={() => kickMember(m.user.id, m.user.username)}>✕</button>
+							{/if}
+						</li>
+					{/each}
+				</ul>
+			{/if}
+		</aside>
+	{/if}
 </div>
 
 <style>
-	/* ── Layout ─────────────────────────────────────────────────────────── */
+	/* ── Layout ──────────────────────────────────────────────────────────── */
 	.discord-layout {
 		display: grid;
 		grid-template-columns: 240px 1fr;
-		height: 100vh;
+		grid-template-rows: 100vh;
 		overflow: hidden;
 		background: var(--bg-base);
+	}
+
+	.discord-layout.show-members {
+		grid-template-columns: 240px 1fr 200px;
 	}
 
 	/* ── Sidebar ─────────────────────────────────────────────────────────── */
@@ -465,6 +643,7 @@
 		background: var(--bg-surface);
 		border-right: 1px solid var(--border);
 		overflow: hidden;
+		min-height: 0;
 	}
 
 	.server-header {
@@ -472,13 +651,13 @@
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
-		padding: 0 1rem;
+		padding: 0 0.75rem 0 1rem;
 		border-bottom: 1px solid var(--border);
 		flex-shrink: 0;
 	}
 
 	.server-name-text {
-		font-size: 0.9rem;
+		font-size: 0.875rem;
 		font-weight: 700;
 		color: var(--text-primary);
 		white-space: nowrap;
@@ -486,56 +665,104 @@
 		text-overflow: ellipsis;
 	}
 
-	.back-btn {
-		font-size: 1rem;
+	.icon-btn {
+		background: transparent;
+		border: none;
 		color: var(--text-muted);
-		text-decoration: none;
-		padding: 0.25rem;
+		cursor: pointer;
+		padding: 0.3rem 0.4rem;
 		border-radius: var(--radius);
-		transition: color var(--transition);
-		flex-shrink: 0;
+		font-size: 0.85rem;
+		line-height: 1;
+		text-decoration: none;
+		transition: color var(--transition), background var(--transition);
+		display: flex;
+		align-items: center;
 	}
 
-	.back-btn:hover { color: var(--text-primary); }
+	.icon-btn:hover { color: var(--text-primary); background: rgba(255,255,255,0.07); }
+	.icon-btn.active { color: var(--accent); background: rgba(99,102,241,0.12); }
 
 	.channel-nav {
 		flex: 1;
 		overflow-y: auto;
-		padding: 0.5rem 0.5rem;
+		padding: 0.5rem 0.4rem;
+		min-height: 0;
 	}
 
 	.channel-category {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
 		font-size: 0.65rem;
 		font-weight: 700;
 		letter-spacing: 0.08em;
 		color: var(--text-muted);
 		text-transform: uppercase;
-		padding: 0.6rem 0.5rem 0.25rem;
+		padding: 0.6rem 0.5rem 0.2rem;
 	}
 
+	.cat-add-btn {
+		background: transparent;
+		border: none;
+		color: var(--text-muted);
+		cursor: pointer;
+		font-size: 1rem;
+		line-height: 1;
+		padding: 0 0.2rem;
+		border-radius: 3px;
+		transition: color var(--transition);
+	}
+
+	.cat-add-btn:hover { color: var(--text-primary); }
+
+	.channel-row {
+		display: flex;
+		align-items: center;
+		border-radius: var(--radius);
+		transition: background var(--transition);
+		position: relative;
+	}
+
+	.channel-row:hover { background: rgba(255,255,255,0.05); }
+	.channel-row.active { background: rgba(255,255,255,0.1); }
+	.channel-row:hover .ch-del-btn { opacity: 1; }
+
 	.channel-btn {
-		width: 100%;
+		flex: 1;
 		display: flex;
 		align-items: center;
 		gap: 0.4rem;
 		padding: 0.35rem 0.5rem;
 		border: none;
-		border-radius: var(--radius);
 		background: transparent;
 		color: var(--text-muted);
 		cursor: pointer;
 		font-size: 0.85rem;
 		text-align: left;
-		transition: background var(--transition), color var(--transition);
 		font-family: inherit;
-		position: relative;
 	}
 
-	.channel-btn:hover { background: rgba(255,255,255,0.06); color: var(--text-secondary); }
-	.channel-btn.active { background: rgba(255,255,255,0.1); color: var(--text-primary); }
+	.channel-row:hover .channel-btn { color: var(--text-secondary); }
+	.channel-row.active .channel-btn { color: var(--text-primary); }
 
-	.ch-prefix { flex-shrink: 0; font-size: 0.9rem; opacity: 0.7; }
+	.ch-prefix { flex-shrink: 0; opacity: 0.7; }
 	.ch-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+	.ch-del-btn {
+		opacity: 0;
+		background: transparent;
+		border: none;
+		color: var(--text-muted);
+		cursor: pointer;
+		font-size: 0.65rem;
+		padding: 0.2rem 0.4rem;
+		border-radius: 3px;
+		transition: color var(--transition), opacity var(--transition);
+		flex-shrink: 0;
+	}
+
+	.ch-del-btn:hover { color: var(--error); }
 
 	.voice-dot {
 		width: 7px; height: 7px;
@@ -544,12 +771,61 @@
 		flex-shrink: 0;
 	}
 
+	/* Create channel inline */
+	.create-channel-inline {
+		padding: 0.3rem 0.4rem;
+	}
+
+	.create-ch-input {
+		width: 100%;
+		font-size: 0.8rem;
+		padding: 0.3rem 0.5rem;
+		background: var(--bg-elevated);
+		border: 1px solid var(--border-focus);
+		border-radius: var(--radius);
+		color: var(--text-primary);
+		outline: none;
+		font-family: inherit;
+		box-sizing: border-box;
+	}
+
+	.create-ch-actions {
+		display: flex;
+		gap: 0.3rem;
+		margin-top: 0.3rem;
+		justify-content: flex-end;
+	}
+
+	.ch-action-cancel {
+		font-size: 0.7rem;
+		padding: 0.15rem 0.4rem;
+		background: transparent;
+		border: 1px solid var(--border);
+		border-radius: var(--radius);
+		color: var(--text-muted);
+		cursor: pointer;
+		font-family: inherit;
+	}
+
+	.ch-action-ok {
+		font-size: 0.7rem;
+		padding: 0.15rem 0.5rem;
+		background: var(--accent);
+		border: none;
+		border-radius: var(--radius);
+		color: var(--accent-text);
+		cursor: pointer;
+		font-family: inherit;
+	}
+
+	.ch-action-ok:disabled { opacity: 0.45; }
+
+	/* Voice participants sidebar */
 	.voice-participants-sidebar {
 		display: flex;
 		flex-direction: column;
 		gap: 0.1rem;
 		padding-left: 1.5rem;
-		margin-bottom: 0.15rem;
 	}
 
 	.voice-participant-item {
@@ -584,7 +860,6 @@
 	}
 
 	.voice-status-label { font-size: 0.72rem; color: #4ade80; }
-
 	.voice-status-actions { display: flex; gap: 0.25rem; }
 
 	.ctrl-btn {
@@ -610,11 +885,12 @@
 
 	.username-text { font-size: 0.82rem; color: var(--text-secondary); font-weight: 600; }
 
-	/* ── Main content ────────────────────────────────────────────────────── */
+	/* ── Main content ─────────────────────────────────────────────────────── */
 	.main-content {
 		display: flex;
 		flex-direction: column;
 		overflow: hidden;
+		min-height: 0;
 	}
 
 	.content-header {
@@ -622,22 +898,23 @@
 		display: flex;
 		align-items: center;
 		gap: 0.4rem;
-		padding: 0 1.25rem;
+		padding: 0 0.75rem 0 1.25rem;
 		border-bottom: 1px solid var(--border);
 		flex-shrink: 0;
 	}
 
 	.header-prefix { font-size: 1rem; color: var(--text-muted); }
-	.header-name { font-size: 0.9rem; color: var(--text-primary); }
+	.header-name { font-size: 0.9rem; color: var(--text-primary); flex: 1; }
+	.header-actions { display: flex; gap: 0.25rem; margin-left: auto; }
 
-	/* ── Messages ────────────────────────────────────────────────────────── */
+	/* ── Messages ─────────────────────────────────────────────────────────── */
 	.messages-area {
 		flex: 1;
 		overflow-y: auto;
 		padding: 0.5rem 1rem;
 		display: flex;
 		flex-direction: column;
-		gap: 0;
+		min-height: 0;
 	}
 
 	.loading, .empty-state {
@@ -677,6 +954,7 @@
 		margin: 1rem 0 0.5rem;
 		color: var(--text-muted);
 		font-size: 0.7rem;
+		flex-shrink: 0;
 	}
 
 	.date-divider::before, .date-divider::after {
@@ -688,15 +966,17 @@
 
 	.message {
 		display: grid;
-		grid-template-columns: 40px 1fr;
+		grid-template-columns: 40px 1fr auto;
 		gap: 0 0.75rem;
-		padding: 0.2rem 0;
+		padding: 0.1rem 0.5rem;
 		border-radius: var(--radius);
 		transition: background var(--transition);
+		position: relative;
+		flex-shrink: 0;
 	}
 
-	.message:hover { background: rgba(255,255,255,0.025); }
 	.message:not(.compact) { padding-top: 0.5rem; }
+	.message:hover { background: rgba(255,255,255,0.025); }
 
 	.avatar-col {
 		display: flex;
@@ -705,7 +985,17 @@
 		padding-top: 0.1rem;
 	}
 
-	.compact-spacer { height: 0; }
+	.compact-spacer {
+		align-items: center;
+		justify-content: flex-end;
+		padding-right: 0.1rem;
+	}
+
+	.compact-time {
+		font-size: 0.6rem;
+		color: var(--text-muted);
+		white-space: nowrap;
+	}
 
 	.msg-body { display: flex; flex-direction: column; gap: 0.15rem; min-width: 0; }
 
@@ -723,8 +1013,84 @@
 		line-height: 1.5;
 		word-break: break-word;
 		white-space: pre-wrap;
+		margin: 0;
 	}
 
+	.msg-actions {
+		display: flex;
+		gap: 0.15rem;
+		align-items: flex-start;
+		padding-top: 0.1rem;
+		flex-shrink: 0;
+	}
+
+	.msg-action-btn {
+		background: var(--bg-elevated);
+		border: 1px solid var(--border);
+		border-radius: var(--radius);
+		cursor: pointer;
+		font-size: 0.75rem;
+		padding: 0.15rem 0.3rem;
+		transition: background var(--transition), border-color var(--transition);
+		line-height: 1.3;
+	}
+
+	.msg-action-btn:hover { background: var(--bg-surface); border-color: var(--border-strong); }
+	.msg-action-btn.danger:hover { border-color: var(--error); }
+
+	/* Edit box */
+	.edit-box {
+		display: flex;
+		flex-direction: column;
+		gap: 0.3rem;
+		margin-top: 0.1rem;
+	}
+
+	.edit-input {
+		width: 100%;
+		font-size: 0.875rem;
+		padding: 0.4rem 0.5rem;
+		background: var(--bg-elevated);
+		border: 1px solid var(--border-focus);
+		border-radius: var(--radius);
+		color: var(--text-primary);
+		outline: none;
+		resize: none;
+		font-family: inherit;
+		line-height: 1.5;
+		box-sizing: border-box;
+	}
+
+	.edit-actions {
+		display: flex;
+		gap: 0.4rem;
+		font-size: 0.72rem;
+	}
+
+	.edit-cancel {
+		background: transparent;
+		border: none;
+		color: var(--text-muted);
+		cursor: pointer;
+		font-family: inherit;
+		font-size: 0.72rem;
+		padding: 0;
+	}
+
+	.edit-cancel:hover { color: var(--text-primary); }
+
+	.edit-save {
+		background: var(--accent);
+		border: none;
+		color: var(--accent-text);
+		border-radius: var(--radius);
+		padding: 0.2rem 0.6rem;
+		cursor: pointer;
+		font-family: inherit;
+		font-size: 0.72rem;
+	}
+
+	/* Attachments */
 	.attachment { margin-top: 0.25rem; }
 
 	.att-img {
@@ -749,7 +1115,7 @@
 
 	.att-size { color: var(--text-muted); font-size: 0.7rem; }
 
-	/* ── Message input ───────────────────────────────────────────────────── */
+	/* ── Message input ────────────────────────────────────────────────────── */
 	.input-area {
 		padding: 0 1rem 1rem;
 		flex-shrink: 0;
@@ -804,8 +1170,7 @@
 		background: var(--accent);
 		border: none;
 		color: var(--accent-text);
-		width: 28px;
-		height: 28px;
+		width: 28px; height: 28px;
 		border-radius: var(--radius);
 		cursor: pointer;
 		font-size: 0.9rem;
@@ -819,7 +1184,7 @@
 	.send-btn:disabled { opacity: 0.35; cursor: default; }
 	.send-btn:not(:disabled):hover { opacity: 0.85; }
 
-	/* ── Voice view ──────────────────────────────────────────────────────── */
+	/* ── Voice view ───────────────────────────────────────────────────────── */
 	.voice-view {
 		flex: 1;
 		display: flex;
@@ -869,16 +1234,12 @@
 		width: 64px; height: 64px;
 		border-radius: 50%;
 		object-fit: cover;
-		font-size: 1.5rem;
 		display: flex; align-items: center; justify-content: center;
 	}
 
 	.voice-card-name { font-size: 0.82rem; color: var(--text-secondary); }
 
-	.voice-controls-bar {
-		display: flex;
-		gap: 0.75rem;
-	}
+	.voice-controls-bar { display: flex; gap: 0.75rem; }
 
 	.ctrl-btn-lg {
 		padding: 0.6rem 1.25rem;
@@ -896,27 +1257,99 @@
 	.ctrl-btn-lg.danger { color: #f87171; border-color: rgba(239,68,68,0.3); }
 	.ctrl-btn-lg.danger:hover { background: rgba(239,68,68,0.1); }
 
-	/* ── Avatars ─────────────────────────────────────────────────────────── */
-	.avatar-xs {
-		width: 16px; height: 16px;
-		border-radius: 50%;
-		object-fit: cover;
+	/* ── Members panel ────────────────────────────────────────────────────── */
+	.members-panel {
+		display: flex;
+		flex-direction: column;
+		background: var(--bg-surface);
+		border-left: 1px solid var(--border);
+		overflow: hidden;
+	}
+
+	.members-header {
+		height: 48px;
+		display: flex;
+		align-items: center;
+		padding: 0 1rem;
+		font-size: 0.72rem;
+		font-weight: 700;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+		color: var(--text-muted);
+		border-bottom: 1px solid var(--border);
 		flex-shrink: 0;
 	}
 
-	.avatar-sm {
-		width: 28px; height: 28px;
-		border-radius: 50%;
-		object-fit: cover;
+	.members-loading {
+		padding: 1rem;
+		font-size: 0.8rem;
+		color: var(--text-muted);
+	}
+
+	.members-list {
+		list-style: none;
+		overflow-y: auto;
+		padding: 0.5rem 0.5rem;
+		display: flex;
+		flex-direction: column;
+		gap: 0.1rem;
+	}
+
+	.member-item {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		padding: 0.35rem 0.5rem;
+		border-radius: var(--radius);
+		transition: background var(--transition);
+	}
+
+	.member-item:hover { background: rgba(255,255,255,0.05); }
+	.member-item:hover .kick-btn { opacity: 1; }
+
+	.member-info {
+		flex: 1;
+		display: flex;
+		flex-direction: column;
+		gap: 0.05rem;
+		min-width: 0;
+	}
+
+	.member-name {
+		font-size: 0.82rem;
+		color: var(--text-secondary);
+		font-weight: 600;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.member-role {
+		font-size: 0.65rem;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.kick-btn {
+		opacity: 0;
+		background: transparent;
+		border: none;
+		color: var(--text-muted);
+		cursor: pointer;
+		font-size: 0.65rem;
+		padding: 0.1rem 0.3rem;
+		border-radius: 3px;
+		transition: color var(--transition), opacity var(--transition);
 		flex-shrink: 0;
 	}
 
-	.avatar-msg {
-		width: 36px; height: 36px;
-		border-radius: 50%;
-		object-fit: cover;
-		flex-shrink: 0;
-	}
+	.kick-btn:hover { color: var(--error); }
+
+	/* ── Avatars ──────────────────────────────────────────────────────────── */
+	.avatar-xs { width: 16px; height: 16px; border-radius: 50%; object-fit: cover; flex-shrink: 0; }
+	.avatar-sm { width: 28px; height: 28px; border-radius: 50%; object-fit: cover; flex-shrink: 0; }
+	.avatar-msg { width: 36px; height: 36px; border-radius: 50%; object-fit: cover; flex-shrink: 0; }
 
 	.avatar-init {
 		background: var(--bg-elevated);
@@ -925,15 +1358,15 @@
 		align-items: center;
 		justify-content: center;
 		font-weight: 700;
-		font-size: 0.75em;
 		flex-shrink: 0;
 	}
 
 	.avatar-xs.avatar-init { font-size: 0.5rem; }
 	.avatar-sm.avatar-init { font-size: 0.7rem; }
 	.avatar-msg.avatar-init { font-size: 0.9rem; }
+	.voice-avatar.avatar-init { font-size: 1.5rem; }
 
-	/* ── Btn primary ────────────────────────────────────────────────────── */
+	/* ── Btn primary ──────────────────────────────────────────────────────── */
 	.btn-primary {
 		padding: 0.5rem 1.25rem;
 		background: var(--accent);
