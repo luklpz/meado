@@ -68,6 +68,15 @@
 	// ── Profile dropdown ───────────────────────────────────────────────────
 	let showProfile = $state(false);
 
+	// ── Unread counts ──────────────────────────────────────────────────────
+	let unread = $state<Map<string, number>>(new Map());
+
+	// ── Roles management ───────────────────────────────────────────────────
+	let newRoleName = $state('');
+	let newRoleColor = $state('#6366f1');
+	let createRoleLoading = $state(false);
+	let rolesError = $state('');
+
 	// ── Derived ────────────────────────────────────────────────────────────
 	let textChannels = $derived(channels.filter((c) => c.type === 'TEXT'));
 	let voiceChannels = $derived(channels.filter((c) => c.type === 'VOICE'));
@@ -81,9 +90,12 @@
 		const socket = socketStore.connect(token);
 
 		socket.on('message:created', (msg) => {
-			if (msg.channelId !== selectedChannel?.id) return;
-			messages = [...messages, msg];
-			scrollToBottom();
+			if (msg.channelId === selectedChannel?.id) {
+				messages = [...messages, msg];
+				scrollToBottom();
+			} else {
+				unread = new Map(unread).set(msg.channelId, (unread.get(msg.channelId) ?? 0) + 1);
+			}
 		});
 		socket.on('message:updated', (msg) => {
 			if (msg.channelId !== selectedChannel?.id) return;
@@ -126,6 +138,7 @@
 		if (!socket) return;
 		if (selectedChannel?.id !== ch.id) socket.emit('channel:leave', { channelId: selectedChannel?.id ?? '' });
 		selectedChannel = ch;
+		unread = new Map(unread).set(ch.id, 0);
 		socket.emit('channel:join', { channelId: ch.id });
 		if (ch.type === 'TEXT') await loadMessages(ch.id);
 	}
@@ -384,6 +397,41 @@
 		whitelist = whitelist.filter((w) => w.user.id !== userId);
 	}
 
+	// ── Roles CRUD ────────────────────────────────────────────────────────
+	async function createRole() {
+		const name = newRoleName.trim();
+		if (!name || createRoleLoading) return;
+		rolesError = '';
+		createRoleLoading = true;
+		try {
+			const res = await fetch(`/api/servers/${server.slug}/roles`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				credentials: 'include',
+				body: JSON.stringify({ name, color: newRoleColor }),
+			});
+			if (!res.ok) {
+				const err = await res.json().catch(() => ({}));
+				rolesError = err.message ?? 'Error.';
+				return;
+			}
+			const role = await res.json();
+			roles = [...roles, role];
+			newRoleName = '';
+			newRoleColor = '#6366f1';
+		} finally {
+			createRoleLoading = false;
+		}
+	}
+
+	async function deleteRole(roleId: string) {
+		if (!confirm('¿Eliminar este rol?')) return;
+		const res = await fetch(`/api/servers/${server.slug}/roles/${roleId}`, {
+			method: 'DELETE', credentials: 'include',
+		});
+		if (res.ok) roles = roles.filter((r) => r.id !== roleId);
+	}
+
 	// ── Role assignment ───────────────────────────────────────────────────
 	async function assignRole(userId: string, roleId: string | null) {
 		const res = await fetch(`/api/servers/${server.slug}/members/${userId}/role`, {
@@ -480,6 +528,9 @@
 					<button class="channel-btn" onclick={() => selectChannel(ch)}>
 						<span class="ch-prefix">#</span>
 						<span class="ch-name">{ch.name}</span>
+						{#if (unread.get(ch.id) ?? 0) > 0}
+							<span class="unread-badge">{unread.get(ch.id)}</span>
+						{/if}
 					</button>
 					{#if canManage}
 						<button class="ch-del-btn" title="Eliminar canal" onclick={() => deleteChannel(ch)}>✕</button>
@@ -772,6 +823,31 @@
 						{settingsLoading ? 'Guardando…' : 'Guardar cambios'}
 					</button>
 				</form>
+				<div class="settings-roles">
+					<p class="settings-section-title">Roles</p>
+					{#each roles.filter((r) => !r.isDefault) as r (r.id)}
+						<div class="role-row">
+							<span class="role-swatch" style="background: {r.color ?? '#6b7280'}"></span>
+							<span class="role-row-name">{r.name}</span>
+							<button type="button" class="wl-remove-btn" onclick={() => deleteRole(r.id)}>✕</button>
+						</div>
+					{/each}
+					<div class="role-create-row">
+						<input type="color" bind:value={newRoleColor} class="color-picker" title="Color del rol" />
+						<input
+							type="text"
+							placeholder="Nombre del rol"
+							bind:value={newRoleName}
+							class="role-name-input"
+							onkeydown={(e) => { if (e.key === 'Enter') { e.preventDefault(); createRole(); } }}
+						/>
+						<button type="button" class="btn-primary btn-sm" onclick={createRole} disabled={createRoleLoading}>
+							{createRoleLoading ? '…' : 'Crear'}
+						</button>
+					</div>
+					{#if rolesError}<p class="error">{rolesError}</p>{/if}
+				</div>
+
 				{#if settingsAccess === 'WHITELIST'}
 					<div class="settings-whitelist">
 						<p class="settings-section-title">Lista blanca</p>
@@ -1892,4 +1968,80 @@
 	.wl-remove-btn:hover { color: var(--error); }
 
 	.wl-empty { font-size: 0.75rem; color: var(--text-muted); margin: 0; }
+
+	/* ── Unread badge ────────────────────────────────────────────────────── */
+	.unread-badge {
+		min-width: 16px;
+		height: 16px;
+		padding: 0 4px;
+		background: var(--accent);
+		color: var(--accent-text);
+		border-radius: 999px;
+		font-size: 0.6rem;
+		font-weight: 700;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		flex-shrink: 0;
+		margin-left: auto;
+	}
+
+	/* ── Roles section in settings ───────────────────────────────────────── */
+	.settings-roles {
+		padding: 1rem 1.25rem;
+		border-top: 1px solid var(--border);
+		display: flex;
+		flex-direction: column;
+		gap: 0.4rem;
+	}
+
+	.role-row {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		padding: 0.3rem 0.4rem;
+		border-radius: var(--radius);
+		background: var(--bg-elevated);
+	}
+
+	.role-swatch {
+		width: 12px;
+		height: 12px;
+		border-radius: 50%;
+		flex-shrink: 0;
+	}
+
+	.role-row-name { flex: 1; font-size: 0.82rem; color: var(--text-secondary); }
+
+	.role-create-row {
+		display: flex;
+		gap: 0.4rem;
+		align-items: center;
+		margin-top: 0.25rem;
+	}
+
+	.color-picker {
+		width: 28px;
+		height: 28px;
+		border: none;
+		padding: 0;
+		border-radius: var(--radius);
+		cursor: pointer;
+		background: transparent;
+		flex-shrink: 0;
+	}
+
+	.role-name-input {
+		flex: 1;
+		font-size: 0.82rem;
+		padding: 0.35rem 0.5rem;
+		background: var(--bg-elevated);
+		border: 1px solid var(--border);
+		border-radius: var(--radius);
+		color: var(--text-primary);
+		outline: none;
+		font-family: inherit;
+	}
+
+	.role-name-input:focus { border-color: var(--border-focus); }
 </style>
