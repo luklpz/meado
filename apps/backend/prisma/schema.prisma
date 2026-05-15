@@ -7,75 +7,146 @@ datasource db {
   provider = "postgresql"
 }
 
+// ── Enums ────────────────────────────────────────────────────────────────────
+
 enum UserRole {
   USER
   ADMIN
   SUPERADMIN
 }
 
-enum RoomMemberRole {
-  USERROOM
-  MODERATOR
-  ADMINROOM
-}
-
-enum RoomAccess {
+enum ServerAccess {
   PUBLIC
   PASSWORD
   WHITELIST
 }
 
+enum ChannelType {
+  TEXT
+  VOICE
+}
+
+// ── User ─────────────────────────────────────────────────────────────────────
+
 model User {
-  id            String          @id @default(cuid())
-  username      String          @unique
-  email         String          @unique
+  id            String            @id @default(cuid())
+  username      String            @unique
+  email         String            @unique
   passwordHash  String
-  emailVerified Boolean         @default(false)
-  role          UserRole        @default(USER)
+  emailVerified Boolean           @default(false)
+  role          UserRole          @default(USER)
   avatarUrl     String?
-  lastPos       Json?
-  createdAt     DateTime        @default(now())
-  updatedAt     DateTime        @updatedAt
-  ownedRooms    Room[]          @relation("RoomOwner")
-  rooms         RoomMember[]
-  whitelist     RoomWhitelist[]
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  ownedServers  Server[]          @relation("ServerOwner")
+  servers       ServerMember[]
+  whitelist     ServerWhitelist[]
+  messages      Message[]
 }
 
-model Room {
-  id              String          @id @default(cuid())
-  name            String
-  slug            String          @unique
-  description     String?
-  accessType      RoomAccess      @default(PUBLIC)
-  passwordHash    String?
-  proximityRadius Int             @default(500)
-  maxPlayers      Int             @default(20)
-  isActive        Boolean         @default(true)
-  createdAt       DateTime        @default(now())
-  updatedAt       DateTime        @updatedAt
-  ownerId         String
-  owner           User            @relation("RoomOwner", fields: [ownerId], references: [id])
-  members         RoomMember[]
-  whitelist       RoomWhitelist[]
+// ── Server ───────────────────────────────────────────────────────────────────
+
+model Server {
+  id           String            @id @default(cuid())
+  name         String
+  slug         String            @unique
+  description  String?
+  iconUrl      String?
+  accessType   ServerAccess      @default(PUBLIC)
+  passwordHash String?
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+  ownerId      String
+
+  owner        User              @relation("ServerOwner", fields: [ownerId], references: [id])
+  members      ServerMember[]
+  channels     Channel[]
+  roles        ServerRole[]
+  whitelist    ServerWhitelist[]
 }
 
-model RoomMember {
+// ── Server roles ──────────────────────────────────────────────────────────────
+
+model ServerRole {
+  id          String         @id @default(cuid())
+  name        String
+  color       String?
+  position    Int            @default(0)
+  isDefault   Boolean        @default(false)
+  // { manageServer, manageChannels, manageRoles, manageMembers,
+  //   sendMessages, attachFiles, manageMessages,
+  //   connect, speak, shareScreen, shareCamera,
+  //   muteMembers, deafenMembers }
+  permissions Json           @default("{}")
+  serverId    String
+
+  server      Server         @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  members     ServerMember[]
+
+  @@unique([serverId, name])
+}
+
+model ServerMember {
   userId   String
-  roomId   String
-  role     RoomMemberRole @default(USERROOM)
-  joinedAt DateTime       @default(now())
-  user     User           @relation(fields: [userId], references: [id], onDelete: Cascade)
-  room     Room           @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  serverId String
+  roleId   String?
+  joinedAt DateTime    @default(now())
 
-  @@id([userId, roomId])
+  user     User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  server   Server      @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  role     ServerRole? @relation(fields: [roleId], references: [id], onDelete: SetNull)
+
+  @@id([userId, serverId])
 }
 
-model RoomWhitelist {
-  userId  String
-  roomId  String
-  addedAt DateTime @default(now())
-  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  room    Room     @relation(fields: [roomId], references: [id], onDelete: Cascade)
+model ServerWhitelist {
+  userId   String
+  serverId String
+  addedAt  DateTime @default(now())
 
-  @@id([userId, roomId])
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  server   Server   @relation(fields: [serverId], references: [id], onDelete: Cascade)
+
+  @@id([userId, serverId])
+}
+
+// ── Channels ──────────────────────────────────────────────────────────────────
+
+model Channel {
+  id        String      @id @default(cuid())
+  name      String
+  type      ChannelType
+  position  Int         @default(0)
+  serverId  String
+  createdAt DateTime    @default(now())
+
+  server    Server      @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  messages  Message[]
+}
+
+// ── Messages ──────────────────────────────────────────────────────────────────
+
+model Message {
+  id          String       @id @default(cuid())
+  content     String?
+  channelId   String
+  authorId    String
+  createdAt   DateTime     @default(now())
+  editedAt    DateTime?
+
+  channel     Channel      @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  author      User         @relation(fields: [authorId], references: [id])
+  attachments Attachment[]
+}
+
+model Attachment {
+  id        String  @id @default(cuid())
+  url       String
+  name      String
+  size      Int
+  mimeType  String
+  messageId String
+
+  message   Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
 }
