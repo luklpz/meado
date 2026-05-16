@@ -60,6 +60,19 @@
 
 	// ── Server header dropdown ─────────────────────────────────────────────
 	let showServerMenu = $state(false);
+	let serverMenuBtnEl = $state<HTMLButtonElement | null>(null);
+	let serverMenuTop = $state(0);
+	let serverMenuLeft = $state(0);
+	let serverMenuWidth = $state(0);
+
+	function openServerMenu() {
+		if (!serverMenuBtnEl) return;
+		const r = serverMenuBtnEl.getBoundingClientRect();
+		serverMenuTop = r.bottom + 4;
+		serverMenuLeft = r.left;
+		serverMenuWidth = r.width;
+		showServerMenu = !showServerMenu;
+	}
 
 	// ── Server settings ────────────────────────────────────────────────────
 	let showSettings = $state(false);
@@ -735,8 +748,9 @@
 		<!-- Server name dropdown trigger -->
 		<div class="server-header" class:menu-open={showServerMenu}>
 			<button
+				bind:this={serverMenuBtnEl}
 				class="server-name-btn"
-				onclick={() => (showServerMenu = !showServerMenu)}
+				onclick={openServerMenu}
 				aria-haspopup="true"
 				aria-expanded={showServerMenu}
 			>
@@ -744,42 +758,6 @@
 				<span class="server-name-chevron">{showServerMenu ? '✕' : '⌄'}</span>
 			</button>
 		</div>
-
-		{#if showServerMenu}
-			<!-- svelte-ignore a11y_no_static_element_interactions -->
-			<div class="server-menu-overlay" onclick={() => (showServerMenu = false)} onkeydown={() => {}}></div>
-			<div class="server-menu">
-				<button class="smenu-item" onclick={() => { copyInviteLink(); showServerMenu = false; }}>
-					<span class="smenu-label">Copiar enlace de invitación</span>
-					<span class="smenu-icon">🔗</span>
-				</button>
-
-				{#if canManage}
-					<div class="smenu-sep"></div>
-					<button class="smenu-item" onclick={() => { showServerMenu = false; openSettings('overview'); }}>
-						<span class="smenu-label">Ajustes del servidor</span>
-						<span class="smenu-icon">⚙️</span>
-					</button>
-					<button class="smenu-item" onclick={() => { showServerMenu = false; openSettings('roles'); }}>
-						<span class="smenu-label">Gestionar roles</span>
-						<span class="smenu-icon">🎭</span>
-					</button>
-					<button class="smenu-item" onclick={() => { showServerMenu = false; openSettings('members'); }}>
-						<span class="smenu-label">Gestionar miembros</span>
-						<span class="smenu-icon">👥</span>
-					</button>
-				{/if}
-
-				<div class="smenu-sep"></div>
-
-				{#if !isOwner}
-					<button class="smenu-item smenu-danger" onclick={() => { showServerMenu = false; leaveServer(); }}>
-						<span class="smenu-label">Abandonar servidor</span>
-						<span class="smenu-icon">🚪</span>
-					</button>
-				{/if}
-			</div>
-		{/if}
 
 		<nav class="channel-nav">
 			<!-- TEXT -->
@@ -907,6 +885,43 @@
 			</div>
 		</div>
 	</aside>
+
+	<!-- Server name dropdown (fixed-positioned to escape sidebar overflow) -->
+	{#if showServerMenu}
+		<!-- svelte-ignore a11y_no_static_element_interactions -->
+		<div class="server-menu-overlay" onclick={() => (showServerMenu = false)} onkeydown={() => {}}></div>
+		<div class="server-menu" style="top:{serverMenuTop}px; left:{serverMenuLeft}px; width:{serverMenuWidth}px;">
+			<button class="smenu-item" onclick={() => { copyInviteLink(); showServerMenu = false; }}>
+				<span class="smenu-label">Copiar enlace de invitación</span>
+				<span class="smenu-icon">🔗</span>
+			</button>
+
+			{#if canManage}
+				<div class="smenu-sep"></div>
+				<button class="smenu-item" onclick={() => { showServerMenu = false; openSettings('overview'); }}>
+					<span class="smenu-label">Ajustes del servidor</span>
+					<span class="smenu-icon">⚙️</span>
+				</button>
+				<button class="smenu-item" onclick={() => { showServerMenu = false; openSettings('roles'); }}>
+					<span class="smenu-label">Gestionar roles</span>
+					<span class="smenu-icon">🎭</span>
+				</button>
+				<button class="smenu-item" onclick={() => { showServerMenu = false; openSettings('members'); }}>
+					<span class="smenu-label">Gestionar miembros</span>
+					<span class="smenu-icon">👥</span>
+				</button>
+			{/if}
+
+			<div class="smenu-sep"></div>
+
+			{#if !isOwner}
+				<button class="smenu-item smenu-danger" onclick={() => { showServerMenu = false; leaveServer(); }}>
+					<span class="smenu-label">Abandonar servidor</span>
+					<span class="smenu-icon">🚪</span>
+				</button>
+			{/if}
+		</div>
+	{/if}
 
 	<!-- ── Main content ───────────────────────────────────────────────────── -->
 	<main class="main-content">
@@ -1466,10 +1481,7 @@
 		position: fixed; inset: 0; z-index: 90;
 	}
 	.server-menu {
-		position: absolute;
-		top: calc(100% + 4px);
-		left: 8px;
-		right: 8px;
+		position: fixed;
 		background: var(--bg-surface);
 		border: 1px solid var(--border);
 		border-radius: var(--radius-lg);
