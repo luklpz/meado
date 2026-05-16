@@ -40,7 +40,7 @@
 	let showMembers = $state(false);
 	let members = $state<Member[]>([]);
 	let membersLoading = $state(false);
-	let roles = $state<{ id: string; name: string; color?: string | null; isDefault: boolean }[]>([]);
+	let roles = $state<{ id: string; name: string; color?: string | null; isDefault: boolean; permissions: Record<string, boolean> }[]>([]);
 
 	// ── Whitelist ──────────────────────────────────────────────────────────
 	let whitelist = $state<{ user: { id: string; username: string; avatarUrl?: string | null } }[]>([]);
@@ -58,15 +58,18 @@
 	let editingContent = $state('');
 	let hoveredId = $state<string | null>(null);
 
+	// ── Server header dropdown ─────────────────────────────────────────────
+	let showServerMenu = $state(false);
+
 	// ── Server settings ────────────────────────────────────────────────────
 	let showSettings = $state(false);
+	let settingsSection = $state<'overview' | 'roles' | 'role-edit' | 'members' | 'whitelist' | 'bans' | 'danger'>('overview');
 	let settingsName = $state(server.name);
 	let settingsDesc = $state(server.description ?? '');
 	let settingsAccess = $state<'PUBLIC' | 'PASSWORD' | 'WHITELIST'>(server.accessType as any);
 	let settingsPassword = $state('');
 	let settingsLoading = $state(false);
 	let settingsError = $state('');
-	let settingsTab = $state<'general' | 'roles' | 'members' | 'danger'>('general');
 	let editingRole = $state<string | null>(null);
 	let editRolePerms = $state<Record<string, boolean>>({});
 	let editRoleName = $state('');
@@ -433,8 +436,8 @@
 	}
 
 	// ── Server settings ───────────────────────────────────────────────────
-	async function openSettings() {
-		settingsTab = 'general';
+	async function openSettings(section: typeof settingsSection = 'overview') {
+		settingsSection = section;
 		settingsName = server.name;
 		settingsDesc = server.description ?? '';
 		settingsAccess = server.accessType as any;
@@ -729,16 +732,54 @@
 	{/if}
 	<!-- ── Sidebar ───────────────────────────────────────────────────────── -->
 	<aside class="sidebar">
-		<div class="server-header">
-			<span class="server-name-text">{server.name}</span>
-			<div class="server-header-actions">
-				<button class="icon-btn" title="Copiar enlace" onclick={copyInviteLink}>🔗</button>
-				{#if canManage}
-					<button class="icon-btn" title="Configuración" onclick={openSettings}>⚙️</button>
-				{/if}
-				<a href="/servers" class="icon-btn" title="Volver">←</a>
-			</div>
+		<!-- Server name dropdown trigger -->
+		<div class="server-header" class:menu-open={showServerMenu}>
+			<button
+				class="server-name-btn"
+				onclick={() => (showServerMenu = !showServerMenu)}
+				aria-haspopup="true"
+				aria-expanded={showServerMenu}
+			>
+				<span class="server-name-text">{server.name}</span>
+				<span class="server-name-chevron">{showServerMenu ? '✕' : '⌄'}</span>
+			</button>
 		</div>
+
+		{#if showServerMenu}
+			<!-- svelte-ignore a11y_no_static_element_interactions -->
+			<div class="server-menu-overlay" onclick={() => (showServerMenu = false)} onkeydown={() => {}}></div>
+			<div class="server-menu">
+				<button class="smenu-item" onclick={() => { copyInviteLink(); showServerMenu = false; }}>
+					<span class="smenu-label">Copiar enlace de invitación</span>
+					<span class="smenu-icon">🔗</span>
+				</button>
+
+				{#if canManage}
+					<div class="smenu-sep"></div>
+					<button class="smenu-item" onclick={() => { showServerMenu = false; openSettings('overview'); }}>
+						<span class="smenu-label">Ajustes del servidor</span>
+						<span class="smenu-icon">⚙️</span>
+					</button>
+					<button class="smenu-item" onclick={() => { showServerMenu = false; openSettings('roles'); }}>
+						<span class="smenu-label">Gestionar roles</span>
+						<span class="smenu-icon">🎭</span>
+					</button>
+					<button class="smenu-item" onclick={() => { showServerMenu = false; openSettings('members'); }}>
+						<span class="smenu-label">Gestionar miembros</span>
+						<span class="smenu-icon">👥</span>
+					</button>
+				{/if}
+
+				<div class="smenu-sep"></div>
+
+				{#if !isOwner}
+					<button class="smenu-item smenu-danger" onclick={() => { showServerMenu = false; leaveServer(); }}>
+						<span class="smenu-label">Abandonar servidor</span>
+						<span class="smenu-icon">🚪</span>
+					</button>
+				{/if}
+			</div>
+		{/if}
 
 		<nav class="channel-nav">
 			<!-- TEXT -->
@@ -1073,258 +1114,251 @@
 		{/if}
 	</main>
 
-	<!-- ── Settings modal ───────────────────────────────────────────────── -->
+	<!-- Settings full-screen -->
 	{#if showSettings}
-		<div class="modal-overlay" role="presentation"
-			onclick={(e) => { if (e.target === e.currentTarget) showSettings = false; }}
-			onkeydown={(e) => { if (e.key === 'Escape') showSettings = false; }}>
-			<div class="settings-modal settings-modal-wide">
-				<div class="settings-header">
-					<h3>Configuración — {server.name}</h3>
-					<button class="icon-btn" onclick={() => (showSettings = false)}>✕</button>
+		<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+		<div class="settings-fullscreen" role="dialog" onkeydown={(e) => { if (e.key === 'Escape') showSettings = false; }}>
+			<!-- Left nav -->
+			<aside class="settings-nav">
+				<div class="settings-nav-server">{server.name}</div>
+
+				<div class="settings-nav-group">
+					<div class="settings-nav-category">GESTIÓN</div>
+					<button class="settings-nav-item" class:active={settingsSection === 'overview'} onclick={() => settingsSection = 'overview'}>Visión general</button>
+					<button class="settings-nav-item" class:active={settingsSection === 'roles' || settingsSection === 'role-edit'} onclick={() => { settingsSection = 'roles'; editingRole = null; }}>Roles</button>
+					<button class="settings-nav-item" class:active={settingsSection === 'members'} onclick={() => settingsSection = 'members'}>Miembros</button>
+					{#if settingsAccess === 'WHITELIST'}
+						<button class="settings-nav-item" class:active={settingsSection === 'whitelist'} onclick={() => settingsSection = 'whitelist'}>Lista blanca</button>
+					{/if}
+					{#if isOwner}
+						<button class="settings-nav-item" class:active={settingsSection === 'bans'} onclick={() => settingsSection = 'bans'}>Baneados</button>
+					{/if}
 				</div>
 
-				<!-- Tab bar -->
-				<div class="settings-tabs">
-					<button class="stab" class:active={settingsTab === 'general'} onclick={() => settingsTab = 'general'}>General</button>
-					<button class="stab" class:active={settingsTab === 'roles'} onclick={() => settingsTab = 'roles'}>Roles</button>
-					<button class="stab" class:active={settingsTab === 'members'} onclick={() => settingsTab = 'members'}>Miembros</button>
-					<button class="stab" class:active={settingsTab === 'danger'} onclick={() => settingsTab = 'danger'}>Zona de peligro</button>
+				<div class="settings-nav-group">
+					<div class="settings-nav-category">ZONA DE PELIGRO</div>
+					{#if !isOwner}
+						<button class="settings-nav-item settings-nav-danger" onclick={leaveServer}>Abandonar servidor</button>
+					{/if}
+					{#if isOwner}
+						<button class="settings-nav-item settings-nav-danger" onclick={deleteServer}>Eliminar servidor</button>
+					{/if}
 				</div>
+			</aside>
 
-				<div class="settings-body-scroll">
+			<!-- Content -->
+			<div class="settings-content">
+				<div class="settings-content-inner">
 
-					<!-- GENERAL TAB -->
-					{#if settingsTab === 'general'}
-						<div class="settings-section">
-							<div class="settings-icon-section">
-								<div class="server-icon-preview">
-									{#if serverIconUrl}
-										<img src={serverIconUrl} alt="" class="server-icon-img" />
-									{:else}
-										<span class="server-icon-initial">{server.name[0].toUpperCase()}</span>
-									{/if}
-								</div>
+					<!-- OVERVIEW -->
+					{#if settingsSection === 'overview'}
+						<h2 class="sc-title">Visión general</h2>
+						<div class="sc-icon-row">
+							<div class="server-icon-preview">
+								{#if serverIconUrl}
+									<img src={serverIconUrl} alt="" class="server-icon-img" />
+								{:else}
+									<span class="server-icon-initial">{server.name[0].toUpperCase()}</span>
+								{/if}
+							</div>
+							<div class="sc-icon-actions">
 								<label class="icon-upload-label">
 									<input type="file" accept="image/jpeg,image/png,image/gif,image/webp" class="hidden-file" onchange={uploadIcon} />
 									Cambiar icono
 								</label>
 								{#if iconUploadError}<p class="error">{iconUploadError}</p>{/if}
 							</div>
-							<form class="settings-form" onsubmit={saveSettings}>
+						</div>
+						<form class="sc-form" onsubmit={saveSettings}>
+							<label>
+								Nombre del servidor
+								<input type="text" bind:value={settingsName} required />
+							</label>
+							<label>
+								Descripción
+								<input type="text" bind:value={settingsDesc} placeholder="Opcional" />
+							</label>
+							<label>
+								Acceso
+								<select bind:value={settingsAccess}>
+									<option value="PUBLIC">Público</option>
+									<option value="PASSWORD">Contraseña</option>
+									<option value="WHITELIST">Lista blanca</option>
+								</select>
+							</label>
+							{#if settingsAccess === 'PASSWORD'}
 								<label>
-									Nombre del servidor
-									<input type="text" bind:value={settingsName} required />
+									Nueva contraseña <span class="optional">(vacío = sin cambio)</span>
+									<input type="password" bind:value={settingsPassword} placeholder="Nueva contraseña" />
 								</label>
-								<label>
-									Descripción
-									<input type="text" bind:value={settingsDesc} placeholder="Opcional" />
-								</label>
-								<label>
-									Acceso
-									<select bind:value={settingsAccess}>
-										<option value="PUBLIC">🌐 Público</option>
-										<option value="PASSWORD">🔒 Contraseña</option>
-										<option value="WHITELIST">📋 Lista blanca</option>
-									</select>
-								</label>
-								{#if settingsAccess === 'PASSWORD'}
-									<label>
-										Nueva contraseña <span class="optional">(vacío = sin cambio)</span>
-										<input type="password" bind:value={settingsPassword} placeholder="Nueva contraseña" />
-									</label>
-								{/if}
-								{#if settingsError}<p class="error">{settingsError}</p>{/if}
+							{/if}
+							{#if settingsError}<p class="error">{settingsError}</p>{/if}
+							<div class="sc-form-footer">
 								<button type="submit" class="btn-primary" disabled={settingsLoading}>
-									{settingsLoading ? 'Guardando…' : 'Guardar cambios'}
+									{settingsLoading ? 'Guardando...' : 'Guardar cambios'}
 								</button>
-							</form>
+							</div>
+						</form>
+
+					<!-- ROLES -->
+					{:else if settingsSection === 'roles'}
+						<h2 class="sc-title">Roles</h2>
+						{#each roles.filter(r => !r.isDefault) as r (r.id)}
+							<div class="role-row-v2">
+								<span class="role-swatch" style="background: {r.color ?? '#6b7280'}"></span>
+								<span class="role-row-name">{r.name}</span>
+								<button class="icon-btn-sm" onclick={() => { startEditRole(r); settingsSection = 'role-edit'; }}>Editar</button>
+								<button class="icon-btn-sm danger" onclick={() => deleteRole(r.id)}>Eliminar</button>
+							</div>
+						{/each}
+						<div class="sc-sep"></div>
+						<h4 class="sc-subtitle">Crear nuevo rol</h4>
+						<div class="role-create-row">
+							<input type="color" bind:value={newRoleColor} class="color-picker" title="Color del rol" />
+							<input type="text" placeholder="Nombre del rol" bind:value={newRoleName} class="role-name-input"
+								onkeydown={(e) => { if (e.key === 'Enter') { e.preventDefault(); createRole(); } }} />
+							<button type="button" class="btn-primary btn-sm" onclick={createRole} disabled={createRoleLoading}>
+								{createRoleLoading ? '...' : 'Crear'}
+							</button>
+						</div>
+						{#if rolesError}<p class="error">{rolesError}</p>{/if}
+
+					<!-- ROLE EDIT -->
+					{:else if settingsSection === 'role-edit'}
+						<div class="sc-back-row">
+							<button class="back-btn" onclick={() => { settingsSection = 'roles'; editingRole = null; }}>← Roles</button>
+						</div>
+						<h2 class="sc-title">Editar rol</h2>
+						<div class="role-editor-basic">
+							<input type="color" bind:value={editRoleColor} class="color-picker" title="Color" />
+							<input type="text" bind:value={editRoleName} placeholder="Nombre del rol" class="role-name-input" />
+						</div>
+						<div class="perm-categories">
+							{#each PERMISSION_CATEGORIES as cat}
+								<div class="perm-cat">
+									<span class="perm-cat-label">{cat.label}</span>
+									{#each cat.keys as key}
+										<label class="perm-row">
+											<input type="checkbox" bind:checked={editRolePerms[key]} />
+											<span>{PERMISSION_LABELS[key]}</span>
+										</label>
+									{/each}
+								</div>
+							{/each}
+						</div>
+						{#if rolesError}<p class="error">{rolesError}</p>{/if}
+						<div class="sc-form-footer">
+							<button class="btn-primary" onclick={saveRole} disabled={editRoleLoading}>
+								{editRoleLoading ? 'Guardando...' : 'Guardar rol'}
+							</button>
+							<button class="btn-ghost" onclick={() => { settingsSection = 'roles'; editingRole = null; }}>Cancelar</button>
 						</div>
 
-						{#if settingsAccess === 'WHITELIST'}
-							<div class="settings-section">
-								<h4 class="section-title">Lista blanca</h4>
-								<div class="whitelist-add-row">
-									<input type="text" placeholder="Nombre de usuario" bind:value={whitelistInput}
-										onkeydown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addToWhitelist(); } }} />
-									<button type="button" class="btn-primary btn-sm" onclick={addToWhitelist} disabled={whitelistLoading}>
-										{whitelistLoading ? '…' : 'Añadir'}
-									</button>
+					<!-- MEMBERS -->
+					{:else if settingsSection === 'members'}
+						<h2 class="sc-title">Miembros ({members.length})</h2>
+						{#each members as m (m.user.id)}
+							<div class="member-settings-row">
+								<div class="ms-avatar">
+									{#if m.user.avatarUrl}
+										<img src={m.user.avatarUrl} class="avatar-sm" alt="" />
+									{:else}
+										<div class="avatar-sm avatar-init">{avatarInitial(m.user.username)}</div>
+									{/if}
 								</div>
-								{#if whitelistError}<p class="error">{whitelistError}</p>{/if}
-								{#if whitelist.length > 0}
-									<ul class="whitelist-list">
-										{#each whitelist as entry (entry.user.id)}
-											<li class="whitelist-item">
-												<div class="wl-avatar-sm">
-													{#if entry.user.avatarUrl}
-														<img src={entry.user.avatarUrl} class="avatar-xs" alt="" />
-													{:else}
-														<div class="avatar-xs avatar-init">{avatarInitial(entry.user.username)}</div>
-													{/if}
-												</div>
-												<span class="wl-name">{entry.user.username}</span>
-												<button type="button" class="wl-remove-btn" onclick={() => removeFromWhitelist(entry.user.id)}>✕</button>
-											</li>
-										{/each}
-									</ul>
+								<div class="ms-info">
+									<span class="ms-name">{m.nickname ?? m.user.name ?? m.user.username}</span>
+									<span class="ms-tag">@{m.user.username}</span>
+								</div>
+								{#if server.ownerId === m.user.id}
+									<span class="owner-badge">Propietario</span>
 								{:else}
-									<p class="wl-empty">Ningún usuario en lista blanca.</p>
+									<select class="role-select-sm" value={m.role?.id ?? ''} onchange={(e) => assignRole(m.user.id, (e.target as HTMLSelectElement).value || null)}>
+										<option value="">Sin rol</option>
+										{#each roles.filter(r => !r.isDefault) as r (r.id)}
+											<option value={r.id}>{r.name}</option>
+										{/each}
+									</select>
+								{/if}
+								{#if m.user.id !== user.id && server.ownerId !== m.user.id}
+									<div class="ms-actions">
+										<button class="icon-btn-sm" onclick={() => kickMember(m.user.id, m.user.username)}>Expulsar</button>
+										{#if isOwner || canManage}
+											<button class="icon-btn-sm danger" onclick={() => banMember(m.user.id, m.user.username)}>Banear</button>
+										{/if}
+									</div>
 								{/if}
 							</div>
-						{/if}
-					{/if}
+						{/each}
 
-					<!-- ROLES TAB -->
-					{#if settingsTab === 'roles'}
-						<div class="settings-section">
-							{#if editingRole}
-								<!-- Role editor -->
-								<div class="role-editor">
-									<div class="role-editor-header">
-										<button class="back-btn" onclick={() => editingRole = null}>← Volver</button>
-										<h4>Editar rol</h4>
-									</div>
-									<div class="role-editor-basic">
-										<input type="color" bind:value={editRoleColor} class="color-picker" title="Color" />
-										<input type="text" bind:value={editRoleName} placeholder="Nombre del rol" class="role-name-input" />
-									</div>
-									<div class="perm-categories">
-										{#each PERMISSION_CATEGORIES as cat}
-											<div class="perm-cat">
-												<span class="perm-cat-label">{cat.label}</span>
-												{#each cat.keys as key}
-													<label class="perm-row">
-														<input type="checkbox" bind:checked={editRolePerms[key]} />
-														<span>{PERMISSION_LABELS[key]}</span>
-													</label>
-												{/each}
-											</div>
-										{/each}
-									</div>
-									{#if rolesError}<p class="error">{rolesError}</p>{/if}
-									<div class="role-editor-actions">
-										<button class="btn-primary" onclick={saveRole} disabled={editRoleLoading}>
-											{editRoleLoading ? 'Guardando…' : 'Guardar rol'}
-										</button>
-										<button class="btn-ghost" onclick={() => editingRole = null}>Cancelar</button>
-									</div>
-								</div>
-							{:else}
-								<!-- Role list -->
-								<h4 class="section-title">Roles ({roles.filter(r => !r.isDefault).length})</h4>
-								{#each roles.filter(r => !r.isDefault) as r (r.id)}
-									<div class="role-row-v2">
-										<span class="role-swatch" style="background: {r.color ?? '#6b7280'}"></span>
-										<span class="role-row-name">{r.name}</span>
-										<button class="icon-btn-sm" onclick={() => startEditRole(r as any)} title="Editar">✎</button>
-										<button class="icon-btn-sm danger" onclick={() => deleteRole(r.id)} title="Eliminar">✕</button>
-									</div>
-								{/each}
-								<div class="role-create-row">
-									<input type="color" bind:value={newRoleColor} class="color-picker" title="Color del rol" />
-									<input type="text" placeholder="Nombre del rol" bind:value={newRoleName} class="role-name-input"
-										onkeydown={(e) => { if (e.key === 'Enter') { e.preventDefault(); createRole(); } }} />
-									<button type="button" class="btn-primary btn-sm" onclick={createRole} disabled={createRoleLoading}>
-										{createRoleLoading ? '…' : 'Crear'}
-									</button>
-								</div>
-								{#if rolesError}<p class="error">{rolesError}</p>{/if}
-							{/if}
+					<!-- WHITELIST -->
+					{:else if settingsSection === 'whitelist'}
+						<h2 class="sc-title">Lista blanca</h2>
+						<div class="whitelist-add-row">
+							<input type="text" placeholder="Nombre de usuario" bind:value={whitelistInput}
+								onkeydown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addToWhitelist(); } }} />
+							<button type="button" class="btn-primary btn-sm" onclick={addToWhitelist} disabled={whitelistLoading}>
+								{whitelistLoading ? '...' : 'Añadir'}
+							</button>
 						</div>
-					{/if}
+						{#if whitelistError}<p class="error">{whitelistError}</p>{/if}
+						{#if whitelist.length > 0}
+							<ul class="whitelist-list">
+								{#each whitelist as entry (entry.user.id)}
+									<li class="whitelist-item">
+										<div class="wl-avatar-sm">
+											{#if entry.user.avatarUrl}
+												<img src={entry.user.avatarUrl} class="avatar-xs" alt="" />
+											{:else}
+												<div class="avatar-xs avatar-init">{avatarInitial(entry.user.username)}</div>
+											{/if}
+										</div>
+										<span class="wl-name">{entry.user.username}</span>
+										<button type="button" class="wl-remove-btn" onclick={() => removeFromWhitelist(entry.user.id)}>Quitar</button>
+									</li>
+								{/each}
+							</ul>
+						{:else}
+							<p class="wl-empty">Ningún usuario en lista blanca.</p>
+						{/if}
 
-					<!-- MEMBERS TAB -->
-					{#if settingsTab === 'members'}
-						<div class="settings-section">
-							<h4 class="section-title">Miembros ({members.length})</h4>
-							{#each members as m (m.user.id)}
+					<!-- BANS -->
+					{:else if settingsSection === 'bans'}
+						<h2 class="sc-title">Baneados ({bans.length})</h2>
+						{#if bans.length === 0}
+							<p class="wl-empty">Nadie baneado.</p>
+						{:else}
+							{#each bans as ban (ban.userId)}
 								<div class="member-settings-row">
 									<div class="ms-avatar">
-										{#if m.user.avatarUrl}
-											<img src={m.user.avatarUrl} class="avatar-xs" alt="" />
+										{#if ban.user.avatarUrl}
+											<img src={ban.user.avatarUrl} class="avatar-sm" alt="" />
 										{:else}
-											<div class="avatar-xs avatar-init">{avatarInitial(m.user.username)}</div>
+											<div class="avatar-sm avatar-init">{avatarInitial(ban.user.username)}</div>
 										{/if}
 									</div>
 									<div class="ms-info">
-										<span class="ms-name">{m.nickname ?? m.user.name ?? m.user.username}</span>
-										<span class="ms-tag">@{m.user.username}</span>
+										<span class="ms-name">{ban.user.name ?? ban.user.username}</span>
+										<span class="ms-tag">@{ban.user.username}</span>
+										{#if ban.reason}<span class="ban-reason">"{ban.reason}"</span>{/if}
 									</div>
-									{#if server.ownerId === m.user.id}
-										<span class="owner-badge">Propietario</span>
-									{:else if m.role}
-										<span class="role-chip" style="border-color: {m.role.color ?? '#6b7280'}; color: {m.role.color ?? '#6b7280'}">{m.role.name}</span>
-									{/if}
-									{#if m.user.id !== user.id && server.ownerId !== m.user.id}
-										<div class="ms-actions">
-											<select class="role-select-sm" value={m.role?.id ?? ''} onchange={(e) => assignRole(m.user.id, (e.target as HTMLSelectElement).value || null)}>
-												<option value="">Sin rol</option>
-												{#each roles.filter(r => !r.isDefault) as r (r.id)}
-													<option value={r.id}>{r.name}</option>
-												{/each}
-											</select>
-											<button class="icon-btn-sm" title="Expulsar" onclick={() => kickMember(m.user.id, m.user.username)}>👢</button>
-											{#if isOwner}
-												<button class="icon-btn-sm danger" title="Banear" onclick={() => banMember(m.user.id, m.user.username)}>🔨</button>
-											{/if}
-										</div>
-									{/if}
+									<button class="btn-ghost btn-sm" onclick={() => unbanUser(ban.userId)}>Desbanear</button>
 								</div>
 							{/each}
-
-							{#if isOwner && bans.length > 0}
-								<h4 class="section-title" style="margin-top: 1.5rem;">Baneados ({bans.length})</h4>
-								{#each bans as ban (ban.userId)}
-									<div class="member-settings-row">
-										<div class="ms-avatar">
-											{#if ban.user.avatarUrl}
-												<img src={ban.user.avatarUrl} class="avatar-xs" alt="" />
-											{:else}
-												<div class="avatar-xs avatar-init">{avatarInitial(ban.user.username)}</div>
-											{/if}
-										</div>
-										<div class="ms-info">
-											<span class="ms-name">{ban.user.name ?? ban.user.username}</span>
-											<span class="ms-tag">@{ban.user.username}</span>
-											{#if ban.reason}<span class="ban-reason">"{ban.reason}"</span>{/if}
-										</div>
-										<button class="btn-ghost btn-sm" onclick={() => unbanUser(ban.userId)}>Desbanear</button>
-									</div>
-								{/each}
-							{/if}
-						</div>
-					{/if}
-
-					<!-- DANGER TAB -->
-					{#if settingsTab === 'danger'}
-						<div class="settings-section">
-							<h4 class="section-title danger-title">Zona de peligro</h4>
-							{#if !isOwner}
-								<div class="danger-item-row">
-									<div>
-										<strong>Salir del servidor</strong>
-										<p>No podrás acceder a los canales hasta que te vuelvan a añadir.</p>
-									</div>
-									<button class="btn-danger-outline" onclick={leaveServer}>Salir</button>
-								</div>
-							{/if}
-							{#if isOwner}
-								<div class="danger-item-row">
-									<div>
-										<strong>Eliminar servidor</strong>
-										<p>Esta acción es permanente e irreversible. Solo el propietario puede hacerlo.</p>
-									</div>
-									<button class="btn-danger-solid" onclick={deleteServer}>Eliminar</button>
-								</div>
-							{/if}
-						</div>
+						{/if}
 					{/if}
 
 				</div>
 			</div>
+
+			<!-- Close button -->
+			<button class="settings-close-btn" onclick={() => showSettings = false} title="Cerrar (Esc)">
+				<span>✕</span>
+				<span class="settings-close-label">ESC</span>
+			</button>
 		</div>
 	{/if}
+
 
 	<!-- ── Members panel ──────────────────────────────────────────────────── -->
 	{#if showMembers}
@@ -1403,14 +1437,165 @@
 	}
 
 	.server-header {
+		position: relative;
 		height: 48px;
+		flex-shrink: 0;
+		border-bottom: 1px solid var(--border);
+	}
+
+	.server-name-btn {
+		width: 100%;
+		height: 100%;
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
 		padding: 0 0.75rem 0 1rem;
-		border-bottom: 1px solid var(--border);
-		flex-shrink: 0;
+		background: transparent;
+		border: none;
+		cursor: pointer;
+		transition: background var(--transition);
+		font-family: inherit;
 	}
+	.server-name-btn:hover { background: rgba(255,255,255,0.05); }
+	.server-header.menu-open .server-name-btn { background: rgba(255,255,255,0.07); }
+
+	.server-name-chevron { font-size: 0.7rem; color: var(--text-muted); flex-shrink: 0; }
+
+	/* Server dropdown menu */
+	.server-menu-overlay {
+		position: fixed; inset: 0; z-index: 90;
+	}
+	.server-menu {
+		position: absolute;
+		top: calc(100% + 4px);
+		left: 8px;
+		right: 8px;
+		background: var(--bg-surface);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-lg);
+		box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+		z-index: 100;
+		padding: 0.3rem;
+		display: flex;
+		flex-direction: column;
+		gap: 0.05rem;
+	}
+	.smenu-item {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		width: 100%;
+		padding: 0.5rem 0.6rem;
+		background: transparent;
+		border: none;
+		border-radius: var(--radius-sm);
+		color: var(--text-secondary);
+		cursor: pointer;
+		font-size: 0.82rem;
+		font-family: inherit;
+		text-align: left;
+		transition: background var(--transition), color var(--transition);
+	}
+	.smenu-item:hover { background: var(--accent); color: var(--accent-text); }
+	.smenu-item:hover .smenu-icon { filter: none; }
+	.smenu-danger { color: var(--error); }
+	.smenu-danger:hover { background: var(--error-surface); color: var(--error); }
+	.smenu-label { font-weight: 500; }
+	.smenu-icon { font-size: 0.8rem; opacity: 0.7; }
+	.smenu-sep { height: 1px; background: var(--border); margin: 0.2rem 0; }
+
+	/* Full-screen settings */
+	.settings-fullscreen {
+		position: fixed;
+		inset: 0;
+		z-index: 400;
+		background: var(--bg-base);
+		display: flex;
+	}
+	.settings-nav {
+		width: 220px;
+		flex-shrink: 0;
+		background: var(--bg-elevated);
+		padding: 1.5rem 0.5rem 1rem;
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+		overflow-y: auto;
+	}
+	.settings-nav-server {
+		font-size: 0.72rem;
+		font-weight: 700;
+		text-transform: uppercase;
+		letter-spacing: 0.08em;
+		color: var(--text-secondary);
+		padding: 0 0.6rem;
+		margin-bottom: 0.25rem;
+	}
+	.settings-nav-group { display: flex; flex-direction: column; gap: 0.05rem; }
+	.settings-nav-category {
+		font-size: 0.62rem;
+		text-transform: uppercase;
+		letter-spacing: 0.1em;
+		color: var(--text-muted);
+		padding: 0.6rem 0.6rem 0.25rem;
+	}
+	.settings-nav-item {
+		width: 100%;
+		padding: 0.45rem 0.75rem;
+		background: transparent;
+		border: none;
+		border-radius: var(--radius-sm);
+		color: var(--text-secondary);
+		cursor: pointer;
+		font-size: 0.82rem;
+		font-family: inherit;
+		text-align: left;
+		transition: background var(--transition), color var(--transition);
+	}
+	.settings-nav-item:hover { background: rgba(255,255,255,0.06); color: var(--text-primary); }
+	.settings-nav-item.active { background: rgba(255,255,255,0.1); color: var(--text-primary); font-weight: 600; }
+	.settings-nav-danger { color: var(--error) !important; }
+	.settings-nav-danger:hover { background: var(--error-surface) !important; }
+
+	.settings-content {
+		flex: 1;
+		overflow-y: auto;
+		padding: 2rem 2.5rem;
+		max-width: 720px;
+	}
+	.settings-content-inner { display: flex; flex-direction: column; gap: 1.25rem; }
+	.sc-title { font-size: 1.1rem; font-weight: 700; color: var(--text-primary); margin: 0 0 0.5rem; }
+	.sc-subtitle { font-size: 0.78rem; font-weight: 600; color: var(--text-secondary); margin: 0; }
+	.sc-sep { height: 1px; background: var(--border); }
+	.sc-back-row { margin-bottom: -0.25rem; }
+	.sc-form { display: flex; flex-direction: column; gap: 0.85rem; }
+	.sc-form label { display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.75rem; color: var(--text-secondary); }
+	.sc-form input, .sc-form select { font-size: 0.85rem; padding: 0.5rem 0.65rem; background: var(--bg-elevated); border: 1px solid var(--border); border-radius: var(--radius); color: var(--text-primary); outline: none; transition: border-color var(--transition); }
+	.sc-form input:focus, .sc-form select:focus { border-color: var(--border-focus); }
+	.sc-form-footer { display: flex; gap: 0.5rem; padding-top: 0.25rem; }
+	.sc-icon-row { display: flex; align-items: center; gap: 1rem; }
+	.sc-icon-actions { display: flex; flex-direction: column; gap: 0.4rem; }
+
+	.settings-close-btn {
+		position: fixed;
+		top: 1.5rem;
+		right: 1.5rem;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 0.1rem;
+		background: transparent;
+		border: 1px solid var(--border);
+		border-radius: var(--radius);
+		color: var(--text-muted);
+		cursor: pointer;
+		padding: 0.4rem 0.6rem;
+		font-size: 0.9rem;
+		transition: background var(--transition), color var(--transition);
+		z-index: 401;
+	}
+	.settings-close-btn:hover { background: var(--bg-elevated); color: var(--text-primary); }
+	.settings-close-label { font-size: 0.55rem; letter-spacing: 0.05em; color: var(--text-muted); }
 
 	.server-name-text {
 		font-size: 0.875rem;
