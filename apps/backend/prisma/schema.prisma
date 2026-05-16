@@ -55,6 +55,8 @@ model User {
   dmMemberships        DirectConversationMember[]
   directMessages       DirectMessage[]
   directReactions      DirectMessageReaction[]
+  bannedFrom           ServerBan[]                @relation("BannedUser")
+  issuedBans           ServerBan[]                @relation("BanIssuer")
 }
 
 // ── Server ───────────────────────────────────────────────────────────────────
@@ -77,6 +79,7 @@ model Server {
   channels     Channel[]
   roles        ServerRole[]
   whitelist    ServerWhitelist[]
+  bans         ServerBan[]
 }
 
 // ── Server roles ──────────────────────────────────────────────────────────────
@@ -121,6 +124,20 @@ model ServerWhitelist {
 
   user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   server   Server   @relation(fields: [serverId], references: [id], onDelete: Cascade)
+
+  @@id([userId, serverId])
+}
+
+model ServerBan {
+  userId     String
+  serverId   String
+  reason     String?
+  bannedAt   DateTime @default(now())
+  bannedById String
+
+  user       User     @relation("BannedUser", fields: [userId], references: [id], onDelete: Cascade)
+  server     Server   @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  bannedBy   User     @relation("BanIssuer", fields: [bannedById], references: [id])
 
   @@id([userId, serverId])
 }

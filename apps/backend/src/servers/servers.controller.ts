@@ -61,8 +61,7 @@ export class ServersController {
 
   @Delete(':slug')
   delete(@Param('slug') slug: string, @Req() req: Request) {
-    const { id, role } = user(req);
-    return this.serversService.deleteServer(slug, id, role);
+    return this.serversService.deleteServer(slug, user(req).id);
   }
 
   // ── Membership ────────────────────────────────────────────────────────
@@ -93,13 +92,14 @@ export class ServersController {
     return this.serversService.kickMember(slug, userId, id, role);
   }
 
-  @Patch(':slug/members/me/nickname')
-  setNickname(
+  @Patch(':slug/members/:userId/nickname')
+  setMemberNickname(
     @Param('slug') slug: string,
+    @Param('userId') targetUserId: string,
     @Body('nickname') nickname: string | undefined,
     @Req() req: Request,
   ) {
-    return this.serversService.setNickname(slug, user(req).id, nickname ?? null);
+    return this.serversService.setMemberNickname(slug, targetUserId, nickname ?? null, user(req).id);
   }
 
   @Patch(':slug/members/:userId/role')
@@ -111,6 +111,31 @@ export class ServersController {
   ) {
     const { id, role } = user(req);
     return this.serversService.assignRole(slug, userId, roleId, id, role);
+  }
+
+  // ── Bans ──────────────────────────────────────────────────────────────
+
+  @Post(':slug/bans')
+  banMember(
+    @Param('slug') slug: string,
+    @Body() body: { userId: string; reason?: string },
+    @Req() req: Request,
+  ) {
+    return this.serversService.banMember(slug, body.userId, user(req).id, body.reason);
+  }
+
+  @Delete(':slug/bans/:userId')
+  unbanMember(
+    @Param('slug') slug: string,
+    @Param('userId') targetUserId: string,
+    @Req() req: Request,
+  ) {
+    return this.serversService.unbanMember(slug, targetUserId, user(req).id);
+  }
+
+  @Get(':slug/bans')
+  getBans(@Param('slug') slug: string, @Req() req: Request) {
+    return this.serversService.getBans(slug, user(req).id);
   }
 
   // ── Channels ──────────────────────────────────────────────────────────

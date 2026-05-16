@@ -6,7 +6,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import type { CreateServerDto } from './dto/create-server.dto';
 import type { CreateRoleDto } from './dto/create-role.dto';
 import type { CreateChannelDto } from './dto/create-channel.dto';
-import { DEFAULT_PERMISSIONS, ADMIN_PERMISSIONS, type ServerPermissions } from '../shared/types/permissions';
+import { DEFAULT_PERMISSIONS, OWNER_PERMISSIONS, type ServerPermissions } from '../shared/types/permissions';
 
 @Injectable()
 export class ServersService {
@@ -89,7 +89,7 @@ export class ServersService {
     });
 
     // Create default @everyone role
-    const everyoneRole = await this.prisma.serverRole.create({
+    await this.prisma.serverRole.create({
       data: {
         name: '@everyone',
         position: 0,
@@ -106,7 +106,7 @@ export class ServersService {
         color: '#22c55e',
         position: 100,
         isDefault: false,
-        permissions: ADMIN_PERMISSIONS as any,
+        permissions: OWNER_PERMISSIONS as any,
         serverId: server.id,
       },
     });
@@ -178,8 +178,10 @@ export class ServersService {
     });
   }
 
-  async deleteServer(slug: string, userId: string, userRole: string) {
-    const server = await this.assertPermission(slug, userId, userRole, 'manageServer');
+  async deleteServer(slug: string, userId: string) {
+    const server = await this.prisma.server.findUnique({ where: { slug } });
+    if (!server) throw new NotFoundException('Server not found');
+    if (server.ownerId !== userId) throw new ForbiddenException('Only the server owner can delete the server');
     await this.prisma.server.delete({ where: { id: server.id } });
     return { ok: true };
   }
@@ -192,6 +194,12 @@ export class ServersService {
       include: { roles: { where: { isDefault: true } } },
     });
     if (!server) throw new NotFoundException('Server not found');
+
+    // Check if user is banned
+    const ban = await this.prisma.serverBan.findUnique({
+      where: { userId_serverId: { userId, serverId: server.id } },
+    });
+    if (ban) throw new ForbiddenException('You are banned from this server');
 
     if (userRole !== 'SUPERADMIN') {
       if (server.accessType === 'PASSWORD') {
@@ -254,11 +262,93 @@ export class ServersService {
     return { nickname: nickname?.trim() || null };
   }
 
+  async setMemberNickname(slug: string, targetUserId: string, nickname: string | null, requesterId: string) {
+    const server = await this.prisma.server.findUnique({ where: { slug } });
+    if (!server) throw new NotFoundException('Server not found');
+    const isOwner = server.ownerId === requesterId;
+    if (!isOwner) {
+      if (targetUserId !== requesterId) {
+        const member = await this.prisma.serverMember.findUnique({
+          where: { userId_serverId: { userId: requesterId, serverId: server.id } },
+          include: { role: true },
+        });
+        const perms = member?.role?.permissions as ServerPermissions | null;
+        if (!perms?.manageNicknames) throw new ForbiddenException('Missing permission: manageNicknames');
+      }
+    }
+    const target = await this.prisma.serverMember.findUnique({
+      where: { userId_serverId: { userId: targetUserId, serverId: server.id } },
+    });
+    if (!target) throw new NotFoundException('Member not found');
+    await this.prisma.serverMember.update({
+      where: { userId_serverId: { userId: targetUserId, serverId: server.id } },
+      data: { nickname: nickname?.trim() || null },
+    });
+    return { nickname: nickname?.trim() || null };
+  }
+
   async kickMember(slug: string, targetUserId: string, requesterId: string, requesterRole: string) {
-    const server = await this.assertPermission(slug, requesterId, requesterRole, 'manageMembers');
+    const server = await this.assertPermission(slug, requesterId, requesterRole, 'kickMembers');
     if (server.ownerId === targetUserId) throw new ForbiddenException('Cannot kick the server owner');
     await this.prisma.serverMember.deleteMany({ where: { userId: targetUserId, serverId: server.id } });
     return { ok: true };
+  }
+
+  async banMember(slug: string, targetUserId: string, requesterId: string, reason?: string) {
+    const server = await this.prisma.server.findUnique({ where: { slug } });
+    if (!server) throw new NotFoundException('Server not found');
+    const isOwner = server.ownerId === requesterId;
+    if (!isOwner) {
+      const member = await this.prisma.serverMember.findUnique({
+        where: { userId_serverId: { userId: requesterId, serverId: server.id } },
+        include: { role: true },
+      });
+      const perms = member?.role?.permissions as ServerPermissions | null;
+      if (!perms?.banMembers) throw new ForbiddenException('Missing permission: banMembers');
+    }
+    if (server.ownerId === targetUserId) throw new ForbiddenException('Cannot ban the server owner');
+    // Kick first, then ban
+    await this.prisma.serverMember.deleteMany({ where: { userId: targetUserId, serverId: server.id } });
+    await this.prisma.serverBan.upsert({
+      where: { userId_serverId: { userId: targetUserId, serverId: server.id } },
+      create: { userId: targetUserId, serverId: server.id, bannedById: requesterId, reason },
+      update: { reason, bannedById: requesterId },
+    });
+    return { ok: true };
+  }
+
+  async unbanMember(slug: string, targetUserId: string, requesterId: string) {
+    const server = await this.prisma.server.findUnique({ where: { slug } });
+    if (!server) throw new NotFoundException('Server not found');
+    const isOwner = server.ownerId === requesterId;
+    if (!isOwner) {
+      const member = await this.prisma.serverMember.findUnique({
+        where: { userId_serverId: { userId: requesterId, serverId: server.id } },
+        include: { role: true },
+      });
+      const perms = member?.role?.permissions as ServerPermissions | null;
+      if (!perms?.banMembers) throw new ForbiddenException('Missing permission: banMembers');
+    }
+    await this.prisma.serverBan.deleteMany({ where: { userId: targetUserId, serverId: server.id } });
+    return { ok: true };
+  }
+
+  async getBans(slug: string, requesterId: string) {
+    const server = await this.prisma.server.findUnique({ where: { slug } });
+    if (!server) throw new NotFoundException('Server not found');
+    const isOwner = server.ownerId === requesterId;
+    if (!isOwner) {
+      const member = await this.prisma.serverMember.findUnique({
+        where: { userId_serverId: { userId: requesterId, serverId: server.id } },
+        include: { role: true },
+      });
+      const perms = member?.role?.permissions as ServerPermissions | null;
+      if (!perms?.banMembers && !perms?.kickMembers) throw new ForbiddenException('Insufficient permissions');
+    }
+    return this.prisma.serverBan.findMany({
+      where: { serverId: server.id },
+      include: { user: { select: { id: true, username: true, name: true, avatarUrl: true } } },
+    });
   }
 
   async assignRole(slug: string, targetUserId: string, roleId: string | null, requesterId: string, requesterRole: string) {
@@ -292,7 +382,7 @@ export class ServersService {
   }
 
   async addToWhitelist(slug: string, username: string, requesterId: string, requesterRole: string) {
-    const server = await this.assertPermission(slug, requesterId, requesterRole, 'manageMembers');
+    const server = await this.assertPermission(slug, requesterId, requesterRole, 'manageServer');
     const user = await this.prisma.user.findUnique({ where: { username } });
     if (!user) throw new NotFoundException('User not found');
     await this.prisma.serverWhitelist.upsert({
@@ -304,7 +394,7 @@ export class ServersService {
   }
 
   async removeFromWhitelist(slug: string, targetUserId: string, requesterId: string, requesterRole: string) {
-    const server = await this.assertPermission(slug, requesterId, requesterRole, 'manageMembers');
+    const server = await this.assertPermission(slug, requesterId, requesterRole, 'manageServer');
     await this.prisma.serverWhitelist.deleteMany({ where: { userId: targetUserId, serverId: server.id } });
     return { ok: true };
   }
@@ -322,7 +412,21 @@ export class ServersService {
 
   async createRole(slug: string, dto: CreateRoleDto, requesterId: string, requesterRole: string) {
     const server = await this.assertPermission(slug, requesterId, requesterRole, 'manageRoles');
-    const perms: ServerPermissions = { ...DEFAULT_PERMISSIONS, ...dto.permissions };
+    const isOwner = server.ownerId === requesterId;
+
+    let perms: ServerPermissions = { ...DEFAULT_PERMISSIONS, ...dto.permissions };
+    if (!isOwner && requesterRole !== 'SUPERADMIN') {
+      // Only grant permissions the requester themselves has
+      const member = await this.prisma.serverMember.findUnique({
+        where: { userId_serverId: { userId: requesterId, serverId: server.id } },
+        include: { role: true },
+      });
+      const myPerms = member?.role?.permissions as ServerPermissions | null ?? DEFAULT_PERMISSIONS;
+      for (const key of Object.keys(perms) as (keyof ServerPermissions)[]) {
+        if (!myPerms[key]) perms[key] = false;
+      }
+    }
+
     return this.prisma.serverRole.create({
       data: {
         name: dto.name,
@@ -345,9 +449,24 @@ export class ServersService {
     if (!role) throw new NotFoundException('Role not found');
     if (role.isDefault) throw new ForbiddenException('Cannot edit the @everyone role');
 
-    const perms = dto.permissions
-      ? { ...(role.permissions as any), ...dto.permissions }
-      : undefined;
+    const isOwner = server.ownerId === requesterId;
+
+    let perms: Record<string, boolean> | undefined;
+    if (dto.permissions) {
+      const merged: Record<string, boolean> = { ...(role.permissions as any), ...dto.permissions };
+      if (!isOwner && requesterRole !== 'SUPERADMIN') {
+        // Intersect with requester's own permissions
+        const member = await this.prisma.serverMember.findUnique({
+          where: { userId_serverId: { userId: requesterId, serverId: server.id } },
+          include: { role: true },
+        });
+        const myPerms = member?.role?.permissions as ServerPermissions | null ?? DEFAULT_PERMISSIONS;
+        for (const key of Object.keys(merged) as (keyof ServerPermissions)[]) {
+          if (!myPerms[key]) merged[key] = false;
+        }
+      }
+      perms = merged;
+    }
 
     return this.prisma.serverRole.update({
       where: { id: roleId },

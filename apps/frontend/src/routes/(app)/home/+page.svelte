@@ -23,6 +23,10 @@
 	let addSuccess = $state('');
 	let addLoading = $state(false);
 	let dmLoading = $state(false);
+	let searchQuery = $state('');
+	let searchResults = $state<{ id: string; username: string; name?: string | null; avatarUrl?: string | null }[]>([]);
+	let searching = $state(false);
+	let searchDone = $state(false);
 
 	// New DM modal
 	let showNewDm = $state(false);
@@ -73,33 +77,50 @@
 
 	const onlineFriends = $derived(friends.filter(f => f.user.online));
 	const incomingPending = $derived(pending.filter(p => p.direction === 'incoming'));
+	const filteredConversations = $derived(
+		searchQuery.trim()
+			? conversations.filter(c =>
+					(c.name ?? c.members.map(m => m.username).join('')).toLowerCase().includes(searchQuery.toLowerCase())
+				)
+			: conversations
+	);
 
-	async function sendFriendRequest() {
-		if (!addIdentifier.trim()) return;
+	async function searchUsers() {
+		if (!addIdentifier.trim() || addIdentifier.trim().length < 2) return;
 		addError = '';
 		addSuccess = '';
-		addLoading = true;
+		searching = true;
+		searchDone = false;
 		try {
-			const res = await fetch('/api/friends/request', {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				credentials: 'include',
-				body: JSON.stringify({ identifier: addIdentifier.trim() }),
-			});
-			if (!res.ok) {
-				const err = await res.json().catch(() => ({}));
-				addError = err.message ?? 'Error al enviar solicitud.';
-				return;
-			}
-			const p = await res.json();
-			addSuccess = `Solicitud enviada a ${addIdentifier.trim()}.`;
-			addIdentifier = '';
-			pending = [...pending, { id: p.id, direction: 'outgoing', user: p.receiver, createdAt: p.createdAt }];
+			const res = await fetch(`/api/users/search?q=${encodeURIComponent(addIdentifier.trim())}`, { credentials: 'include' });
+			if (res.ok) searchResults = await res.json();
+			else searchResults = [];
+			searchDone = true;
 		} catch {
-			addError = 'Error de red.';
+			searchResults = [];
+			searchDone = true;
 		} finally {
-			addLoading = false;
+			searching = false;
 		}
+	}
+
+	async function sendRequestToUser(userId: string, username: string) {
+		const res = await fetch('/api/friends/request', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			credentials: 'include',
+			body: JSON.stringify({ identifier: username }),
+		});
+		if (!res.ok) {
+			const err = await res.json().catch(() => ({}));
+			addError = err.message ?? 'Error al enviar solicitud.';
+			return;
+		}
+		const p = await res.json();
+		addSuccess = `Solicitud enviada a ${username}.`;
+		pending = [...pending, { id: p.id, direction: 'outgoing', user: p.receiver, createdAt: p.createdAt }];
+		// Remove from results
+		searchResults = searchResults.filter(u => u.id !== userId);
 	}
 
 	async function acceptFriend(friendshipId: string) {
@@ -165,7 +186,7 @@
 	<!-- DM/Friends sidebar -->
 	<aside class="home-sidebar">
 		<div class="search-bar">
-			<input type="text" placeholder="Busca o inicia una conversación" disabled />
+			<input type="text" bind:value={searchQuery} placeholder="Buscar" oninput={() => {}} />
 		</div>
 
 		<button class="sidebar-nav-btn" onclick={() => (activeTab = 'online')}>
@@ -181,7 +202,7 @@
 			<button class="icon-btn" title="Nueva conversación" onclick={() => (showNewDm = true)}>+</button>
 		</div>
 
-		{#each conversations as conv (conv.id)}
+		{#each filteredConversations as conv (conv.id)}
 			{@const unread = $dmUnread.get(conv.id) ?? 0}
 			<a href="/home/dm/{conv.id}" class="dm-item">
 				<div class="dm-avatar">
@@ -334,20 +355,46 @@
 			{:else if activeTab === 'add'}
 				<div class="add-friend-panel">
 					<h3>Añadir amigo</h3>
-					<p>Busca por username o email.</p>
+					<p>Busca por username. Solo se puede añadir por username exacto.</p>
 					<div class="add-form">
 						<input
 							type="text"
 							bind:value={addIdentifier}
-							placeholder="username o email"
-							onkeydown={(e) => e.key === 'Enter' && sendFriendRequest()}
+							placeholder="username"
+							onkeydown={(e) => e.key === 'Enter' && searchUsers()}
 						/>
-						<button class="btn-primary" onclick={sendFriendRequest} disabled={addLoading || !addIdentifier.trim()}>
-							{addLoading ? '…' : 'Enviar solicitud'}
+						<button class="btn-primary" onclick={searchUsers} disabled={searching || addIdentifier.trim().length < 2}>
+							{searching ? '…' : 'Buscar'}
 						</button>
 					</div>
 					{#if addError}<p class="error">{addError}</p>{/if}
 					{#if addSuccess}<p class="success">{addSuccess}</p>{/if}
+					{#if searchDone}
+						{#if searchResults.length === 0}
+							<p class="search-empty">No se encontraron usuarios con ese username.</p>
+						{:else}
+							<ul class="search-results">
+								{#each searchResults as u (u.id)}
+									<li class="search-result-item">
+										<div class="sr-avatar">
+											{#if u.avatarUrl}
+												<img src={u.avatarUrl} alt="" class="avatar-sm" />
+											{:else}
+												<div class="avatar-sm avatar-init">{(u.name || u.username)[0].toUpperCase()}</div>
+											{/if}
+										</div>
+										<div class="sr-info">
+											<span class="sr-name">{u.name || u.username}</span>
+											<span class="sr-tag">@{u.username}</span>
+										</div>
+										<button class="btn-primary btn-sm" onclick={() => sendRequestToUser(u.id, u.username)}>
+											Añadir
+										</button>
+									</li>
+								{/each}
+							</ul>
+						{/if}
+					{/if}
 				</div>
 			{/if}
 		</div>
@@ -416,12 +463,14 @@
 		background: var(--bg-elevated);
 		border: none;
 		border-radius: var(--radius);
-		color: var(--text-muted);
+		color: var(--text-primary);
 		font-size: 0.78rem;
 		font-family: inherit;
-		cursor: not-allowed;
+		outline: none;
 		box-sizing: border-box;
 	}
+
+	.search-bar input::placeholder { color: var(--text-muted); }
 
 	.sidebar-nav-btn {
 		display: flex;
@@ -869,4 +918,16 @@
 	}
 
 	.icon-btn:hover { color: var(--text-primary); background: var(--bg-elevated); }
+
+	/* ── Friend search results ───────────────────────────────────────────── */
+	.search-empty { font-size: 0.78rem; color: var(--text-muted); padding: 0.5rem 0; }
+	.search-results { list-style: none; padding: 0; margin: 0.5rem 0 0; display: flex; flex-direction: column; gap: 0.35rem; }
+	.search-result-item { display: flex; align-items: center; gap: 0.6rem; padding: 0.4rem 0.5rem; background: var(--bg-elevated); border-radius: var(--radius); }
+	.sr-avatar { flex-shrink: 0; }
+	.sr-info { flex: 1; display: flex; flex-direction: column; gap: 0.05rem; min-width: 0; }
+	.sr-name { font-size: 0.82rem; color: var(--text-primary); font-weight: 600; }
+	.sr-tag { font-size: 0.68rem; color: var(--text-muted); }
+	.btn-sm { font-size: 0.72rem; padding: 0.25rem 0.6rem; }
+	.avatar-sm { width: 28px; height: 28px; border-radius: 50%; object-fit: cover; flex-shrink: 0; }
+	.avatar-init { display: flex; align-items: center; justify-content: center; background: var(--bg-elevated); border: 1px solid var(--border); font-weight: 700; font-size: 0.7rem; color: var(--accent); border-radius: 50%; }
 </style>

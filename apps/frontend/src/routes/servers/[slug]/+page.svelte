@@ -5,6 +5,7 @@
 	import { socketStore } from '$lib/socket.js';
 	import { livekitStore } from '$lib/livekit.js';
 	import type { MessagePayload, VoiceMember, MessageReaction } from '$lib/types/socket-events.types.js';
+	import { PERMISSION_LABELS, PERMISSION_CATEGORIES } from '$lib/permissions.js';
 
 	let { data } = $props();
 	const { user, server } = data;
@@ -13,7 +14,8 @@
 	interface Channel { id: string; name: string; type: 'TEXT' | 'VOICE'; position: number; }
 	interface Member {
 		joinedAt: string;
-		user: { id: string; username: string; avatarUrl?: string | null };
+		nickname?: string | null;
+		user: { id: string; username: string; name?: string | null; avatarUrl?: string | null };
 		role?: { id: string; name: string; color?: string | null } | null;
 	}
 
@@ -64,6 +66,14 @@
 	let settingsPassword = $state('');
 	let settingsLoading = $state(false);
 	let settingsError = $state('');
+	let settingsTab = $state<'general' | 'roles' | 'members' | 'danger'>('general');
+	let editingRole = $state<string | null>(null);
+	let editRolePerms = $state<Record<string, boolean>>({});
+	let editRoleName = $state('');
+	let editRoleColor = $state('');
+	let editRoleLoading = $state(false);
+	let bans = $state<{ userId: string; user: { id: string; username: string; name?: string | null; avatarUrl?: string | null }; reason?: string | null }[]>([]);
+	let bansLoading = $state(false);
 
 	// ── Profile dropdown ───────────────────────────────────────────────────
 	let showProfile = $state(false);
@@ -424,19 +434,31 @@
 
 	// ── Server settings ───────────────────────────────────────────────────
 	async function openSettings() {
+		settingsTab = 'general';
 		settingsName = server.name;
 		settingsDesc = server.description ?? '';
 		settingsAccess = server.accessType as any;
 		settingsPassword = '';
+		settingsLoading = false;
 		settingsError = '';
-		whitelistError = '';
-		showSettings = true;
-		const [rolesRes, wlRes] = await Promise.all([
+		editingRole = null;
+		bans = [];
+
+		const [membersRes, rolesRes, whitelistRes] = await Promise.all([
+			fetch(`/api/servers/${server.slug}/members`, { credentials: 'include' }),
 			fetch(`/api/servers/${server.slug}/roles`, { credentials: 'include' }),
 			server.accessType === 'WHITELIST' ? fetch(`/api/servers/${server.slug}/whitelist`, { credentials: 'include' }) : Promise.resolve(null),
 		]);
+		if (membersRes.ok) members = await membersRes.json();
 		if (rolesRes.ok) roles = await rolesRes.json();
-		if (wlRes?.ok) whitelist = await wlRes.json();
+		if (whitelistRes?.ok) whitelist = await whitelistRes.json();
+
+		if (isOwner) {
+			const bansRes = await fetch(`/api/servers/${server.slug}/bans`, { credentials: 'include' });
+			if (bansRes.ok) bans = await bansRes.json();
+		}
+
+		showSettings = true;
 	}
 
 	async function uploadIcon(e: Event) {
@@ -497,6 +519,54 @@
 		if (!confirm(`¿Eliminar permanentemente "${server.name}"? Esto no se puede deshacer.`)) return;
 		const res = await fetch(`/api/servers/${server.slug}`, { method: 'DELETE', credentials: 'include' });
 		if (res.ok) goto('/servers');
+	}
+
+	// ── Role editing ──────────────────────────────────────────────────────
+	function startEditRole(r: { id: string; name: string; color?: string | null; permissions: Record<string, boolean> }) {
+		editingRole = r.id;
+		editRoleName = r.name;
+		editRoleColor = r.color ?? '#6366f1';
+		editRolePerms = { ...r.permissions };
+	}
+
+	async function saveRole() {
+		if (!editingRole) return;
+		editRoleLoading = true;
+		try {
+			const res = await fetch(`/api/servers/${server.slug}/roles/${editingRole}`, {
+				method: 'PATCH',
+				headers: { 'Content-Type': 'application/json' },
+				credentials: 'include',
+				body: JSON.stringify({ name: editRoleName, color: editRoleColor, permissions: editRolePerms }),
+			});
+			if (!res.ok) { rolesError = 'Error al guardar.'; return; }
+			const updated = await res.json();
+			roles = roles.map(r => r.id === editingRole ? { ...r, ...updated } : r);
+			editingRole = null;
+		} finally {
+			editRoleLoading = false;
+		}
+	}
+
+	// ── Bans ──────────────────────────────────────────────────────────────
+	async function banMember(userId: string, username: string) {
+		const reason = prompt(`Razón del baneo de ${username} (opcional):`);
+		if (reason === null) return; // cancelled
+		const res = await fetch(`/api/servers/${server.slug}/bans`, {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			credentials: 'include',
+			body: JSON.stringify({ userId, reason: reason || undefined }),
+		});
+		if (res.ok) {
+			members = members.filter(m => m.user.id !== userId);
+			showToast(`${username} baneado.`);
+		}
+	}
+
+	async function unbanUser(userId: string) {
+		const res = await fetch(`/api/servers/${server.slug}/bans/${userId}`, { method: 'DELETE', credentials: 'include' });
+		if (res.ok) bans = bans.filter(b => b.userId !== userId);
 	}
 
 	// ── Whitelist ─────────────────────────────────────────────────────────
@@ -1005,124 +1075,252 @@
 
 	<!-- ── Settings modal ───────────────────────────────────────────────── -->
 	{#if showSettings}
-		<div class="modal-overlay" role="presentation" onclick={(e) => { if (e.target === e.currentTarget) showSettings = false; }} onkeydown={(e) => { if (e.key === 'Escape') showSettings = false; }}>
-			<div class="settings-modal">
+		<div class="modal-overlay" role="presentation"
+			onclick={(e) => { if (e.target === e.currentTarget) showSettings = false; }}
+			onkeydown={(e) => { if (e.key === 'Escape') showSettings = false; }}>
+			<div class="settings-modal settings-modal-wide">
 				<div class="settings-header">
-					<h3>Configuración de {server.name}</h3>
+					<h3>Configuración — {server.name}</h3>
 					<button class="icon-btn" onclick={() => (showSettings = false)}>✕</button>
 				</div>
-				<div class="settings-icon-section">
-					<div class="server-icon-preview">
-						{#if serverIconUrl}
-							<img src={serverIconUrl} alt="" class="server-icon-img" />
-						{:else}
-							<span class="server-icon-initial">{server.name[0].toUpperCase()}</span>
-						{/if}
-					</div>
-					<label class="icon-upload-label">
-						<input type="file" accept="image/jpeg,image/png,image/gif,image/webp" class="hidden-file" onchange={uploadIcon} />
-						Cambiar icono
-					</label>
-					{#if iconUploadError}<p class="error">{iconUploadError}</p>{/if}
-				</div>
-				<form class="settings-body" onsubmit={saveSettings}>
-					<label>
-						Nombre del servidor
-						<input type="text" bind:value={settingsName} required />
-					</label>
-					<label>
-						Descripción
-						<input type="text" bind:value={settingsDesc} placeholder="Opcional" />
-					</label>
-					<label>
-						Acceso
-						<select bind:value={settingsAccess}>
-							<option value="PUBLIC">🌐 Público</option>
-							<option value="PASSWORD">🔒 Contraseña</option>
-							<option value="WHITELIST">📋 Lista blanca</option>
-						</select>
-					</label>
-					{#if settingsAccess === 'PASSWORD'}
-						<label>
-							Nueva contraseña <span class="optional">(dejar vacío para no cambiar)</span>
-							<input type="password" bind:value={settingsPassword} placeholder="Nueva contraseña" />
-						</label>
-					{/if}
-					{#if settingsError}<p class="error">{settingsError}</p>{/if}
-					<button type="submit" class="btn-primary" disabled={settingsLoading}>
-						{settingsLoading ? 'Guardando…' : 'Guardar cambios'}
-					</button>
-				</form>
-				<div class="settings-roles">
-					<p class="settings-section-title">Roles</p>
-					{#each roles.filter((r) => !r.isDefault) as r (r.id)}
-						<div class="role-row">
-							<span class="role-swatch" style="background: {r.color ?? '#6b7280'}"></span>
-							<span class="role-row-name">{r.name}</span>
-							<button type="button" class="wl-remove-btn" onclick={() => deleteRole(r.id)}>✕</button>
-						</div>
-					{/each}
-					<div class="role-create-row">
-						<input type="color" bind:value={newRoleColor} class="color-picker" title="Color del rol" />
-						<input
-							type="text"
-							placeholder="Nombre del rol"
-							bind:value={newRoleName}
-							class="role-name-input"
-							onkeydown={(e) => { if (e.key === 'Enter') { e.preventDefault(); createRole(); } }}
-						/>
-						<button type="button" class="btn-primary btn-sm" onclick={createRole} disabled={createRoleLoading}>
-							{createRoleLoading ? '…' : 'Crear'}
-						</button>
-					</div>
-					{#if rolesError}<p class="error">{rolesError}</p>{/if}
+
+				<!-- Tab bar -->
+				<div class="settings-tabs">
+					<button class="stab" class:active={settingsTab === 'general'} onclick={() => settingsTab = 'general'}>General</button>
+					<button class="stab" class:active={settingsTab === 'roles'} onclick={() => settingsTab = 'roles'}>Roles</button>
+					<button class="stab" class:active={settingsTab === 'members'} onclick={() => settingsTab = 'members'}>Miembros</button>
+					<button class="stab" class:active={settingsTab === 'danger'} onclick={() => settingsTab = 'danger'}>Zona de peligro</button>
 				</div>
 
-				{#if settingsAccess === 'WHITELIST'}
-					<div class="settings-whitelist">
-						<p class="settings-section-title">Lista blanca</p>
-						<div class="whitelist-add-row">
-							<input
-								type="text"
-								placeholder="Nombre de usuario"
-								bind:value={whitelistInput}
-								onkeydown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addToWhitelist(); } }}
-							/>
-							<button type="button" class="btn-primary btn-sm" onclick={addToWhitelist} disabled={whitelistLoading}>
-								{whitelistLoading ? '…' : 'Añadir'}
-							</button>
+				<div class="settings-body-scroll">
+
+					<!-- GENERAL TAB -->
+					{#if settingsTab === 'general'}
+						<div class="settings-section">
+							<div class="settings-icon-section">
+								<div class="server-icon-preview">
+									{#if serverIconUrl}
+										<img src={serverIconUrl} alt="" class="server-icon-img" />
+									{:else}
+										<span class="server-icon-initial">{server.name[0].toUpperCase()}</span>
+									{/if}
+								</div>
+								<label class="icon-upload-label">
+									<input type="file" accept="image/jpeg,image/png,image/gif,image/webp" class="hidden-file" onchange={uploadIcon} />
+									Cambiar icono
+								</label>
+								{#if iconUploadError}<p class="error">{iconUploadError}</p>{/if}
+							</div>
+							<form class="settings-form" onsubmit={saveSettings}>
+								<label>
+									Nombre del servidor
+									<input type="text" bind:value={settingsName} required />
+								</label>
+								<label>
+									Descripción
+									<input type="text" bind:value={settingsDesc} placeholder="Opcional" />
+								</label>
+								<label>
+									Acceso
+									<select bind:value={settingsAccess}>
+										<option value="PUBLIC">🌐 Público</option>
+										<option value="PASSWORD">🔒 Contraseña</option>
+										<option value="WHITELIST">📋 Lista blanca</option>
+									</select>
+								</label>
+								{#if settingsAccess === 'PASSWORD'}
+									<label>
+										Nueva contraseña <span class="optional">(vacío = sin cambio)</span>
+										<input type="password" bind:value={settingsPassword} placeholder="Nueva contraseña" />
+									</label>
+								{/if}
+								{#if settingsError}<p class="error">{settingsError}</p>{/if}
+								<button type="submit" class="btn-primary" disabled={settingsLoading}>
+									{settingsLoading ? 'Guardando…' : 'Guardar cambios'}
+								</button>
+							</form>
 						</div>
-						{#if whitelistError}<p class="error">{whitelistError}</p>{/if}
-						{#if whitelist.length > 0}
-							<ul class="whitelist-list">
-								{#each whitelist as entry (entry.user.id)}
-									<li class="whitelist-item">
-										<div class="wl-avatar-sm">
-											{#if entry.user.avatarUrl}
-												<img src={entry.user.avatarUrl} class="avatar-xs" alt="" />
-											{:else}
-												<div class="avatar-xs avatar-init">{avatarInitial(entry.user.username)}</div>
+
+						{#if settingsAccess === 'WHITELIST'}
+							<div class="settings-section">
+								<h4 class="section-title">Lista blanca</h4>
+								<div class="whitelist-add-row">
+									<input type="text" placeholder="Nombre de usuario" bind:value={whitelistInput}
+										onkeydown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addToWhitelist(); } }} />
+									<button type="button" class="btn-primary btn-sm" onclick={addToWhitelist} disabled={whitelistLoading}>
+										{whitelistLoading ? '…' : 'Añadir'}
+									</button>
+								</div>
+								{#if whitelistError}<p class="error">{whitelistError}</p>{/if}
+								{#if whitelist.length > 0}
+									<ul class="whitelist-list">
+										{#each whitelist as entry (entry.user.id)}
+											<li class="whitelist-item">
+												<div class="wl-avatar-sm">
+													{#if entry.user.avatarUrl}
+														<img src={entry.user.avatarUrl} class="avatar-xs" alt="" />
+													{:else}
+														<div class="avatar-xs avatar-init">{avatarInitial(entry.user.username)}</div>
+													{/if}
+												</div>
+												<span class="wl-name">{entry.user.username}</span>
+												<button type="button" class="wl-remove-btn" onclick={() => removeFromWhitelist(entry.user.id)}>✕</button>
+											</li>
+										{/each}
+									</ul>
+								{:else}
+									<p class="wl-empty">Ningún usuario en lista blanca.</p>
+								{/if}
+							</div>
+						{/if}
+					{/if}
+
+					<!-- ROLES TAB -->
+					{#if settingsTab === 'roles'}
+						<div class="settings-section">
+							{#if editingRole}
+								<!-- Role editor -->
+								<div class="role-editor">
+									<div class="role-editor-header">
+										<button class="back-btn" onclick={() => editingRole = null}>← Volver</button>
+										<h4>Editar rol</h4>
+									</div>
+									<div class="role-editor-basic">
+										<input type="color" bind:value={editRoleColor} class="color-picker" title="Color" />
+										<input type="text" bind:value={editRoleName} placeholder="Nombre del rol" class="role-name-input" />
+									</div>
+									<div class="perm-categories">
+										{#each PERMISSION_CATEGORIES as cat}
+											<div class="perm-cat">
+												<span class="perm-cat-label">{cat.label}</span>
+												{#each cat.keys as key}
+													<label class="perm-row">
+														<input type="checkbox" bind:checked={editRolePerms[key]} />
+														<span>{PERMISSION_LABELS[key]}</span>
+													</label>
+												{/each}
+											</div>
+										{/each}
+									</div>
+									{#if rolesError}<p class="error">{rolesError}</p>{/if}
+									<div class="role-editor-actions">
+										<button class="btn-primary" onclick={saveRole} disabled={editRoleLoading}>
+											{editRoleLoading ? 'Guardando…' : 'Guardar rol'}
+										</button>
+										<button class="btn-ghost" onclick={() => editingRole = null}>Cancelar</button>
+									</div>
+								</div>
+							{:else}
+								<!-- Role list -->
+								<h4 class="section-title">Roles ({roles.filter(r => !r.isDefault).length})</h4>
+								{#each roles.filter(r => !r.isDefault) as r (r.id)}
+									<div class="role-row-v2">
+										<span class="role-swatch" style="background: {r.color ?? '#6b7280'}"></span>
+										<span class="role-row-name">{r.name}</span>
+										<button class="icon-btn-sm" onclick={() => startEditRole(r as any)} title="Editar">✎</button>
+										<button class="icon-btn-sm danger" onclick={() => deleteRole(r.id)} title="Eliminar">✕</button>
+									</div>
+								{/each}
+								<div class="role-create-row">
+									<input type="color" bind:value={newRoleColor} class="color-picker" title="Color del rol" />
+									<input type="text" placeholder="Nombre del rol" bind:value={newRoleName} class="role-name-input"
+										onkeydown={(e) => { if (e.key === 'Enter') { e.preventDefault(); createRole(); } }} />
+									<button type="button" class="btn-primary btn-sm" onclick={createRole} disabled={createRoleLoading}>
+										{createRoleLoading ? '…' : 'Crear'}
+									</button>
+								</div>
+								{#if rolesError}<p class="error">{rolesError}</p>{/if}
+							{/if}
+						</div>
+					{/if}
+
+					<!-- MEMBERS TAB -->
+					{#if settingsTab === 'members'}
+						<div class="settings-section">
+							<h4 class="section-title">Miembros ({members.length})</h4>
+							{#each members as m (m.user.id)}
+								<div class="member-settings-row">
+									<div class="ms-avatar">
+										{#if m.user.avatarUrl}
+											<img src={m.user.avatarUrl} class="avatar-xs" alt="" />
+										{:else}
+											<div class="avatar-xs avatar-init">{avatarInitial(m.user.username)}</div>
+										{/if}
+									</div>
+									<div class="ms-info">
+										<span class="ms-name">{m.nickname ?? m.user.name ?? m.user.username}</span>
+										<span class="ms-tag">@{m.user.username}</span>
+									</div>
+									{#if server.ownerId === m.user.id}
+										<span class="owner-badge">Propietario</span>
+									{:else if m.role}
+										<span class="role-chip" style="border-color: {m.role.color ?? '#6b7280'}; color: {m.role.color ?? '#6b7280'}">{m.role.name}</span>
+									{/if}
+									{#if m.user.id !== user.id && server.ownerId !== m.user.id}
+										<div class="ms-actions">
+											<select class="role-select-sm" value={m.role?.id ?? ''} onchange={(e) => assignRole(m.user.id, (e.target as HTMLSelectElement).value || null)}>
+												<option value="">Sin rol</option>
+												{#each roles.filter(r => !r.isDefault) as r (r.id)}
+													<option value={r.id}>{r.name}</option>
+												{/each}
+											</select>
+											<button class="icon-btn-sm" title="Expulsar" onclick={() => kickMember(m.user.id, m.user.username)}>👢</button>
+											{#if isOwner}
+												<button class="icon-btn-sm danger" title="Banear" onclick={() => banMember(m.user.id, m.user.username)}>🔨</button>
 											{/if}
 										</div>
-										<span class="wl-name">{entry.user.username}</span>
-										<button type="button" class="wl-remove-btn" onclick={() => removeFromWhitelist(entry.user.id)}>✕</button>
-									</li>
-								{/each}
-							</ul>
-						{:else}
-							<p class="wl-empty">Ningún usuario en lista blanca.</p>
-						{/if}
-					</div>
-				{/if}
+									{/if}
+								</div>
+							{/each}
 
-				<div class="settings-danger">
-					<p class="danger-title">Zona de peligro</p>
-					{#if !isOwner}
-						<button class="btn-danger-outline" onclick={leaveServer}>Salir del servidor</button>
+							{#if isOwner && bans.length > 0}
+								<h4 class="section-title" style="margin-top: 1.5rem;">Baneados ({bans.length})</h4>
+								{#each bans as ban (ban.userId)}
+									<div class="member-settings-row">
+										<div class="ms-avatar">
+											{#if ban.user.avatarUrl}
+												<img src={ban.user.avatarUrl} class="avatar-xs" alt="" />
+											{:else}
+												<div class="avatar-xs avatar-init">{avatarInitial(ban.user.username)}</div>
+											{/if}
+										</div>
+										<div class="ms-info">
+											<span class="ms-name">{ban.user.name ?? ban.user.username}</span>
+											<span class="ms-tag">@{ban.user.username}</span>
+											{#if ban.reason}<span class="ban-reason">"{ban.reason}"</span>{/if}
+										</div>
+										<button class="btn-ghost btn-sm" onclick={() => unbanUser(ban.userId)}>Desbanear</button>
+									</div>
+								{/each}
+							{/if}
+						</div>
 					{/if}
-					{#if canManage}
-						<button class="btn-danger-solid" onclick={deleteServer}>Eliminar servidor</button>
+
+					<!-- DANGER TAB -->
+					{#if settingsTab === 'danger'}
+						<div class="settings-section">
+							<h4 class="section-title danger-title">Zona de peligro</h4>
+							{#if !isOwner}
+								<div class="danger-item-row">
+									<div>
+										<strong>Salir del servidor</strong>
+										<p>No podrás acceder a los canales hasta que te vuelvan a añadir.</p>
+									</div>
+									<button class="btn-danger-outline" onclick={leaveServer}>Salir</button>
+								</div>
+							{/if}
+							{#if isOwner}
+								<div class="danger-item-row">
+									<div>
+										<strong>Eliminar servidor</strong>
+										<p>Esta acción es permanente e irreversible. Solo el propietario puede hacerlo.</p>
+									</div>
+									<button class="btn-danger-solid" onclick={deleteServer}>Eliminar</button>
+								</div>
+							{/if}
+						</div>
 					{/if}
+
 				</div>
 			</div>
 		</div>
@@ -2085,51 +2283,9 @@
 
 	.settings-header h3 { font-size: 0.9rem; color: var(--text-primary); }
 
-	.settings-body {
-		display: flex;
-		flex-direction: column;
-		gap: 0.75rem;
-		padding: 1.25rem;
-	}
-
-	.settings-body label {
-		display: flex;
-		flex-direction: column;
-		gap: 0.3rem;
-		font-size: 0.72rem;
-		color: var(--text-secondary);
-		font-weight: 600;
-		letter-spacing: 0.04em;
-		text-transform: uppercase;
-	}
-
-	.settings-body input,
-	.settings-body select {
-		font-size: 0.85rem;
-		padding: 0.4rem 0.6rem;
-		background: var(--bg-elevated);
-		border: 1px solid var(--border);
-		border-radius: var(--radius);
-		color: var(--text-primary);
-		outline: none;
-		font-family: inherit;
-		transition: border-color var(--transition);
-	}
-
-	.settings-body input:focus,
-	.settings-body select:focus { border-color: var(--border-focus); }
-
 	.optional { font-weight: 400; text-transform: none; letter-spacing: 0; color: var(--text-muted); }
 
 	.error { font-size: 0.75rem; color: var(--error); }
-
-	.settings-danger {
-		padding: 1rem 1.25rem 1.25rem;
-		border-top: 1px solid var(--border);
-		display: flex;
-		flex-direction: column;
-		gap: 0.5rem;
-	}
 
 	.danger-title {
 		font-size: 0.7rem;
@@ -2185,23 +2341,6 @@
 	}
 
 	/* ── Whitelist section in settings ──────────────────────────────────── */
-	.settings-whitelist {
-		padding: 1rem 1.25rem;
-		border-top: 1px solid var(--border);
-		display: flex;
-		flex-direction: column;
-		gap: 0.5rem;
-	}
-
-	.settings-section-title {
-		font-size: 0.7rem;
-		font-weight: 700;
-		text-transform: uppercase;
-		letter-spacing: 0.08em;
-		color: var(--text-muted);
-		margin: 0;
-	}
-
 	.whitelist-add-row {
 		display: flex;
 		gap: 0.4rem;
@@ -2280,23 +2419,6 @@
 	}
 
 	/* ── Roles section in settings ───────────────────────────────────────── */
-	.settings-roles {
-		padding: 1rem 1.25rem;
-		border-top: 1px solid var(--border);
-		display: flex;
-		flex-direction: column;
-		gap: 0.4rem;
-	}
-
-	.role-row {
-		display: flex;
-		align-items: center;
-		gap: 0.5rem;
-		padding: 0.3rem 0.4rem;
-		border-radius: var(--radius);
-		background: var(--bg-elevated);
-	}
-
 	.role-swatch {
 		width: 12px;
 		height: 12px;
@@ -2374,6 +2496,50 @@
 	}
 
 	.icon-upload-label:hover { background: rgba(99,102,241,0.1); }
+
+	/* ── Settings modal wide / tabs ─────────────────────────────────────── */
+	.settings-modal-wide { max-width: 700px; width: 100%; max-height: 85vh; display: flex; flex-direction: column; }
+	.settings-tabs { display: flex; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+	.stab { flex: 1; padding: 0.6rem; background: transparent; border: none; border-bottom: 2px solid transparent; color: var(--text-muted); cursor: pointer; font-size: 0.78rem; transition: all var(--transition); font-family: inherit; }
+	.stab:hover { color: var(--text-primary); }
+	.stab.active { color: var(--accent); border-bottom-color: var(--accent); }
+	.settings-body-scroll { overflow-y: auto; flex: 1; }
+	.settings-section { padding: 1.25rem; display: flex; flex-direction: column; gap: 0.85rem; }
+	.settings-form { display: flex; flex-direction: column; gap: 0.65rem; }
+	.settings-form label { display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.75rem; color: var(--text-secondary); }
+	.settings-form input, .settings-form select { font-size: 0.82rem; padding: 0.45rem 0.6rem; background: var(--bg-elevated); border: 1px solid var(--border); border-radius: var(--radius); color: var(--text-primary); outline: none; font-family: inherit; }
+	.settings-form input:focus, .settings-form select:focus { border-color: var(--border-focus); }
+	.section-title { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-muted); margin-bottom: 0.25rem; }
+	.role-row-v2 { display: flex; align-items: center; gap: 0.5rem; padding: 0.45rem 0.5rem; border-radius: var(--radius); background: var(--bg-elevated); }
+	.role-row-v2 .role-row-name { flex: 1; font-size: 0.82rem; }
+	.icon-btn-sm { background: transparent; border: none; cursor: pointer; font-size: 0.8rem; padding: 0.15rem 0.35rem; border-radius: var(--radius-sm); color: var(--text-muted); transition: color var(--transition), background var(--transition); }
+	.icon-btn-sm:hover { color: var(--text-primary); background: var(--bg-surface); }
+	.icon-btn-sm.danger:hover { color: var(--error); }
+	.role-editor { display: flex; flex-direction: column; gap: 0.85rem; }
+	.role-editor-header { display: flex; align-items: center; gap: 0.75rem; }
+	.back-btn { background: transparent; border: none; color: var(--accent); cursor: pointer; font-size: 0.78rem; padding: 0; font-family: inherit; }
+	.role-editor-basic { display: flex; align-items: center; gap: 0.5rem; }
+	.perm-categories { display: flex; flex-direction: column; gap: 1rem; }
+	.perm-cat { display: flex; flex-direction: column; gap: 0.25rem; }
+	.perm-cat-label { font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-muted); margin-bottom: 0.1rem; }
+	.perm-row { display: flex; align-items: center; gap: 0.5rem; font-size: 0.8rem; color: var(--text-secondary); cursor: pointer; padding: 0.2rem 0; }
+	.perm-row input[type="checkbox"] { accent-color: var(--accent); width: 14px; height: 14px; }
+	.role-editor-actions { display: flex; gap: 0.5rem; }
+	.btn-ghost { background: transparent; border: 1px solid var(--border); color: var(--text-secondary); border-radius: var(--radius); padding: 0.45rem 0.85rem; cursor: pointer; font-size: 0.8rem; font-family: inherit; }
+	.btn-ghost:hover { background: var(--bg-elevated); }
+	.member-settings-row { display: flex; align-items: center; gap: 0.6rem; padding: 0.45rem 0.5rem; border-radius: var(--radius); background: var(--bg-elevated); }
+	.ms-avatar { flex-shrink: 0; }
+	.ms-info { flex: 1; display: flex; flex-direction: column; gap: 0.02rem; min-width: 0; }
+	.ms-name { font-size: 0.82rem; color: var(--text-primary); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+	.ms-tag { font-size: 0.65rem; color: var(--text-muted); }
+	.ms-actions { display: flex; align-items: center; gap: 0.3rem; flex-shrink: 0; }
+	.owner-badge { font-size: 0.62rem; padding: 0.1rem 0.4rem; border: 1px solid #f59e0b; color: #f59e0b; border-radius: 2px; flex-shrink: 0; }
+	.role-chip { font-size: 0.62rem; padding: 0.1rem 0.4rem; border: 1px solid; border-radius: 2px; flex-shrink: 0; }
+	.role-select-sm { font-size: 0.72rem; padding: 0.15rem 0.35rem; background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text-primary); max-width: 110px; font-family: inherit; }
+	.ban-reason { font-size: 0.65rem; color: var(--text-muted); font-style: italic; }
+	.danger-item-row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0.85rem; border: 1px solid var(--error); border-radius: var(--radius); }
+	.danger-item-row p { font-size: 0.75rem; color: var(--text-muted); margin-top: 0.2rem; }
+	.danger-title { color: var(--error) !important; }
 
 	/* ── Load more / channel start ───────────────────────────────────────── */
 	.loading-more {
