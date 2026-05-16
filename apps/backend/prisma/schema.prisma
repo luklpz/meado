@@ -44,11 +44,16 @@ model User {
   createdAt     DateTime          @default(now())
   updatedAt     DateTime          @updatedAt
 
-  ownedServers  Server[]          @relation("ServerOwner")
-  servers       ServerMember[]
-  whitelist     ServerWhitelist[]
-  messages      Message[]
-  reactions     MessageReaction[]
+  ownedServers         Server[]                   @relation("ServerOwner")
+  servers              ServerMember[]
+  whitelist            ServerWhitelist[]
+  messages             Message[]
+  reactions            MessageReaction[]
+  sentFriendships      Friendship[]               @relation("SentFriendships")
+  receivedFriendships  Friendship[]               @relation("ReceivedFriendships")
+  dmMemberships        DirectConversationMember[]
+  directMessages       DirectMessage[]
+  directReactions      DirectMessageReaction[]
 }
 
 // ── Server ───────────────────────────────────────────────────────────────────
@@ -166,6 +171,87 @@ model MessageReaction {
 
   message   Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
   user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([messageId, userId, emoji])
+}
+
+// ── Friends ───────────────────────────────────────────────────────────────────
+
+enum FriendshipStatus {
+  PENDING
+  ACCEPTED
+  BLOCKED
+}
+
+model Friendship {
+  id         String           @id @default(cuid())
+  senderId   String
+  receiverId String
+  status     FriendshipStatus @default(PENDING)
+  createdAt  DateTime         @default(now())
+  updatedAt  DateTime         @updatedAt
+
+  sender     User             @relation("SentFriendships", fields: [senderId], references: [id], onDelete: Cascade)
+  receiver   User             @relation("ReceivedFriendships", fields: [receiverId], references: [id], onDelete: Cascade)
+
+  @@unique([senderId, receiverId])
+}
+
+// ── Direct Messages ───────────────────────────────────────────────────────────
+
+model DirectConversation {
+  id        String                     @id @default(cuid())
+  name      String?
+  createdAt DateTime                   @default(now())
+  updatedAt DateTime                   @updatedAt
+
+  members   DirectConversationMember[]
+  messages  DirectMessage[]
+}
+
+model DirectConversationMember {
+  userId         String
+  conversationId String
+  joinedAt       DateTime @default(now())
+
+  user           User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  conversation   DirectConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@id([userId, conversationId])
+}
+
+model DirectMessage {
+  id             String                  @id @default(cuid())
+  content        String?
+  conversationId String
+  authorId       String
+  createdAt      DateTime                @default(now())
+  editedAt       DateTime?
+
+  conversation   DirectConversation      @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  author         User                    @relation(fields: [authorId], references: [id])
+  attachments    DirectAttachment[]
+  reactions      DirectMessageReaction[]
+}
+
+model DirectAttachment {
+  id        String        @id @default(cuid())
+  url       String
+  name      String
+  size      Int
+  mimeType  String
+  messageId String
+
+  message   DirectMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+}
+
+model DirectMessageReaction {
+  messageId String
+  userId    String
+  emoji     String
+
+  message   DirectMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@id([messageId, userId, emoji])
 }

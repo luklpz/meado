@@ -35,6 +35,17 @@ export interface MessageReaction {
   me: boolean;
 }
 
+export interface DmMessagePayload {
+  id: string;
+  content: string | null;
+  conversationId: string;
+  createdAt: string;
+  editedAt: string | null;
+  author: MessageAuthor;
+  attachments: MessageAttachment[];
+  reactions: MessageReaction[];
+}
+
 export interface ClientToServerEvents {
   'channel:join': (payload: { channelId: string }) => void;
   'channel:leave': (payload: { channelId: string }) => void;
@@ -44,6 +55,11 @@ export interface ClientToServerEvents {
   'typing:start': (payload: { channelId: string }) => void;
   'typing:stop': (payload: { channelId: string }) => void;
   'reaction:toggle': (payload: { messageId: string; emoji: string }) => void;
+  'dm:join': (payload: { conversationId: string }) => void;
+  'dm:leave': (payload: { conversationId: string }) => void;
+  'dm:send': (payload: { conversationId: string; content: string }) => void;
+  'dm:typing:start': (payload: { conversationId: string }) => void;
+  'dm:typing:stop': (payload: { conversationId: string }) => void;
 }
 
 export interface ServerToClientEvents {
@@ -55,4 +71,7 @@ export interface ServerToClientEvents {
   'voice:left': (payload: { channelId: string; userId: string }) => void;
   'typing:update': (payload: { channelId: string; usernames: string[] }) => void;
   'reaction:updated': (payload: { messageId: string; channelId: string; reactions: MessageReaction[] }) => void;
+  'dm:message:created': (payload: DmMessagePayload) => void;
+  'dm:typing:update': (payload: { conversationId: string; usernames: string[] }) => void;
+  'presence:update': (payload: { userId: string; online: boolean }) => void;
 }

@@ -129,9 +129,7 @@
 
 <style>
 	.profile-menu {
-		position: fixed;
-		top: 1rem;
-		right: 1rem;
+		position: relative;
 		z-index: 200;
 		font-family: var(--font-mono);
 	}
@@ -169,8 +167,8 @@
 	/* ── Panel ── */
 	.panel {
 		position: absolute;
-		top: calc(100% + 0.6rem);
-		right: 0;
+		bottom: calc(100% + 0.6rem);
+		left: calc(100% + 0.4rem);
 		min-width: 220px;
 		background: var(--bg-surface);
 		border: 1px solid var(--border);

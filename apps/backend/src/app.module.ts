@@ -6,6 +6,8 @@ import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './auth/auth.module';
 import { ServersModule } from './servers/servers.module';
 import { MessagesModule } from './messages/messages.module';
+import { FriendsModule } from './friends/friends.module';
+import { DmModule } from './dm/dm.module';
 
 @Module({
   imports: [
@@ -15,6 +17,8 @@ import { MessagesModule } from './messages/messages.module';
     AuthModule,
     ServersModule,
     MessagesModule,
+    FriendsModule,
+    DmModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })

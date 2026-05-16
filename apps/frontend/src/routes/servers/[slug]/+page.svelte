@@ -1170,7 +1170,7 @@
 	.discord-layout {
 		display: grid;
 		grid-template-columns: 240px 1fr;
-		grid-template-rows: 100vh;
+		height: 100%;
 		overflow: hidden;
 		background: var(--bg-base);
 	}
