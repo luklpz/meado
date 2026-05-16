@@ -18,7 +18,7 @@
 	let conversations = $state<Conversation[]>([...data.conversations]);
 
 	let activeTab = $state<'online' | 'all' | 'pending' | 'add'>('online');
-	let addUsername = $state('');
+	let addIdentifier = $state('');
 	let addError = $state('');
 	let addSuccess = $state('');
 	let addLoading = $state(false);
@@ -75,7 +75,7 @@
 	const incomingPending = $derived(pending.filter(p => p.direction === 'incoming'));
 
 	async function sendFriendRequest() {
-		if (!addUsername.trim()) return;
+		if (!addIdentifier.trim()) return;
 		addError = '';
 		addSuccess = '';
 		addLoading = true;
@@ -84,7 +84,7 @@
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				credentials: 'include',
-				body: JSON.stringify({ username: addUsername.trim() }),
+				body: JSON.stringify({ identifier: addIdentifier.trim() }),
 			});
 			if (!res.ok) {
 				const err = await res.json().catch(() => ({}));
@@ -92,8 +92,8 @@
 				return;
 			}
 			const p = await res.json();
-			addSuccess = `Solicitud enviada a ${addUsername.trim()}.`;
-			addUsername = '';
+			addSuccess = `Solicitud enviada a ${addIdentifier.trim()}.`;
+			addIdentifier = '';
 			pending = [...pending, { id: p.id, direction: 'outgoing', user: p.receiver, createdAt: p.createdAt }];
 		} catch {
 			addError = 'Error de red.';
@@ -334,15 +334,15 @@
 			{:else if activeTab === 'add'}
 				<div class="add-friend-panel">
 					<h3>Añadir amigo</h3>
-					<p>Busca por nombre de usuario exacto.</p>
+					<p>Busca por username o email.</p>
 					<div class="add-form">
 						<input
 							type="text"
-							bind:value={addUsername}
-							placeholder="Nombre de usuario"
+							bind:value={addIdentifier}
+							placeholder="username o email"
 							onkeydown={(e) => e.key === 'Enter' && sendFriendRequest()}
 						/>
-						<button class="btn-primary" onclick={sendFriendRequest} disabled={addLoading || !addUsername.trim()}>
+						<button class="btn-primary" onclick={sendFriendRequest} disabled={addLoading || !addIdentifier.trim()}>
 							{addLoading ? '…' : 'Enviar solicitud'}
 						</button>
 					</div>

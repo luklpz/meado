@@ -232,11 +232,26 @@ export class ServersService {
       where: { serverId: server.id },
       select: {
         joinedAt: true,
-        user: { select: { id: true, username: true, avatarUrl: true } },
+        nickname: true,
+        user: { select: { id: true, username: true, name: true, avatarUrl: true } },
         role: { select: { id: true, name: true, color: true } },
       },
       orderBy: { joinedAt: 'asc' },
     });
+  }
+
+  async setNickname(slug: string, userId: string, nickname: string | null) {
+    const server = await this.prisma.server.findUnique({ where: { slug } });
+    if (!server) throw new NotFoundException('Server not found');
+    const member = await this.prisma.serverMember.findUnique({
+      where: { userId_serverId: { userId, serverId: server.id } },
+    });
+    if (!member) throw new ForbiddenException('Not a member');
+    await this.prisma.serverMember.update({
+      where: { userId_serverId: { userId, serverId: server.id } },
+      data: { nickname: nickname?.trim() || null },
+    });
+    return { nickname: nickname?.trim() || null };
   }
 
   async kickMember(slug: string, targetUserId: string, requesterId: string, requesterRole: string) {

@@ -93,6 +93,15 @@ export class ServersController {
     return this.serversService.kickMember(slug, userId, id, role);
   }
 
+  @Patch(':slug/members/me/nickname')
+  setNickname(
+    @Param('slug') slug: string,
+    @Body('nickname') nickname: string | undefined,
+    @Req() req: Request,
+  ) {
+    return this.serversService.setNickname(slug, user(req).id, nickname ?? null);
+  }
+
   @Patch(':slug/members/:userId/role')
   assignRole(
     @Param('slug') slug: string,

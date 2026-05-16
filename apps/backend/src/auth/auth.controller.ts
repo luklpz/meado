@@ -89,4 +89,11 @@ export class AuthController {
   me(@Req() req: Request) {
     return this.authService.getMe((req as any).user);
   }
+
+  @UseGuards(JwtAuthGuard)
+  @Patch('profile')
+  @HttpCode(200)
+  updateProfile(@Req() req: Request, @Body() body: { name?: string }) {
+    return this.authService.updateProfile((req as any).user.id, body);
+  }
 }

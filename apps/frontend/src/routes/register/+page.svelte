@@ -1,7 +1,10 @@
 <script lang="ts">
 	import { authStore } from '$lib/auth.js';
 
+	const USERNAME_RE = /^[a-zA-Z0-9]+$/;
+
 	let username = $state('');
+	let name = $state('');
 	let email = $state('');
 	let password = $state('');
 	let password2 = $state('');
@@ -9,13 +12,21 @@
 	let loading = $state(false);
 	let success = $state(false);
 
+	let usernameError = $derived(
+		username.length > 0 && !USERNAME_RE.test(username)
+			? 'Solo letras y números'
+			: ''
+	);
+
 	async function handleRegister(e: SubmitEvent) {
 		e.preventDefault();
 		error = '';
+		if (!USERNAME_RE.test(username)) { error = 'El username solo puede contener letras y números.'; return; }
+		if (username.length < 3) { error = 'El username debe tener al menos 3 caracteres.'; return; }
 		if (password !== password2) { error = 'Las contraseñas no coinciden.'; return; }
 		loading = true;
 		try {
-			await authStore.register(username, email, password);
+			await authStore.register(username, email, password, name || undefined);
 			success = true;
 		} catch (err) {
 			error = err instanceof Error ? err.message : 'Error al registrarse.';
@@ -43,9 +54,22 @@
 		{:else}
 			<form onsubmit={handleRegister}>
 				<label>
-					<span>Nombre de usuario</span>
+					<span class="label-row">
+						Username
+						<span class="label-hint">identificador único · solo letras y números</span>
+					</span>
 					<input type="text" bind:value={username} autocomplete="username"
-						required minlength="3" maxlength="24" />
+						required minlength="3" maxlength="32"
+						class:input-error={usernameError} />
+					{#if usernameError}<span class="field-error">{usernameError}</span>{/if}
+				</label>
+				<label>
+					<span class="label-row">
+						Nombre visible
+						<span class="label-hint">opcional · lo que ven los demás</span>
+					</span>
+					<input type="text" bind:value={name} autocomplete="name" maxlength="64"
+						placeholder="Igual que username si se deja vacío" />
 				</label>
 				<label>
 					<span>Email</span>
@@ -66,7 +90,7 @@
 					<p class="error">{error}</p>
 				{/if}
 
-				<button type="submit" disabled={loading}>
+				<button type="submit" disabled={loading || !!usernameError}>
 					{loading ? 'Creando cuenta…' : 'Crear cuenta'}
 				</button>
 			</form>
@@ -94,7 +118,7 @@
 		border-radius: var(--radius-lg);
 		background: var(--bg-surface);
 		width: 100%;
-		max-width: 360px;
+		max-width: 380px;
 	}
 
 	.logo {
@@ -115,6 +139,17 @@
 		color: var(--text-secondary);
 	}
 
+	.label-row {
+		display: flex;
+		align-items: baseline;
+		gap: 0.4rem;
+	}
+
+	.label-hint {
+		font-size: 0.65rem;
+		color: var(--text-muted);
+	}
+
 	input {
 		font-size: 0.85rem;
 		padding: 0.5rem 0.65rem;
@@ -127,6 +162,10 @@
 	}
 
 	input:focus { border-color: var(--border-focus); }
+	input.input-error { border-color: var(--error); }
+	input::placeholder { color: var(--text-muted); font-size: 0.75rem; }
+
+	.field-error { font-size: 0.68rem; color: var(--error); margin-top: -0.1rem; }
 
 	button {
 		font-size: 0.85rem;

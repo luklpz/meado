@@ -8,6 +8,9 @@
 	let open = $state(false);
 	let uploading = $state(false);
 	let uploadError = $state('');
+	let editingName = $state(false);
+	let nameInput = $state('');
+	let nameError = $state('');
 	let panelTop = $state(0);
 	let panelLeft = $state(0);
 	let btnEl: HTMLButtonElement;
@@ -26,6 +29,16 @@
 
 	function setTheme(t: Theme) {
 		themeStore.set(t);
+	}
+
+	async function saveName() {
+		nameError = '';
+		try {
+			await authStore.updateProfile(nameInput);
+			editingName = false;
+		} catch (err) {
+			nameError = err instanceof Error ? err.message : 'Error';
+		}
 	}
 
 	async function handleFileChange(e: Event) {
@@ -85,7 +98,26 @@
 						{/if}
 					</div>
 					<div class="user-meta">
-						<span class="user-name">{$user.username}</span>
+						{#if editingName}
+							<div class="name-edit-row">
+								<input
+									class="name-input"
+									bind:value={nameInput}
+									placeholder="Nombre visible"
+									maxlength="64"
+									onkeydown={e => { if (e.key === 'Enter') saveName(); if (e.key === 'Escape') editingName = false; }}
+								/>
+								<button class="name-save-btn" onclick={saveName}>✓</button>
+								<button class="name-cancel-btn" onclick={() => editingName = false}>✕</button>
+							</div>
+							{#if nameError}<span class="name-error">{nameError}</span>{/if}
+						{:else}
+							<button class="name-btn" onclick={() => { nameInput = $user?.name ?? ''; editingName = true; }}>
+								<span class="user-display-name">{$user.name || $user.username}</span>
+								<span class="edit-hint">✎</span>
+							</button>
+							<span class="user-tag">@{$user.username}</span>
+						{/if}
 						{#if $user.role === 'ADMIN' || $user.role === 'SUPERADMIN'}
 							<span class="role-badge">Admin</span>
 						{/if}
@@ -222,9 +254,64 @@
 
 	.initial-lg { line-height: 1; }
 
-	.user-meta { display: flex; flex-direction: column; gap: 0.2rem; }
+	.user-meta { display: flex; flex-direction: column; gap: 0.15rem; }
 
-	.user-name { font-size: 0.82rem; font-weight: 600; color: var(--text-primary); }
+	.name-btn {
+		display: flex;
+		align-items: center;
+		gap: 0.3rem;
+		background: transparent;
+		border: none;
+		padding: 0;
+		cursor: pointer;
+		text-align: left;
+	}
+
+	.user-display-name { font-size: 0.82rem; font-weight: 600; color: var(--text-primary); }
+
+	.edit-hint {
+		font-size: 0.62rem;
+		color: var(--text-muted);
+		opacity: 0;
+		transition: opacity var(--transition);
+	}
+
+	.name-btn:hover .edit-hint { opacity: 1; }
+
+	.user-tag { font-size: 0.65rem; color: var(--text-muted); }
+
+	.name-edit-row {
+		display: flex;
+		align-items: center;
+		gap: 0.25rem;
+	}
+
+	.name-input {
+		font-size: 0.78rem;
+		padding: 0.2rem 0.35rem;
+		background: var(--bg-elevated);
+		border: 1px solid var(--border-focus);
+		border-radius: var(--radius-sm);
+		color: var(--text-primary);
+		outline: none;
+		width: 120px;
+	}
+
+	.name-save-btn, .name-cancel-btn {
+		background: transparent;
+		border: none;
+		cursor: pointer;
+		font-size: 0.75rem;
+		padding: 0.1rem 0.25rem;
+		border-radius: var(--radius-sm);
+	}
+
+	.name-save-btn { color: var(--success); }
+	.name-save-btn:hover { background: var(--success-surface); }
+	.name-cancel-btn { color: var(--text-muted); }
+	.name-cancel-btn:hover { background: var(--bg-elevated); }
+
+	.name-error { font-size: 0.65rem; color: var(--error); }
 
 	.role-badge {
 		font-size: 0.58rem;

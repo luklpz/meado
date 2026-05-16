@@ -3,14 +3,17 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
-const USER_SELECT = { id: true, username: true, avatarUrl: true } as const;
+const USER_SELECT = { id: true, username: true, name: true, avatarUrl: true } as const;
 
 @Injectable()
 export class FriendsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async sendRequest(senderId: string, username: string) {
-    const receiver = await this.prisma.user.findUnique({ where: { username } });
+  async sendRequest(senderId: string, identifier: string) {
+    const isEmail = identifier.includes('@');
+    const receiver = await this.prisma.user.findFirst({
+      where: isEmail ? { email: identifier.toLowerCase() } : { username: identifier },
+    });
     if (!receiver) throw new NotFoundException('User not found');
     if (receiver.id === senderId) throw new BadRequestException('Cannot add yourself');
 
@@ -73,6 +76,19 @@ export class FriendsService {
     return { ok: true };
   }
 
+  async setAlias(userId: string, friendshipId: string, alias: string | null) {
+    const friendship = await this.prisma.friendship.findUnique({ where: { id: friendshipId } });
+    if (!friendship) throw new NotFoundException('Friendship not found');
+    if (friendship.senderId !== userId && friendship.receiverId !== userId) {
+      throw new ForbiddenException('Not your friendship');
+    }
+    const field = friendship.senderId === userId ? 'aliasBySender' : 'aliasByReceiver';
+    return this.prisma.friendship.update({
+      where: { id: friendshipId },
+      data: { [field]: alias?.trim() || null },
+    });
+  }
+
   async getFriends(userId: string, onlineUserIds: Set<string>) {
     const rows = await this.prisma.friendship.findMany({
       where: { status: 'ACCEPTED', OR: [{ senderId: userId }, { receiverId: userId }] },
@@ -82,8 +98,14 @@ export class FriendsService {
       },
     });
     return rows.map(f => {
-      const friend = f.senderId === userId ? f.receiver : f.sender;
-      return { id: f.id, user: { ...friend, online: onlineUserIds.has(friend.id) } };
+      const isSender = f.senderId === userId;
+      const friend = isSender ? f.receiver : f.sender;
+      const alias = isSender ? f.aliasBySender : f.aliasByReceiver;
+      return {
+        id: f.id,
+        alias,
+        user: { ...friend, online: onlineUserIds.has(friend.id) },
+      };
     });
   }
 

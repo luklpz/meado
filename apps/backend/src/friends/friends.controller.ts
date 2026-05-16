@@ -1,5 +1,5 @@
 import {
-  Controller, Get, Post, Delete, Param, Body, Req, UseGuards,
+  Controller, Get, Post, Patch, Delete, Param, Body, Req, UseGuards,
 } from '@nestjs/common';
 import { FriendsService } from './friends.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -24,13 +24,18 @@ export class FriendsController {
   }
 
   @Post('request')
-  sendRequest(@Req() req: any, @Body() body: { username: string }) {
-    return this.friendsService.sendRequest(req.user.id, body.username);
+  sendRequest(@Req() req: any, @Body() body: { identifier: string }) {
+    return this.friendsService.sendRequest(req.user.id, body.identifier);
   }
 
   @Post('accept/:id')
   accept(@Req() req: any, @Param('id') id: string) {
     return this.friendsService.accept(req.user.id, id);
+  }
+
+  @Patch(':id/alias')
+  setAlias(@Req() req: any, @Param('id') id: string, @Body() body: { alias?: string }) {
+    return this.friendsService.setAlias(req.user.id, id, body.alias ?? null);
   }
 
   @Delete(':id')

@@ -36,6 +36,7 @@ enum ChannelType {
 model User {
   id            String            @id @default(cuid())
   username      String            @unique
+  name          String?
   email         String            @unique
   passwordHash  String
   emailVerified Boolean           @default(false)
@@ -100,10 +101,11 @@ model ServerRole {
 }
 
 model ServerMember {
-  userId   String
-  serverId String
-  roleId   String?
-  joinedAt DateTime    @default(now())
+  userId    String
+  serverId  String
+  roleId    String?
+  nickname  String?
+  joinedAt  DateTime    @default(now())
 
   user     User        @relation(fields: [userId], references: [id], onDelete: Cascade)
   server   Server      @relation(fields: [serverId], references: [id], onDelete: Cascade)
@@ -184,12 +186,14 @@ enum FriendshipStatus {
 }
 
 model Friendship {
-  id         String           @id @default(cuid())
-  senderId   String
-  receiverId String
-  status     FriendshipStatus @default(PENDING)
-  createdAt  DateTime         @default(now())
-  updatedAt  DateTime         @updatedAt
+  id              String           @id @default(cuid())
+  senderId        String
+  receiverId      String
+  status          FriendshipStatus @default(PENDING)
+  aliasBySender   String?
+  aliasByReceiver String?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
 
   sender     User             @relation("SentFriendships", fields: [senderId], references: [id], onDelete: Cascade)
   receiver   User             @relation("ReceivedFriendships", fields: [receiverId], references: [id], onDelete: Cascade)

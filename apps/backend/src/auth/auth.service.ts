@@ -11,9 +11,12 @@ import type { LoginDto } from './dto/login.dto';
 export interface PublicUser {
   id: string;
   username: string;
+  name?: string | null;
   role: string;
   avatarUrl?: string | null;
 }
+
+const USERNAME_RE = /^[a-zA-Z0-9]+$/;
 
 const secret = () => process.env.JWT_SECRET ?? 'dev-secret';
 
@@ -32,6 +35,13 @@ export class AuthService {
   ) {}
 
   async register(dto: RegisterDto): Promise<{ message: string }> {
+    if (!USERNAME_RE.test(dto.username)) {
+      throw new BadRequestException('Username must contain only letters and numbers');
+    }
+    if (dto.username.length < 3 || dto.username.length > 32) {
+      throw new BadRequestException('Username must be 3–32 characters');
+    }
+
     const normalizedEmail = normalizeEmail(dto.email);
 
     const [byUsername, byEmail] = await Promise.all([
@@ -46,7 +56,13 @@ export class AuthService {
     const passwordHash = await bcrypt.hash(dto.password, 12);
 
     const user = await this.prisma.user.create({
-      data: { username: dto.username, email: normalizedEmail, passwordHash, role: role as any },
+      data: {
+        username: dto.username,
+        name: dto.name?.trim() || null,
+        email: normalizedEmail,
+        passwordHash,
+        role: role as any,
+      },
       select: { id: true, username: true, email: true },
     });
 
@@ -79,7 +95,7 @@ export class AuthService {
     }
 
     return this.buildResult({
-      id: user.id, username: user.username, role: user.role as string, avatarUrl: user.avatarUrl,
+      id: user.id, username: user.username, name: user.name, role: user.role as string, avatarUrl: user.avatarUrl,
     });
   }
 
@@ -182,7 +198,7 @@ export class AuthService {
   async getMe(user: PublicUser): Promise<PublicUser & { socketToken: string }> {
     const dbUser = await this.prisma.user.findUnique({
       where: { id: user.id },
-      select: { avatarUrl: true },
+      select: { avatarUrl: true, name: true },
     });
 
     const socketToken = jwt.sign(
@@ -191,7 +207,13 @@ export class AuthService {
       { expiresIn: '1h' },
     );
 
-    return { ...user, avatarUrl: dbUser?.avatarUrl, socketToken };
+    return { ...user, name: dbUser?.name, avatarUrl: dbUser?.avatarUrl, socketToken };
+  }
+
+  async updateProfile(userId: string, dto: { name?: string }): Promise<{ name: string | null }> {
+    const name = dto.name?.trim() || null;
+    await this.prisma.user.update({ where: { id: userId }, data: { name } });
+    return { name };
   }
 
   private buildResult(user: PublicUser): { token: string; user: PublicUser } {
