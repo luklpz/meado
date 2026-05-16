@@ -39,8 +39,23 @@
 		);
 	}
 
+	function playPing() {
+		try {
+			const ctx = new AudioContext();
+			const osc = ctx.createOscillator();
+			const gain = ctx.createGain();
+			osc.connect(gain);
+			gain.connect(ctx.destination);
+			osc.frequency.value = 880;
+			osc.type = 'sine';
+			gain.gain.setValueAtTime(0.25, ctx.currentTime);
+			gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
+			osc.start(ctx.currentTime);
+			osc.stop(ctx.currentTime + 0.35);
+		} catch {}
+	}
+
 	function handleDmMessage(msg: any) {
-		// Update lastMessage in conversation list
 		conversations = conversations
 			.map(c => c.id === msg.conversationId
 				? { ...c, lastMessage: { id: msg.id, content: msg.content, createdAt: msg.createdAt, author: msg.author } }
@@ -51,7 +66,10 @@
 				const tb = b.lastMessage ? new Date(b.lastMessage.createdAt).getTime() : 0;
 				return tb - ta;
 			});
-		incrementUnread(msg.conversationId);
+		if (msg.author?.id !== user.id) {
+			incrementUnread(msg.conversationId);
+			playPing();
+		}
 	}
 
 	onMount(() => {

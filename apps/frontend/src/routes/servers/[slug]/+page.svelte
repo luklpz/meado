@@ -92,6 +92,36 @@
 	let bans = $state<{ userId: string; user: { id: string; username: string; name?: string | null; avatarUrl?: string | null }; reason?: string | null }[]>([]);
 	let bansLoading = $state(false);
 
+	// ── Profile card ──────────────────────────────────────────────────────
+	interface ProfileCardData {
+		userId: string; username: string;
+		name?: string | null; avatarUrl?: string | null;
+		nickname?: string | null;
+		role?: { name: string; color?: string | null } | null;
+	}
+	let profileCard = $state<(ProfileCardData & { x: number; y: number }) | null>(null);
+
+	function openProfileCard(data: ProfileCardData, e: MouseEvent) {
+		e.stopPropagation();
+		const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+		const cardW = 248;
+		const cardH = 230;
+		const x = r.left + r.width / 2 > window.innerWidth / 2
+			? r.left - cardW - 8
+			: r.right + 8;
+		const y = Math.min(r.top, window.innerHeight - cardH - 8);
+		profileCard = { ...data, x, y };
+	}
+
+	function memberCardData(m: Member): ProfileCardData {
+		return { userId: m.user.id, username: m.user.username, name: m.user.name, avatarUrl: m.user.avatarUrl, nickname: m.nickname, role: m.role };
+	}
+
+	function authorCardData(msg: MessagePayload): ProfileCardData {
+		const member = members.find(m => m.user.id === msg.author.id);
+		return { userId: msg.author.id, username: msg.author.username, avatarUrl: msg.author.avatarUrl, nickname: member?.nickname, role: member?.role };
+	}
+
 	// ── Profile dropdown ───────────────────────────────────────────────────
 	let showProfile = $state(false);
 
@@ -971,15 +1001,17 @@
 						>
 							{#if !sameAuthor}
 								<div class="avatar-col">
-									{#if msg.author.avatarUrl}
-										<img src={msg.author.avatarUrl} class="avatar-msg" alt="" />
-									{:else}
-										<div class="avatar-msg avatar-init">{avatarInitial(msg.author.username)}</div>
-									{/if}
+									<button class="avatar-btn-msg" onclick={(e) => openProfileCard(authorCardData(msg), e)}>
+										{#if msg.author.avatarUrl}
+											<img src={msg.author.avatarUrl} class="avatar-msg" alt="" />
+										{:else}
+											<div class="avatar-msg avatar-init">{avatarInitial(msg.author.username)}</div>
+										{/if}
+									</button>
 								</div>
 								<div class="msg-body">
 									<div class="msg-header">
-										<span class="msg-author">{msg.author.username}</span>
+										<button class="msg-author-btn" onclick={(e) => openProfileCard(authorCardData(msg), e)}>{msg.author.username}</button>
 										<span class="msg-time">{formatTime(msg.createdAt)}</span>
 										{#if msg.editedAt}<span class="msg-edited">(editado)</span>{/if}
 									</div>
@@ -1385,18 +1417,21 @@
 			{:else}
 				<ul class="members-list">
 					{#each members as m (m.user.id)}
-						<li class="member-item">
+						<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+						<li class="member-item" onclick={(e) => openProfileCard(memberCardData(m), e)} onkeydown={() => {}}>
 							{#if m.user.avatarUrl}
 								<img src={m.user.avatarUrl} class="avatar-sm" alt="" />
 							{:else}
 								<div class="avatar-sm avatar-init">{avatarInitial(m.user.username)}</div>
 							{/if}
 							<div class="member-info">
-								<span class="member-name">{m.user.username}</span>
+								<span class="member-name">{m.nickname ?? m.user.name ?? m.user.username}</span>
 								{#if canManage && roles.length > 0 && m.user.id !== user.id}
+									<!-- svelte-ignore a11y_click_events_have_key_events -->
 									<select
 										class="role-select"
 										value={m.role?.id ?? ''}
+										onclick={(e) => e.stopPropagation()}
 										onchange={(e) => assignRole(m.user.id, (e.target as HTMLSelectElement).value || null)}
 									>
 										<option value="">Sin rol</option>
@@ -1411,10 +1446,10 @@
 								{/if}
 							</div>
 							{#if m.user.id !== user.id}
-								<button class="dm-btn" title="Mensaje directo" onclick={() => openDm(m.user.id)}>💬</button>
+								<button class="dm-btn" title="Mensaje directo" onclick={(e) => { e.stopPropagation(); openDm(m.user.id); }}>💬</button>
 							{/if}
 							{#if canManage && m.user.id !== user.id}
-								<button class="kick-btn" title="Expulsar" onclick={() => kickMember(m.user.id, m.user.username)}>✕</button>
+								<button class="kick-btn" title="Expulsar" onclick={(e) => { e.stopPropagation(); kickMember(m.user.id, m.user.username); }}>✕</button>
 							{/if}
 						</li>
 					{/each}
@@ -1425,6 +1460,46 @@
 
 	{#if toast}
 		<div class="toast">{toast}</div>
+	{/if}
+
+	<!-- ── Profile card ───────────────────────────────────────────────────── -->
+	{#if profileCard}
+		<!-- svelte-ignore a11y_no_static_element_interactions -->
+		<div class="pc-overlay" onclick={() => (profileCard = null)} onkeydown={() => {}}></div>
+		<div class="profile-card" style="top:{profileCard.y}px; left:{profileCard.x}px;">
+			<div class="pc-avatar-wrap">
+				{#if profileCard.avatarUrl}
+					<img src={profileCard.avatarUrl} class="pc-avatar-img" alt="" />
+				{:else}
+					<div class="pc-avatar-init">{avatarInitial(profileCard.username)}</div>
+				{/if}
+			</div>
+			<div class="pc-body">
+				<div class="pc-displayname">
+					{profileCard.nickname ?? profileCard.name ?? profileCard.username}
+				</div>
+				{#if profileCard.nickname || profileCard.name}
+					<div class="pc-tag">@{profileCard.username}</div>
+				{/if}
+				{#if profileCard.role}
+					<div class="pc-role" style="color:{profileCard.role.color ?? 'var(--text-muted)'}">
+						{profileCard.role.name}
+					</div>
+				{/if}
+			</div>
+			{#if profileCard.userId !== user.id}
+				<div class="pc-actions">
+					<button class="pc-dm-btn" onclick={() => { const uid = profileCard!.userId; profileCard = null; openDm(uid); }}>
+						💬 Enviar mensaje
+					</button>
+					{#if canManage}
+						<button class="pc-kick-btn" onclick={() => { const u = profileCard!; profileCard = null; kickMember(u.userId, u.username); }}>
+							Expulsar
+						</button>
+					{/if}
+				</div>
+			{/if}
+		</div>
 	{/if}
 </div>
 
@@ -1956,6 +2031,19 @@
 	.msg-header { display: flex; align-items: baseline; gap: 0.4rem; }
 
 	.msg-author { font-size: 0.875rem; font-weight: 600; color: var(--text-primary); }
+
+	.avatar-btn-msg {
+		background: transparent; border: none; padding: 0; cursor: pointer;
+		border-radius: 50%; display: block;
+	}
+	.avatar-btn-msg:hover { opacity: 0.8; }
+
+	.msg-author-btn {
+		background: transparent; border: none; padding: 0; cursor: pointer;
+		font-size: 0.875rem; font-weight: 600; color: var(--text-primary);
+		font-family: inherit;
+	}
+	.msg-author-btn:hover { text-decoration: underline; }
 
 	.msg-time { font-size: 0.68rem; color: var(--text-muted); }
 
@@ -2884,4 +2972,77 @@
 
 		.hamburger-btn { display: flex; }
 	}
+
+	/* ── Profile card ──────────────────────────────────────────────────────── */
+	.pc-overlay {
+		position: fixed; inset: 0; z-index: 300;
+	}
+	.profile-card {
+		position: fixed;
+		z-index: 301;
+		width: 248px;
+		background: var(--bg-surface);
+		border: 1px solid var(--border-strong);
+		border-radius: var(--radius-lg);
+		box-shadow: 0 12px 40px rgba(0,0,0,0.55);
+		overflow: hidden;
+	}
+	.pc-avatar-wrap {
+		width: 100%;
+		height: 72px;
+		background: var(--bg-elevated);
+		display: flex;
+		align-items: flex-end;
+		padding: 0 1rem;
+	}
+	.pc-avatar-img {
+		width: 64px; height: 64px; border-radius: 50%;
+		object-fit: cover;
+		border: 4px solid var(--bg-surface);
+		transform: translateY(32px);
+		flex-shrink: 0;
+	}
+	.pc-avatar-init {
+		width: 64px; height: 64px; border-radius: 50%;
+		background: var(--accent);
+		color: var(--accent-text);
+		display: flex; align-items: center; justify-content: center;
+		font-size: 1.4rem; font-weight: 700;
+		border: 4px solid var(--bg-surface);
+		transform: translateY(32px);
+		flex-shrink: 0;
+	}
+	.pc-body {
+		padding: 2.6rem 1rem 0.75rem;
+		display: flex; flex-direction: column; gap: 0.1rem;
+	}
+	.pc-displayname { font-size: 1rem; font-weight: 700; color: var(--text-primary); }
+	.pc-tag { font-size: 0.72rem; color: var(--text-muted); }
+	.pc-role { font-size: 0.7rem; font-weight: 600; margin-top: 0.2rem; }
+	.pc-actions {
+		padding: 0.5rem 1rem 0.75rem;
+		display: flex; gap: 0.4rem; flex-wrap: wrap;
+	}
+	.pc-dm-btn {
+		flex: 1;
+		padding: 0.4rem 0.75rem;
+		background: var(--accent);
+		color: var(--accent-text);
+		border: none; border-radius: var(--radius);
+		cursor: pointer; font-size: 0.8rem; font-weight: 600;
+		font-family: inherit;
+		transition: opacity var(--transition);
+	}
+	.pc-dm-btn:hover { opacity: 0.85; }
+	.pc-kick-btn {
+		padding: 0.4rem 0.75rem;
+		background: transparent;
+		border: 1px solid var(--error);
+		color: var(--error);
+		border-radius: var(--radius);
+		cursor: pointer; font-size: 0.78rem;
+		font-family: inherit;
+		transition: background var(--transition);
+	}
+	.pc-kick-btn:hover { background: var(--error-surface); }
 </style>
