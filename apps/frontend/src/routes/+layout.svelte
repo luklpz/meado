@@ -311,7 +311,7 @@
 
 	/* ── Rail ── */
 	.rail {
-		width: 72px;
+		width: 56px;
 		flex-shrink: 0;
 		background: var(--bg-elevated);
 		border-right: 1px solid var(--border);
@@ -328,7 +328,7 @@
 	.rail::-webkit-scrollbar { display: none; }
 
 	.rail-separator {
-		width: 32px;
+		width: 24px;
 		height: 1px;
 		background: var(--border);
 		margin: 0.25rem 0;
@@ -339,8 +339,8 @@
 
 	.rail-btn {
 		position: relative;
-		width: 48px;
-		height: 48px;
+		width: 36px;
+		height: 36px;
 		border-radius: 50%;
 		display: flex;
 		align-items: center;

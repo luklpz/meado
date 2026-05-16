@@ -8,6 +8,9 @@
 	let open = $state(false);
 	let uploading = $state(false);
 	let uploadError = $state('');
+	let panelTop = $state(0);
+	let panelLeft = $state(0);
+	let btnEl: HTMLButtonElement;
 
 	let fileInput: HTMLInputElement;
 
@@ -52,7 +55,15 @@
 />
 
 <div class="profile-menu">
-	<button class="avatar-btn" onclick={() => (open = !open)} aria-label="Perfil y ajustes">
+	<button bind:this={btnEl} class="avatar-btn" onclick={() => {
+		const r = btnEl.getBoundingClientRect();
+		const panelH = 320;
+		panelTop = r.bottom + panelH > window.innerHeight
+			? r.top - panelH
+			: r.bottom + 8;
+		panelLeft = r.right + 8;
+		open = !open;
+	}} aria-label="Perfil y ajustes">
 		{#if $user?.avatarUrl}
 			<img src={$user.avatarUrl} alt={$user.username} class="avatar-img" />
 		{:else if $user}
@@ -63,7 +74,7 @@
 	</button>
 
 	{#if open}
-		<div class="panel">
+		<div class="panel" style="top:{panelTop}px; left:{panelLeft}px;">
 			{#if $user}
 				<div class="user-card">
 					<div class="user-avatar-lg">
@@ -166,9 +177,8 @@
 
 	/* ── Panel ── */
 	.panel {
-		position: absolute;
-		bottom: calc(100% + 0.6rem);
-		left: calc(100% + 0.4rem);
+		position: fixed;
+		z-index: 9999;
 		min-width: 220px;
 		background: var(--bg-surface);
 		border: 1px solid var(--border);
