@@ -380,6 +380,18 @@
 		}
 	}
 
+	async function openDm(userId: string) {
+		const res = await fetch('/api/dm', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			credentials: 'include',
+			body: JSON.stringify({ userIds: [userId] }),
+		});
+		if (!res.ok) return;
+		const conv = await res.json();
+		goto(`/home/dm/${conv.id}`);
+	}
+
 	async function kickMember(userId: string, username: string) {
 		if (!confirm(`¿Expulsar a ${username}?`)) return;
 		const res = await fetch(`/api/servers/${server.slug}/members/${userId}`, {
@@ -1150,6 +1162,9 @@
 									</span>
 								{/if}
 							</div>
+							{#if m.user.id !== user.id}
+								<button class="dm-btn" title="Mensaje directo" onclick={() => openDm(m.user.id)}>💬</button>
+							{/if}
 							{#if canManage && m.user.id !== user.id}
 								<button class="kick-btn" title="Expulsar" onclick={() => kickMember(m.user.id, m.user.username)}>✕</button>
 							{/if}
@@ -1890,6 +1905,7 @@
 
 	.member-item:hover { background: rgba(255,255,255,0.05); }
 	.member-item:hover .kick-btn { opacity: 1; }
+	.member-item:hover .dm-btn { opacity: 1; }
 
 	.member-info {
 		flex: 1;
@@ -1929,6 +1945,20 @@
 	}
 
 	.kick-btn:hover { color: var(--error); }
+
+	.dm-btn {
+		opacity: 0;
+		background: transparent;
+		border: none;
+		color: var(--text-muted);
+		cursor: pointer;
+		font-size: 0.85rem;
+		padding: 0.1rem 0.3rem;
+		border-radius: 3px;
+		transition: color var(--transition), opacity var(--transition);
+		flex-shrink: 0;
+	}
+	.dm-btn:hover { color: var(--accent); }
 
 	/* ── Avatars ──────────────────────────────────────────────────────────── */
 	.avatar-xs { width: 16px; height: 16px; border-radius: 50%; object-fit: cover; flex-shrink: 0; }

@@ -4,6 +4,7 @@
 	import { authStore } from '$lib/auth.js';
 	import { socketStore } from '$lib/socket.js';
 	import type { ChatSocket } from '$lib/socket.js';
+	import { clearUnread } from '$lib/dmStore.js';
 
 	let { data } = $props();
 	const { user } = data;
@@ -82,6 +83,7 @@
 	}
 
 	onMount(() => {
+		clearUnread(conversation.id);
 		const token = authStore.getSocketToken();
 		if (token) {
 			sock = socketStore.connect(token);

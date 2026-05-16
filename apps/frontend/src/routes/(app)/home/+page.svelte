@@ -4,6 +4,7 @@
 	import { authStore } from '$lib/auth.js';
 	import { socketStore } from '$lib/socket.js';
 	import type { ChatSocket } from '$lib/socket.js';
+	import { dmUnread, incrementUnread } from '$lib/dmStore.js';
 
 	let { data } = $props();
 	const { user } = data;
@@ -23,6 +24,9 @@
 	let addLoading = $state(false);
 	let dmLoading = $state(false);
 
+	// New DM modal
+	let showNewDm = $state(false);
+
 	let sock: ChatSocket | null = null;
 
 	function handlePresence(data: { userId: string; online: boolean }) {
@@ -31,16 +35,40 @@
 		);
 	}
 
+	function handleDmMessage(msg: any) {
+		// Update lastMessage in conversation list
+		conversations = conversations
+			.map(c => c.id === msg.conversationId
+				? { ...c, lastMessage: { id: msg.id, content: msg.content, createdAt: msg.createdAt, author: msg.author } }
+				: c
+			)
+			.sort((a, b) => {
+				const ta = a.lastMessage ? new Date(a.lastMessage.createdAt).getTime() : 0;
+				const tb = b.lastMessage ? new Date(b.lastMessage.createdAt).getTime() : 0;
+				return tb - ta;
+			});
+		incrementUnread(msg.conversationId);
+	}
+
 	onMount(() => {
 		const token = authStore.getSocketToken();
 		if (token) {
 			sock = socketStore.connect(token);
 			sock.on('presence:update', handlePresence);
+			sock.on('dm:message:created', handleDmMessage);
+			// Join all DM rooms to receive new message notifications
+			for (const conv of conversations) {
+				sock.emit('dm:join', { conversationId: conv.id });
+			}
 		}
 	});
 
 	onDestroy(() => {
 		sock?.off('presence:update', handlePresence);
+		sock?.off('dm:message:created', handleDmMessage);
+		for (const conv of conversations) {
+			sock?.emit('dm:leave', { conversationId: conv.id });
+		}
 	});
 
 	const onlineFriends = $derived(friends.filter(f => f.user.online));
@@ -150,9 +178,11 @@
 
 		<div class="sidebar-section-header">
 			<span>Mensajes directos</span>
+			<button class="icon-btn" title="Nueva conversación" onclick={() => (showNewDm = true)}>+</button>
 		</div>
 
 		{#each conversations as conv (conv.id)}
+			{@const unread = $dmUnread.get(conv.id) ?? 0}
 			<a href="/home/dm/{conv.id}" class="dm-item">
 				<div class="dm-avatar">
 					{#if convAvatar(conv)}
@@ -164,10 +194,12 @@
 				<div class="dm-info">
 					<div class="dm-name">{convName(conv)}</div>
 					{#if conv.lastMessage}
-						<div class="dm-last">{conv.lastMessage.author.username}: {conv.lastMessage.content ?? '📎'}</div>
+						<div class="dm-last" class:dm-last-unread={unread > 0}>{conv.lastMessage.author.username}: {conv.lastMessage.content ?? '📎'}</div>
 					{/if}
 				</div>
-				{#if conv.lastMessage}
+				{#if unread > 0}
+					<span class="dm-unread-badge">{unread > 9 ? '9+' : unread}</span>
+				{:else if conv.lastMessage}
 					<span class="dm-time">{formatTime(conv.lastMessage.createdAt)}</span>
 				{/if}
 			</a>
@@ -321,6 +353,40 @@
 		</div>
 	</main>
 </div>
+
+{#if showNewDm}
+	<div class="modal-overlay" role="dialog" aria-modal="true">
+		<div class="new-dm-modal">
+			<div class="new-dm-header">
+				<h4>Nueva conversación</h4>
+				<button class="close-btn" onclick={() => (showNewDm = false)}>✕</button>
+			</div>
+			{#if friends.length === 0}
+				<p class="empty-modal">No tienes amigos todavía.</p>
+			{:else}
+				<div class="friend-pick-list">
+					{#each friends as f (f.id)}
+						<button
+							class="friend-pick-row"
+							disabled={dmLoading}
+							onclick={() => { showNewDm = false; openOrCreateDm(f.user.id); }}
+						>
+							<div class="pick-avatar">
+								{#if f.user.avatarUrl}
+									<img src={f.user.avatarUrl} alt="" />
+								{:else}
+									<span>{f.user.username[0].toUpperCase()}</span>
+								{/if}
+							</div>
+							<span class="pick-name">{f.user.username}</span>
+							<div class="pick-status" class:online={f.user.online}></div>
+						</button>
+					{/each}
+				</div>
+			{/if}
+		</div>
+	</div>
+{/if}
 
 <style>
 	.home-layout {
@@ -666,4 +732,141 @@
 
 	.error { font-size: 0.78rem; color: var(--error); }
 	.success { font-size: 0.78rem; color: #3ba55d; }
+
+	/* ── DM unread badge ── */
+	.dm-unread-badge {
+		background: var(--error);
+		color: #fff;
+		font-size: 0.6rem;
+		font-weight: 700;
+		min-width: 16px;
+		height: 16px;
+		border-radius: 999px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		padding: 0 3px;
+		flex-shrink: 0;
+	}
+
+	.dm-last-unread { color: var(--text-secondary); font-weight: 600; }
+
+	/* ── New DM modal ── */
+	.modal-overlay {
+		position: fixed;
+		inset: 0;
+		background: rgba(0,0,0,0.6);
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		z-index: 400;
+	}
+
+	.new-dm-modal {
+		background: var(--bg-surface);
+		border: 1px solid var(--border-strong);
+		border-radius: var(--radius-lg);
+		width: 360px;
+		max-width: calc(100vw - 2rem);
+		max-height: 480px;
+		display: flex;
+		flex-direction: column;
+		overflow: hidden;
+	}
+
+	.new-dm-header {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		padding: 1rem 1rem 0.75rem;
+		border-bottom: 1px solid var(--border);
+		flex-shrink: 0;
+	}
+
+	.new-dm-header h4 { font-size: 0.9rem; font-weight: 700; color: var(--text-primary); }
+
+	.close-btn {
+		background: none;
+		border: none;
+		color: var(--text-muted);
+		cursor: pointer;
+		font-size: 0.85rem;
+		padding: 0.2rem 0.3rem;
+		border-radius: var(--radius-sm);
+		transition: color var(--transition), background var(--transition);
+	}
+
+	.close-btn:hover { color: var(--text-primary); background: var(--bg-elevated); }
+
+	.empty-modal { font-size: 0.85rem; color: var(--text-muted); text-align: center; padding: 2rem 1rem; }
+
+	.friend-pick-list {
+		display: flex;
+		flex-direction: column;
+		gap: 0.15rem;
+		overflow-y: auto;
+		padding: 0.5rem;
+	}
+
+	.friend-pick-row {
+		display: flex;
+		align-items: center;
+		gap: 0.6rem;
+		padding: 0.5rem;
+		border-radius: var(--radius);
+		background: transparent;
+		border: none;
+		cursor: pointer;
+		font-family: inherit;
+		color: var(--text-secondary);
+		width: 100%;
+		text-align: left;
+		transition: background var(--transition), color var(--transition);
+	}
+
+	.friend-pick-row:hover:not(:disabled) { background: var(--bg-elevated); color: var(--text-primary); }
+	.friend-pick-row:disabled { opacity: 0.5; cursor: not-allowed; }
+
+	.pick-avatar {
+		width: 36px;
+		height: 36px;
+		border-radius: 50%;
+		background: var(--bg-elevated);
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		font-size: 0.9rem;
+		font-weight: 700;
+		color: var(--text-muted);
+		overflow: hidden;
+		flex-shrink: 0;
+	}
+
+	.pick-avatar img { width: 100%; height: 100%; object-fit: cover; }
+
+	.pick-name { flex: 1; font-size: 0.85rem; font-weight: 600; }
+
+	.pick-status {
+		width: 10px;
+		height: 10px;
+		border-radius: 50%;
+		background: var(--text-muted);
+		flex-shrink: 0;
+	}
+
+	.pick-status.online { background: #3ba55d; }
+
+	.icon-btn {
+		background: none;
+		border: none;
+		color: var(--text-muted);
+		cursor: pointer;
+		font-size: 1rem;
+		line-height: 1;
+		padding: 0.1rem 0.2rem;
+		border-radius: var(--radius-sm);
+		transition: color var(--transition), background var(--transition);
+	}
+
+	.icon-btn:hover { color: var(--text-primary); background: var(--bg-elevated); }
 </style>
