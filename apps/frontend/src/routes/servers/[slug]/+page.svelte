@@ -60,7 +60,7 @@
 
 	// ── Server header dropdown ─────────────────────────────────────────────
 	let showServerMenu = $state(false);
-	let serverMenuBtnEl = $state<HTMLButtonElement | null>(null);
+	let serverMenuBtnEl: HTMLButtonElement | undefined;
 	let serverMenuTop = $state(0);
 	let serverMenuLeft = $state(0);
 	let serverMenuWidth = $state(0);
@@ -68,9 +68,10 @@
 	function openServerMenu() {
 		if (!serverMenuBtnEl) return;
 		const r = serverMenuBtnEl.getBoundingClientRect();
-		serverMenuTop = r.bottom + 4;
+		const menuEstH = 250;
 		serverMenuLeft = r.left;
 		serverMenuWidth = r.width;
+		serverMenuTop = r.bottom + menuEstH > window.innerHeight ? r.top - menuEstH : r.bottom + 4;
 		showServerMenu = !showServerMenu;
 	}
 
