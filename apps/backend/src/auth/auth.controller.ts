@@ -3,6 +3,7 @@ import {
   HttpCode, UseGuards, UseInterceptors, UploadedFile,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { Throttle } from '@nestjs/throttler';
 import { memoryStorage } from 'multer';
 import type { Request, Response } from 'express';
 import { AuthService } from './auth.service';
@@ -46,6 +47,7 @@ export class AuthController {
 
   @Post('login')
   @HttpCode(200)
+  @Throttle({ default: { limit: 8, ttl: 60000 } })
   async login(@Body() dto: LoginDto, @Res({ passthrough: true }) res: Response) {
     const result = await this.authService.login(dto);
     res.cookie(COOKIE, result.token, cookieOpts(this.prod));

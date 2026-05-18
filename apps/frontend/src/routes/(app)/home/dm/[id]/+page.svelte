@@ -5,9 +5,11 @@
 	import { socketStore } from '$lib/socket.js';
 	import type { ChatSocket } from '$lib/socket.js';
 	import { clearUnread } from '$lib/dmStore.js';
+	import { playPing } from '$lib/ping.js';
+	import { uploadToDrive } from '$lib/driveUpload.js';
 
 	let { data } = $props();
-	const { user } = data;
+	const user = $derived(data.user as { id: string; username: string; role: string; avatarUrl?: string | null });
 
 	type DmMessage = {
 		id: string;
@@ -27,15 +29,35 @@
 		lastMessage: any;
 	};
 
+	// svelte-ignore state_referenced_locally
 	let conversation = $state(data.conversation as Conversation);
+	// svelte-ignore state_referenced_locally
 	let conversations = $state(data.conversations as Conversation[]);
+	// svelte-ignore state_referenced_locally
 	let messages = $state<DmMessage[]>([...data.messages]);
 	let msgInput = $state('');
 	let sending = $state(false);
+	let imageUploading = $state(false);
+	let fileInput = $state<HTMLInputElement | undefined>(undefined);
 	let messagesEl = $state<HTMLDivElement | null>(null);
 	let typingUsernames = $state<string[]>([]);
+	// svelte-ignore state_referenced_locally
+	let hasMore = $state(data.messages.length === 50);
+	let loadingMore = $state(false);
 	let typingTimeout: ReturnType<typeof setTimeout> | null = null;
 	let hoveredId = $state<string | null>(null);
+	let editingId = $state<string | null>(null);
+	let editingContent = $state('');
+
+	let sidebarSearch = $state('');
+	const filteredConvs = $derived(
+		sidebarSearch.trim()
+			? conversations.filter(c => {
+					const name = c.name ?? c.members.filter(m => m.id !== user.id).map(m => m.username).join(' ');
+					return name.toLowerCase().includes(sidebarSearch.toLowerCase());
+				})
+			: conversations
+	);
 
 	// Add member modal
 	let showAddMember = $state(false);
@@ -71,32 +93,52 @@
 		}
 	}
 
-	function playPing() {
+	async function loadMoreMessages() {
+		if (loadingMore || !hasMore || messages.length === 0) return;
+		loadingMore = true;
+		const oldest = messages[0].createdAt;
 		try {
-			const ctx = new AudioContext();
-			const osc = ctx.createOscillator();
-			const gain = ctx.createGain();
-			osc.connect(gain);
-			gain.connect(ctx.destination);
-			osc.frequency.value = 880;
-			osc.type = 'sine';
-			gain.gain.setValueAtTime(0.25, ctx.currentTime);
-			gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
-			osc.start(ctx.currentTime);
-			osc.stop(ctx.currentTime + 0.35);
-		} catch {}
+			const res = await fetch(`/api/dm/${conversation.id}/messages?limit=50&before=${encodeURIComponent(oldest)}`, { credentials: 'include' });
+			if (res.ok) {
+				const older: DmMessage[] = await res.json();
+				if (older.length === 0) { hasMore = false; return; }
+				const el = messagesEl;
+				const prevHeight = el?.scrollHeight ?? 0;
+				messages = [...older, ...messages];
+				hasMore = older.length === 50;
+				await tick();
+				if (el) el.scrollTop = el.scrollHeight - prevHeight;
+			}
+		} finally {
+			loadingMore = false;
+		}
+	}
+
+	function onMessagesScroll() {
+		if (!messagesEl || loadingMore || !hasMore) return;
+		if (messagesEl.scrollTop < 120) loadMoreMessages();
 	}
 
 	function handleNewMessage(msg: DmMessage) {
 		if (msg.conversationId !== conversation.id) return;
 		messages = [...messages, msg];
-		if (msg.author.id !== user.id) playPing();
+		if (msg.author.id !== user.id && document.hidden) playPing();
 		scrollToBottom();
 	}
 
 	function handleTypingUpdate(d: { conversationId: string; usernames: string[] }) {
 		if (d.conversationId !== conversation.id) return;
 		typingUsernames = d.usernames.filter(u => u !== user.username);
+	}
+
+	function handleDmUpdated(msg: DmMessage) {
+		if (msg.conversationId !== conversation.id) return;
+		messages = messages.map(m => m.id === msg.id ? msg : m);
+	}
+
+	function handleDmDeleted(d: { messageId: string; conversationId: string }) {
+		if (d.conversationId !== conversation.id) return;
+		messages = messages.filter(m => m.id !== d.messageId);
 	}
 
 	onMount(() => {
@@ -107,14 +149,17 @@
 			sock.emit('dm:join', { conversationId: conversation.id });
 			sock.on('dm:message:created', handleNewMessage);
 			sock.on('dm:typing:update', handleTypingUpdate);
+			sock.on('dm:message:updated', handleDmUpdated);
+			sock.on('dm:message:deleted', handleDmDeleted);
 		}
 		scrollToBottom(true);
 	});
 
 	onDestroy(() => {
-		sock?.emit('dm:leave', { conversationId: conversation.id });
 		sock?.off('dm:message:created', handleNewMessage);
 		sock?.off('dm:typing:update', handleTypingUpdate);
+		sock?.off('dm:message:updated', handleDmUpdated);
+		sock?.off('dm:message:deleted', handleDmDeleted);
 	});
 
 	async function sendMessage() {
@@ -135,6 +180,64 @@
 			e.preventDefault();
 			sendMessage();
 		}
+	}
+
+	async function sendFile(file: File) {
+		if (file.type.startsWith('image/')) {
+			imageUploading = true;
+			try {
+				const fd = new FormData();
+				fd.append('file', file);
+				if (msgInput.trim()) fd.append('content', msgInput.trim());
+				msgInput = '';
+				const res = await fetch(`/api/dm/${conversation.id}/messages`, {
+					method: 'POST', credentials: 'include', body: fd,
+				});
+				if (!res.ok) console.error('Error al enviar imagen en DM');
+			} finally {
+				imageUploading = false;
+			}
+			return;
+		}
+
+		const content = msgInput.trim();
+		msgInput = '';
+		const convId = conversation.id;
+		try {
+			const driveFile = await uploadToDrive(file);
+			const fd = new FormData();
+			if (content) fd.append('content', content);
+			fd.append('attachmentUrl', driveFile.url);
+			fd.append('attachmentName', file.name);
+			fd.append('attachmentSize', String(file.size));
+			fd.append('attachmentMimeType', file.type || 'application/octet-stream');
+			await fetch(`/api/dm/${convId}/messages`, {
+				method: 'POST', credentials: 'include', body: fd,
+			});
+		} catch { /* upload tray shows error */ }
+	}
+
+	function onFileChange(e: Event) {
+		const f = (e.target as HTMLInputElement).files?.[0];
+		if (f) { sendFile(f); (e.target as HTMLInputElement).value = ''; }
+	}
+
+	function fileSize(bytes: number) {
+		if (bytes < 1024) return `${bytes} B`;
+		if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+		if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+		return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+	}
+
+	function fileIcon(mime: string): string {
+		if (mime.startsWith('video/')) return '🎬';
+		if (mime.startsWith('audio/')) return '🎵';
+		if (mime === 'application/pdf') return '📄';
+		if (mime.includes('word') || mime.includes('document')) return '📝';
+		if (mime.includes('excel') || mime.includes('spreadsheet') || mime.includes('csv')) return '📊';
+		if (mime.includes('zip') || mime.includes('rar') || mime.includes('tar') || mime.includes('gzip') || mime.includes('7z')) return '📦';
+		if (mime.startsWith('text/')) return '📋';
+		return '📎';
 	}
 
 	function startTyping() {
@@ -183,6 +286,36 @@
 		if (addMemberFriends.length === 0) showAddMember = false;
 	}
 
+	function startEdit(msg: DmMessage) {
+		editingId = msg.id;
+		editingContent = msg.content ?? '';
+	}
+
+	function cancelEdit() { editingId = null; editingContent = ''; }
+
+	async function submitEdit(msg: DmMessage) {
+		const content = editingContent.trim();
+		if (!content) return;
+		const res = await fetch(`/api/dm/${conversation.id}/messages/${msg.id}`, {
+			method: 'PATCH',
+			headers: { 'Content-Type': 'application/json' },
+			credentials: 'include',
+			body: JSON.stringify({ content }),
+		});
+		if (res.ok) cancelEdit();
+	}
+
+	async function deleteMsg(msg: DmMessage) {
+		await fetch(`/api/dm/${conversation.id}/messages/${msg.id}`, {
+			method: 'DELETE', credentials: 'include',
+		});
+	}
+
+	function onEditKeydown(e: KeyboardEvent, msg: DmMessage) {
+		if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submitEdit(msg); }
+		if (e.key === 'Escape') cancelEdit();
+	}
+
 	function formatTime(iso: string) {
 		return new Date(iso).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' });
 	}
@@ -208,7 +341,7 @@
 	<!-- Sidebar -->
 	<aside class="home-sidebar">
 		<div class="search-bar">
-			<input type="text" placeholder="Busca o inicia una conversación" disabled />
+			<input type="text" placeholder="Busca una conversación" bind:value={sidebarSearch} />
 		</div>
 
 		<a href="/home" class="sidebar-nav-btn">
@@ -220,7 +353,7 @@
 			<span>Mensajes directos</span>
 		</div>
 
-		{#each conversations as conv (conv.id)}
+		{#each filteredConvs as conv (conv.id)}
 			{@const isActive = conv.id === conversation.id}
 			<a href="/home/dm/{conv.id}" class="dm-item" class:dm-item-active={isActive}>
 				<div class="dm-avatar">
@@ -259,7 +392,10 @@
 			</div>
 		</div>
 
-		<div class="messages-area" bind:this={messagesEl}>
+		<div class="messages-area" bind:this={messagesEl} onscroll={onMessagesScroll}>
+			{#if loadingMore}
+				<div class="loading-more">Cargando mensajes anteriores…</div>
+			{/if}
 			{#if messages.length === 0}
 				<div class="chat-welcome">
 					<div class="welcome-avatar">
@@ -301,7 +437,44 @@
 									<span class="msg-time">{formatTime(msg.createdAt)}</span>
 									{#if msg.editedAt}<span class="msg-edited">(editado)</span>{/if}
 								</div>
-								{#if msg.content}<p class="msg-content">{msg.content}</p>{/if}
+								{#if editingId === msg.id}
+									<div class="edit-box">
+										<textarea bind:value={editingContent} onkeydown={(e) => onEditKeydown(e, msg)} rows="1" class="edit-input"></textarea>
+										<div class="edit-actions">
+											<button class="edit-save" onclick={() => submitEdit(msg)}>Guardar</button>
+											<button class="edit-cancel" onclick={cancelEdit}>Esc · Cancelar</button>
+										</div>
+									</div>
+								{:else}
+									{#if msg.content}<p class="msg-content">{msg.content}</p>{/if}
+									{#if msg.attachments?.length}
+										<div class="attachments">
+											{#each msg.attachments as att}
+												{#if att.mimeType.startsWith('image/')}
+													<a href={att.url} target="_blank" rel="noreferrer" class="att-img-wrap">
+														<img src={att.url} alt={att.name} class="att-image" loading="lazy" />
+													</a>
+												{:else}
+													<div class="att-file">
+														<span class="att-file-icon">{fileIcon(att.mimeType)}</span>
+														<div class="att-info">
+															<a href={att.url} target="_blank" rel="noreferrer" class="att-file-name">{att.name}</a>
+															<span class="att-size">{fileSize(att.size)}</span>
+														</div>
+														<a href={att.url} download={att.name} rel="noreferrer" class="att-dl" aria-label="Descargar">↓</a>
+													</div>
+												{/if}
+											{/each}
+										</div>
+									{/if}
+									{#if msg.reactions?.length}
+										<div class="reactions">
+											{#each msg.reactions as r}
+												<span class="reaction" class:reaction-me={r.me}>{r.emoji} {r.count}</span>
+											{/each}
+										</div>
+									{/if}
+								{/if}
 							</div>
 						{:else}
 							<div class="avatar-col compact-spacer">
@@ -310,7 +483,50 @@
 								{/if}
 							</div>
 							<div class="msg-body">
-								{#if msg.content}<p class="msg-content">{msg.content}</p>{/if}
+								{#if editingId === msg.id}
+									<div class="edit-box">
+										<textarea bind:value={editingContent} onkeydown={(e) => onEditKeydown(e, msg)} rows="1" class="edit-input"></textarea>
+										<div class="edit-actions">
+											<button class="edit-save" onclick={() => submitEdit(msg)}>Guardar</button>
+											<button class="edit-cancel" onclick={cancelEdit}>Esc · Cancelar</button>
+										</div>
+									</div>
+								{:else}
+									{#if msg.content}<p class="msg-content">{msg.content}</p>{/if}
+									{#if msg.attachments?.length}
+										<div class="attachments">
+											{#each msg.attachments as att}
+												{#if att.mimeType.startsWith('image/')}
+													<a href={att.url} target="_blank" rel="noreferrer" class="att-img-wrap">
+														<img src={att.url} alt={att.name} class="att-image" loading="lazy" />
+													</a>
+												{:else}
+													<div class="att-file">
+														<span class="att-file-icon">{fileIcon(att.mimeType)}</span>
+														<div class="att-info">
+															<a href={att.url} target="_blank" rel="noreferrer" class="att-file-name">{att.name}</a>
+															<span class="att-size">{fileSize(att.size)}</span>
+														</div>
+														<a href={att.url} download={att.name} rel="noreferrer" class="att-dl" aria-label="Descargar">↓</a>
+													</div>
+												{/if}
+											{/each}
+										</div>
+									{/if}
+									{#if msg.reactions?.length}
+										<div class="reactions">
+											{#each msg.reactions as r}
+												<span class="reaction" class:reaction-me={r.me}>{r.emoji} {r.count}</span>
+											{/each}
+										</div>
+									{/if}
+								{/if}
+							</div>
+						{/if}
+						{#if hoveredId === msg.id && msg.author.id === user.id && editingId !== msg.id}
+							<div class="msg-actions">
+								<button class="msg-action-btn" onclick={() => startEdit(msg)} title="Editar">✏️</button>
+								<button class="msg-action-btn danger" onclick={() => deleteMsg(msg)} title="Borrar">🗑️</button>
 							</div>
 						{/if}
 					</div>
@@ -327,13 +543,17 @@
 
 		<div class="input-area">
 			<div class="input-box">
+				<button class="attach-btn" title="Adjuntar archivo" disabled={imageUploading} onclick={() => fileInput?.click()}>+</button>
+				<input class="hidden-file" type="file" accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.zip,.rar" bind:this={fileInput} onchange={onFileChange} />
 				<textarea
 					placeholder="Escribe un mensaje a {convName(conversation)}…"
 					bind:value={msgInput}
 					onkeydown={onKeydown}
 					oninput={startTyping}
 					rows="1"
+					maxlength="4000"
 				></textarea>
+				<button class="send-btn" disabled={!msgInput.trim() || sending} onclick={sendMessage}>↑</button>
 			</div>
 		</div>
 	</div>
@@ -402,12 +622,14 @@
 		background: var(--bg-elevated);
 		border: none;
 		border-radius: var(--radius);
-		color: var(--text-muted);
+		color: var(--text-primary);
 		font-size: 0.78rem;
 		font-family: inherit;
-		cursor: not-allowed;
+		outline: none;
 		box-sizing: border-box;
 	}
+
+	.search-bar input::placeholder { color: var(--text-muted); }
 
 	.sidebar-nav-btn {
 		display: flex;
@@ -547,6 +769,7 @@
 		display: flex;
 		gap: 0;
 		padding: 0.15rem 1rem;
+		padding-right: 5rem;
 		position: relative;
 	}
 
@@ -589,6 +812,206 @@
 		margin: 0;
 		white-space: pre-wrap;
 		word-break: break-word;
+	}
+
+	.msg-actions {
+		position: absolute;
+		right: 0.75rem;
+		top: 50%;
+		transform: translateY(-50%);
+		display: flex;
+		gap: 0.15rem;
+		background: var(--bg-surface);
+		border: 1px solid var(--border);
+		border-radius: var(--radius);
+		padding: 0.1rem 0.2rem;
+	}
+
+	.msg-action-btn {
+		background: none;
+		border: none;
+		cursor: pointer;
+		font-size: 0.75rem;
+		padding: 0.15rem 0.25rem;
+		border-radius: var(--radius-sm);
+		color: var(--text-muted);
+		transition: background var(--transition), color var(--transition);
+	}
+
+	.msg-action-btn:hover { background: var(--bg-elevated); color: var(--text-primary); }
+	.msg-action-btn.danger:hover { background: var(--error-surface); color: var(--error); }
+
+	.edit-box { display: flex; flex-direction: column; gap: 0.3rem; margin-top: 0.15rem; }
+
+	.edit-input {
+		width: 100%;
+		background: var(--bg-elevated);
+		border: 1px solid var(--border-focus);
+		border-radius: var(--radius);
+		color: var(--text-primary);
+		font-family: inherit;
+		font-size: 0.875rem;
+		line-height: 1.45;
+		padding: 0.35rem 0.5rem;
+		resize: none;
+		outline: none;
+		box-sizing: border-box;
+	}
+
+	.edit-actions { display: flex; gap: 0.4rem; font-size: 0.72rem; }
+
+	.edit-save {
+		background: var(--accent);
+		color: var(--accent-text);
+		border: none;
+		border-radius: var(--radius-sm);
+		padding: 0.2rem 0.5rem;
+		cursor: pointer;
+		font-family: inherit;
+		font-size: 0.72rem;
+		font-weight: 600;
+	}
+
+	.edit-cancel {
+		background: none;
+		border: none;
+		color: var(--text-muted);
+		cursor: pointer;
+		font-family: inherit;
+		font-size: 0.72rem;
+	}
+
+	.edit-cancel:hover { color: var(--text-primary); }
+
+	.attachments { display: flex; flex-direction: column; gap: 0.35rem; margin-top: 0.3rem; }
+
+	.att-img-wrap { display: inline-block; }
+	.att-image { max-width: 320px; max-height: 240px; border-radius: var(--radius); object-fit: contain; display: block; cursor: zoom-in; }
+
+	.att-file {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.5rem;
+		padding: 0.45rem 0.6rem;
+		background: var(--bg-elevated);
+		border-radius: var(--radius-lg);
+		border: 1px solid var(--border);
+		max-width: 300px;
+	}
+
+	.att-file-icon { font-size: 1.2rem; flex-shrink: 0; }
+
+	.att-info {
+		flex: 1;
+		display: flex;
+		flex-direction: column;
+		gap: 0.1rem;
+		overflow: hidden;
+	}
+
+	.att-file-name {
+		font-size: 0.78rem;
+		font-weight: 600;
+		color: var(--accent);
+		text-decoration: none;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.att-file-name:hover { text-decoration: underline; }
+	.att-size { color: var(--text-muted); font-size: 0.68rem; }
+
+	.att-dl {
+		flex-shrink: 0;
+		width: 24px; height: 24px;
+		border-radius: var(--radius-sm);
+		background: var(--bg-base);
+		border: 1px solid var(--border);
+		display: flex; align-items: center; justify-content: center;
+		font-size: 0.8rem;
+		color: var(--text-secondary);
+		text-decoration: none;
+		transition: background var(--transition), color var(--transition);
+	}
+
+	.att-dl:hover { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+
+	/* Attach + send buttons */
+	.attach-btn {
+		background: none;
+		border: none;
+		color: var(--text-muted);
+		font-size: 1.25rem;
+		line-height: 1;
+		cursor: pointer;
+		padding: 0 0.25rem;
+		flex-shrink: 0;
+		transition: color var(--transition);
+	}
+
+	.attach-btn:hover:not(:disabled) { color: var(--text-primary); }
+	.attach-btn:disabled { opacity: 0.35; cursor: default; }
+
+	.hidden-file { display: none; }
+
+	.send-btn {
+		background: var(--accent);
+		border: none;
+		color: var(--accent-text);
+		width: 28px; height: 28px;
+		border-radius: var(--radius);
+		cursor: pointer;
+		font-size: 0.9rem;
+		display: flex; align-items: center; justify-content: center;
+		flex-shrink: 0;
+		transition: opacity var(--transition);
+	}
+
+	.send-btn:disabled { opacity: 0.35; cursor: default; }
+	.send-btn:not(:disabled):hover { opacity: 0.85; }
+
+	.att-file {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.4rem;
+		padding: 0.4rem 0.65rem;
+		background: var(--bg-elevated);
+		border: 1px solid var(--border);
+		border-radius: var(--radius);
+		text-decoration: none;
+		color: var(--text-secondary);
+		font-size: 0.8rem;
+		max-width: 320px;
+	}
+
+	.att-size { font-size: 0.68rem; color: var(--text-muted); flex-shrink: 0; }
+
+	.reactions { display: flex; flex-wrap: wrap; gap: 0.25rem; margin-top: 0.2rem; }
+
+	.reaction {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.2rem;
+		padding: 0.1rem 0.4rem;
+		background: var(--bg-elevated);
+		border: 1px solid var(--border);
+		border-radius: 999px;
+		font-size: 0.75rem;
+		color: var(--text-secondary);
+	}
+
+	.reaction-me {
+		background: color-mix(in srgb, var(--accent) 15%, transparent);
+		border-color: var(--accent);
+		color: var(--accent);
+	}
+
+	.loading-more {
+		text-align: center;
+		font-size: 0.72rem;
+		color: var(--text-muted);
+		padding: 0.5rem 0;
 	}
 
 	.date-divider {

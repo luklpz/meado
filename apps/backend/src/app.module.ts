@@ -9,6 +9,7 @@ import { MessagesModule } from './messages/messages.module';
 import { FriendsModule } from './friends/friends.module';
 import { DmModule } from './dm/dm.module';
 import { UsersModule } from './users/users.module';
+import { StorageModule } from './storage/storage.module';
 
 @Module({
   imports: [
@@ -21,6 +22,7 @@ import { UsersModule } from './users/users.module';
     FriendsModule,
     DmModule,
     UsersModule,
+    StorageModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })

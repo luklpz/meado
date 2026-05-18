@@ -4,17 +4,21 @@
 	import { authStore } from '$lib/auth.js';
 	import { socketStore } from '$lib/socket.js';
 	import type { ChatSocket } from '$lib/socket.js';
-	import { dmUnread, incrementUnread } from '$lib/dmStore.js';
+	import { dmUnread } from '$lib/dmStore.js';
+	import { playPing } from '$lib/ping.js';
 
 	let { data } = $props();
-	const { user } = data;
+	const user = $derived(data.user as { id: string; username: string; role: string; avatarUrl?: string | null });
 
 	type Friend = { id: string; user: { id: string; username: string; avatarUrl?: string | null; online: boolean } };
 	type Pending = { id: string; direction: 'incoming' | 'outgoing'; user: { id: string; username: string; avatarUrl?: string | null }; createdAt: string };
 	type Conversation = { id: string; name: string | null; members: { id: string; username: string; avatarUrl?: string | null }[]; lastMessage: { content: string | null; createdAt: string; author: { username: string } } | null };
 
+	// svelte-ignore state_referenced_locally
 	let friends = $state<Friend[]>([...data.friends]);
+	// svelte-ignore state_referenced_locally
 	let pending = $state<Pending[]>([...data.pending]);
+	// svelte-ignore state_referenced_locally
 	let conversations = $state<Conversation[]>([...data.conversations]);
 
 	let activeTab = $state<'online' | 'all' | 'pending' | 'add'>('online');
@@ -23,6 +27,7 @@
 	let addSuccess = $state('');
 	let addLoading = $state(false);
 	let dmLoading = $state(false);
+	let dmError = $state('');
 	let searchQuery = $state('');
 	let searchResults = $state<{ id: string; username: string; name?: string | null; avatarUrl?: string | null }[]>([]);
 	let searching = $state(false);
@@ -39,20 +44,9 @@
 		);
 	}
 
-	function playPing() {
-		try {
-			const ctx = new AudioContext();
-			const osc = ctx.createOscillator();
-			const gain = ctx.createGain();
-			osc.connect(gain);
-			gain.connect(ctx.destination);
-			osc.frequency.value = 880;
-			osc.type = 'sine';
-			gain.gain.setValueAtTime(0.25, ctx.currentTime);
-			gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
-			osc.start(ctx.currentTime);
-			osc.stop(ctx.currentTime + 0.35);
-		} catch {}
+	function handleFriendRequest(data: { id: string; user: { id: string; username: string; avatarUrl?: string | null }; createdAt: string }) {
+		if (pending.some(p => p.id === data.id)) return;
+		pending = [...pending, { id: data.id, direction: 'incoming', user: data.user, createdAt: data.createdAt }];
 	}
 
 	function handleDmMessage(msg: any) {
@@ -66,8 +60,7 @@
 				const tb = b.lastMessage ? new Date(b.lastMessage.createdAt).getTime() : 0;
 				return tb - ta;
 			});
-		if (msg.author?.id !== user.id) {
-			incrementUnread(msg.conversationId);
+		if (msg.author?.id !== user.id && document.hidden) {
 			playPing();
 		}
 	}
@@ -78,19 +71,14 @@
 			sock = socketStore.connect(token);
 			sock.on('presence:update', handlePresence);
 			sock.on('dm:message:created', handleDmMessage);
-			// Join all DM rooms to receive new message notifications
-			for (const conv of conversations) {
-				sock.emit('dm:join', { conversationId: conv.id });
-			}
+			sock.on('friend:request', handleFriendRequest);
 		}
 	});
 
 	onDestroy(() => {
 		sock?.off('presence:update', handlePresence);
 		sock?.off('dm:message:created', handleDmMessage);
-		for (const conv of conversations) {
-			sock?.emit('dm:leave', { conversationId: conv.id });
-		}
+		sock?.off('friend:request', handleFriendRequest);
 	});
 
 	const onlineFriends = $derived(friends.filter(f => f.user.online));
@@ -143,14 +131,15 @@
 
 	async function acceptFriend(friendshipId: string) {
 		const res = await fetch(`/api/friends/accept/${friendshipId}`, { method: 'POST', credentials: 'include' });
-		if (!res.ok) return;
+		if (!res.ok) { addError = 'Error al aceptar la solicitud'; return; }
 		const f = await res.json();
 		pending = pending.filter(p => p.id !== friendshipId);
 		friends = [...friends, { id: f.id, user: { ...f.sender, online: false } }];
 	}
 
 	async function removeFriend(friendshipId: string) {
-		await fetch(`/api/friends/${friendshipId}`, { method: 'DELETE', credentials: 'include' });
+		const res = await fetch(`/api/friends/${friendshipId}`, { method: 'DELETE', credentials: 'include' });
+		if (!res.ok) return;
 		friends = friends.filter(f => f.id !== friendshipId);
 		pending = pending.filter(p => p.id !== friendshipId);
 	}
@@ -158,6 +147,7 @@
 	async function openOrCreateDm(userId: string) {
 		if (dmLoading) return;
 		dmLoading = true;
+		dmError = '';
 		try {
 			const res = await fetch('/api/dm', {
 				method: 'POST',
@@ -165,7 +155,7 @@
 				credentials: 'include',
 				body: JSON.stringify({ userIds: [userId] }),
 			});
-			if (!res.ok) return;
+			if (!res.ok) { dmError = 'No se pudo abrir la conversación'; return; }
 			const conv = await res.json();
 			goto(`/home/dm/${conv.id}`);
 		} finally {
@@ -267,6 +257,7 @@
 		</div>
 
 		<div class="friends-content">
+			{#if dmError}<p class="error" style="margin-bottom:0.5rem">{dmError}</p>{/if}
 			{#if activeTab === 'online'}
 				<div class="section-label">EN LÍNEA — {onlineFriends.length}</div>
 				{#if onlineFriends.length === 0}

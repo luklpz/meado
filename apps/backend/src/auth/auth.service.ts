@@ -24,7 +24,7 @@ const ALLOWED_AVATAR_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/web
 
 function normalizeEmail(email: string): string {
   const [local, domain] = email.toLowerCase().split('@');
-  return `${local.replace(/\./g, '')}@${domain}`;
+  return `${local}@${domain}`;
 }
 
 @Injectable()
@@ -35,11 +35,17 @@ export class AuthService {
   ) {}
 
   async register(dto: RegisterDto): Promise<{ message: string }> {
+    if (!dto.username || !dto.email || !dto.password) {
+      throw new BadRequestException('Username, email and password are required');
+    }
     if (!USERNAME_RE.test(dto.username)) {
       throw new BadRequestException('Username must contain only letters and numbers');
     }
     if (dto.username.length < 3 || dto.username.length > 32) {
       throw new BadRequestException('Username must be 3–32 characters');
+    }
+    if (!dto.password || dto.password.length < 8) {
+      throw new BadRequestException('Password must be at least 8 characters');
     }
 
     const normalizedEmail = normalizeEmail(dto.email);
@@ -83,6 +89,7 @@ export class AuthService {
   }
 
   async login(dto: LoginDto): Promise<{ token: string; user: PublicUser }> {
+    if (!dto.email || !dto.password) throw new UnauthorizedException('Invalid credentials');
     const normalizedEmail = normalizeEmail(dto.email);
     const user = await this.prisma.user.findUnique({ where: { email: normalizedEmail } });
     if (!user) throw new UnauthorizedException('Invalid credentials');
@@ -149,8 +156,8 @@ export class AuthService {
     }
 
     if (payload.type !== 'reset') throw new BadRequestException('Invalid token type');
-    if (!newPassword || newPassword.length < 6) {
-      throw new BadRequestException('Password must be at least 6 characters');
+    if (!newPassword || newPassword.length < 8) {
+      throw new BadRequestException('Password must be at least 8 characters');
     }
 
     const passwordHash = await bcrypt.hash(newPassword, 12);

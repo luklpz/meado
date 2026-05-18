@@ -126,13 +126,28 @@ export class DmService {
     return msgs.reverse().map(m => ({ ...m, reactions: formatReactions(m.reactions, userId) }));
   }
 
-  async sendMessage(conversationId: string, authorId: string, content?: string) {
+  async sendMessage(
+    conversationId: string,
+    authorId: string,
+    content?: string,
+    attachments?: { url: string; name: string; size: number; mimeType: string }[],
+  ) {
     if (!(await this.isMember(conversationId, authorId))) {
       throw new ForbiddenException('Not a member');
     }
-    if (!content?.trim()) throw new BadRequestException('Content required');
+    if (!content?.trim() && !attachments?.length) {
+      throw new BadRequestException('Content or attachment required');
+    }
+    if (content && content.length > 4000) throw new BadRequestException('Message too long (max 4000 chars)');
     const msg = await this.prisma.directMessage.create({
-      data: { conversationId, authorId, content: content.trim() },
+      data: {
+        conversationId,
+        authorId,
+        content: content?.trim() || null,
+        ...(attachments?.length
+          ? { attachments: { create: attachments.map(a => ({ url: a.url, name: a.name, size: a.size, mimeType: a.mimeType })) } }
+          : {}),
+      },
       select: DM_MSG_SELECT,
     });
     await this.prisma.directConversation.update({
@@ -140,6 +155,28 @@ export class DmService {
       data: { updatedAt: new Date() },
     });
     return { ...msg, reactions: [] };
+  }
+
+  async editMessage(messageId: string, userId: string, content: string) {
+    const msg = await this.prisma.directMessage.findUnique({ where: { id: messageId } });
+    if (!msg) throw new NotFoundException('Message not found');
+    if (msg.authorId !== userId) throw new ForbiddenException('Not your message');
+    if (!content?.trim()) throw new BadRequestException('Content required');
+    if (content.length > 4000) throw new BadRequestException('Message too long (max 4000 chars)');
+    const updated = await this.prisma.directMessage.update({
+      where: { id: messageId },
+      data: { content: content.trim(), editedAt: new Date() },
+      select: DM_MSG_SELECT,
+    });
+    return { ...updated, reactions: formatReactions(updated.reactions, userId) };
+  }
+
+  async deleteMessage(messageId: string, userId: string) {
+    const msg = await this.prisma.directMessage.findUnique({ where: { id: messageId } });
+    if (!msg) throw new NotFoundException('Message not found');
+    if (msg.authorId !== userId) throw new ForbiddenException('Not your message');
+    await this.prisma.directMessage.delete({ where: { id: messageId } });
+    return { ok: true, messageId, conversationId: msg.conversationId };
   }
 
   async addMember(conversationId: string, requesterId: string, userId: string) {

@@ -1,0 +1,61 @@
+import { Injectable, InternalServerErrorException, ForbiddenException } from '@nestjs/common';
+import { google } from 'googleapis';
+
+@Injectable()
+export class DriveService {
+  private readonly oauthClient = new google.auth.OAuth2(
+    process.env.GOOGLE_CLIENT_ID,
+    process.env.GOOGLE_CLIENT_SECRET,
+  );
+
+  // nonces issued by initUploadSession, consumed once by setPublic
+  private readonly pendingNonces = new Set<string>();
+
+  constructor() {
+    this.oauthClient.setCredentials({ refresh_token: process.env.GOOGLE_REFRESH_TOKEN });
+  }
+
+  async initUploadSession(filename: string, mimeType: string): Promise<{ uploadUrl: string; nonce: string }> {
+    const { token } = await this.oauthClient.getAccessToken();
+    const folderId = process.env.GOOGLE_DRIVE_FOLDER_ID;
+
+    const res = await fetch(
+      'https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable',
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+          'X-Upload-Content-Type': mimeType,
+        },
+        body: JSON.stringify({
+          name: filename,
+          ...(folderId ? { parents: [folderId] } : {}),
+        }),
+      },
+    );
+
+    if (!res.ok) throw new InternalServerErrorException('Drive init failed');
+    const uploadUrl = res.headers.get('location');
+    if (!uploadUrl) throw new InternalServerErrorException('No upload URL from Drive');
+
+    const nonce = crypto.randomUUID();
+    this.pendingNonces.add(nonce);
+    // Auto-expire nonce after 2 hours (generous for large uploads)
+    setTimeout(() => this.pendingNonces.delete(nonce), 2 * 60 * 60 * 1000);
+
+    return { uploadUrl, nonce };
+  }
+
+  async setPublic(fileId: string, nonce: string): Promise<string> {
+    if (!this.pendingNonces.has(nonce)) throw new ForbiddenException('Invalid or expired upload nonce');
+    this.pendingNonces.delete(nonce);
+
+    const drive = google.drive({ version: 'v3', auth: this.oauthClient });
+    await drive.permissions.create({
+      fileId,
+      requestBody: { role: 'reader', type: 'anyone' },
+    });
+    return `https://drive.google.com/uc?export=download&id=${fileId}`;
+  }
+}

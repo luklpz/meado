@@ -42,6 +42,7 @@ export class ServersService {
         slug: true,
         description: true,
         iconUrl: true,
+        serverType: true,
         accessType: true,
         ownerId: true,
         owner: { select: { username: true, avatarUrl: true } },
@@ -60,13 +61,16 @@ export class ServersService {
     return server;
   }
 
+  async isServerMember(slug: string, userId: string): Promise<boolean> {
+    const count = await this.prisma.serverMember.count({
+      where: { server: { slug }, userId },
+    });
+    return count > 0;
+  }
+
   // ── Create ───────────────────────────────────────────────────────────
 
   async createServer(dto: CreateServerDto, ownerId: string) {
-    if (dto.serverType === 'SPATIAL') {
-      throw new HttpException('Los servidores espaciales 2D aún no están implementados', HttpStatus.NOT_IMPLEMENTED);
-    }
-
     const existing = await this.prisma.server.findUnique({ where: { slug: dto.slug } });
     if (existing) throw new ConflictException('Slug already in use');
 
@@ -204,7 +208,8 @@ export class ServersService {
     if (userRole !== 'SUPERADMIN') {
       if (server.accessType === 'PASSWORD') {
         if (!password) throw new ForbiddenException('Password required');
-        const valid = await bcrypt.compare(password, server.passwordHash!);
+        if (!server.passwordHash) throw new ForbiddenException('Server password not configured');
+        const valid = await bcrypt.compare(password, server.passwordHash);
         if (!valid) throw new ForbiddenException('Invalid password');
       }
       if (server.accessType === 'WHITELIST') {
@@ -233,7 +238,9 @@ export class ServersService {
     return { ok: true };
   }
 
-  async getMembers(slug: string) {
+  async getMembers(slug: string, requesterId: string) {
+    const isMember = await this.isServerMember(slug, requesterId);
+    if (!isMember) throw new ForbiddenException('Not a member');
     const server = await this.prisma.server.findUnique({ where: { slug } });
     if (!server) throw new NotFoundException('Server not found');
     return this.prisma.serverMember.findMany({
@@ -372,7 +379,8 @@ export class ServersService {
 
   // ── Whitelist ─────────────────────────────────────────────────────────
 
-  async getWhitelist(slug: string) {
+  async getWhitelist(slug: string, requesterId: string, requesterRole: string) {
+    await this.assertPermission(slug, requesterId, requesterRole, 'manageServer');
     const server = await this.prisma.server.findUnique({ where: { slug } });
     if (!server) throw new NotFoundException('Server not found');
     return this.prisma.serverWhitelist.findMany({
@@ -401,7 +409,9 @@ export class ServersService {
 
   // ── Roles ─────────────────────────────────────────────────────────────
 
-  async getRoles(slug: string) {
+  async getRoles(slug: string, requesterId: string) {
+    const isMember = await this.isServerMember(slug, requesterId);
+    if (!isMember) throw new ForbiddenException('Not a member');
     const server = await this.prisma.server.findUnique({ where: { slug } });
     if (!server) throw new NotFoundException('Server not found');
     return this.prisma.serverRole.findMany({

@@ -15,7 +15,7 @@
 		error = '';
 
 		if (password !== password2) { error = 'Las contraseñas no coinciden.'; return; }
-		if (password.length < 6) { error = 'La contraseña debe tener al menos 6 caracteres.'; return; }
+		if (password.length < 8) { error = 'La contraseña debe tener al menos 8 caracteres.'; return; }
 		if (!token) { error = 'Enlace inválido.'; return; }
 
 		loading = true;
@@ -45,11 +45,11 @@
 			<form onsubmit={handleSubmit}>
 				<label>
 					<span>Nueva contraseña</span>
-					<input type="password" bind:value={password} autocomplete="new-password" required minlength="6" />
+					<input type="password" bind:value={password} autocomplete="new-password" required minlength="8" />
 				</label>
 				<label>
 					<span>Confirmar contraseña</span>
-					<input type="password" bind:value={password2} autocomplete="new-password" required minlength="6" />
+					<input type="password" bind:value={password2} autocomplete="new-password" required minlength="8" />
 				</label>
 
 				{#if error}

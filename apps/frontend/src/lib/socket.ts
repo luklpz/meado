@@ -23,7 +23,14 @@ function createSocketStore() {
     });
 
     s.on('connect', () => { connected.set(true); socket.set(s); });
-    s.on('disconnect', () => { connected.set(false); });
+    s.on('disconnect', () => {
+      connected.set(false);
+      // Refresh socket token so reconnect attempts use a fresh 1h JWT
+      fetch('/api/auth/me', { credentials: 'include' })
+        .then(r => r.ok ? r.json() : null)
+        .then(data => { if (data?.socketToken) (s as any).auth = { token: data.socketToken }; })
+        .catch(() => {});
+    });
 
     _socket = s;
     socket.set(s);

@@ -24,8 +24,15 @@ export class FriendsController {
   }
 
   @Post('request')
-  sendRequest(@Req() req: any, @Body() body: { identifier: string }) {
-    return this.friendsService.sendRequest(req.user.id, body.identifier);
+  async sendRequest(@Req() req: any, @Body() body: { identifier: string }) {
+    const friendship = await this.friendsService.sendRequest(req.user.id, body.identifier);
+    const sender = (friendship as any).sender;
+    this.gateway.emitToUser(friendship.receiverId, 'friend:request', {
+      id: friendship.id,
+      user: { id: sender.id, username: sender.username, avatarUrl: sender.avatarUrl ?? null },
+      createdAt: (friendship.createdAt as Date).toISOString(),
+    });
+    return friendship;
   }
 
   @Post('accept/:id')

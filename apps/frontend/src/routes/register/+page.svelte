@@ -78,7 +78,7 @@
 				<label>
 					<span>Contraseña</span>
 					<input type="password" bind:value={password}
-						autocomplete="new-password" required minlength="6" />
+						autocomplete="new-password" required minlength="8" />
 				</label>
 				<label>
 					<span>Repetir contraseña</span>

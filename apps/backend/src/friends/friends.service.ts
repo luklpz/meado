@@ -33,7 +33,10 @@ export class FriendsService {
 
     return this.prisma.friendship.create({
       data: { senderId, receiverId: receiver.id },
-      include: { receiver: { select: USER_SELECT } },
+      include: {
+        receiver: { select: USER_SELECT },
+        sender: { select: USER_SELECT },
+      },
     });
   }
 

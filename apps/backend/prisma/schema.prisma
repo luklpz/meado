@@ -115,6 +115,7 @@ model ServerMember {
   role     ServerRole? @relation(fields: [roleId], references: [id], onDelete: SetNull)
 
   @@id([userId, serverId])
+  @@index([userId])
 }
 
 model ServerWhitelist {
@@ -167,9 +168,11 @@ model Message {
   editedAt    DateTime?
 
   channel     Channel           @relation(fields: [channelId], references: [id], onDelete: Cascade)
-  author      User              @relation(fields: [authorId], references: [id])
+  author      User              @relation(fields: [authorId], references: [id], onDelete: Cascade)
   attachments Attachment[]
   reactions   MessageReaction[]
+
+  @@index([channelId, createdAt])
 }
 
 model Attachment {
@@ -192,6 +195,7 @@ model MessageReaction {
   user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@id([messageId, userId, emoji])
+  @@index([messageId])
 }
 
 // ── Friends ───────────────────────────────────────────────────────────────────
@@ -216,6 +220,7 @@ model Friendship {
   receiver   User             @relation("ReceivedFriendships", fields: [receiverId], references: [id], onDelete: Cascade)
 
   @@unique([senderId, receiverId])
+  @@index([receiverId])
 }
 
 // ── Direct Messages ───────────────────────────────────────────────────────────
@@ -250,9 +255,11 @@ model DirectMessage {
   editedAt       DateTime?
 
   conversation   DirectConversation      @relation(fields: [conversationId], references: [id], onDelete: Cascade)
-  author         User                    @relation(fields: [authorId], references: [id])
+  author         User                    @relation(fields: [authorId], references: [id], onDelete: Cascade)
   attachments    DirectAttachment[]
   reactions      DirectMessageReaction[]
+
+  @@index([conversationId, createdAt])
 }
 
 model DirectAttachment {
@@ -275,4 +282,5 @@ model DirectMessageReaction {
   user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@id([messageId, userId, emoji])
+  @@index([messageId])
 }

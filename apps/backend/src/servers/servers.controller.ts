@@ -1,10 +1,12 @@
 import {
   Controller, Get, Post, Patch, Delete,
   Param, Body, Req, UseGuards, UseInterceptors, UploadedFile,
+  ForbiddenException,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
 import type { Request } from 'express';
+import { AccessToken } from 'livekit-server-sdk';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
@@ -64,6 +66,22 @@ export class ServersController {
     return this.serversService.deleteServer(slug, user(req).id);
   }
 
+  // ── LiveKit (Spatial servers) ─────────────────────────────────────────
+
+  @Get(':slug/livekit-token')
+  async getLivekitToken(@Param('slug') slug: string, @Req() req: Request) {
+    const { id, username } = user(req);
+    const isMember = await this.serversService.isServerMember(slug, id);
+    if (!isMember) throw new ForbiddenException('Not a member');
+    const token = new AccessToken(
+      process.env.LIVEKIT_API_KEY!,
+      process.env.LIVEKIT_API_SECRET!,
+      { identity: id, name: username, ttl: '4h' },
+    );
+    token.addGrant({ roomJoin: true, room: `spatial-${slug}`, canPublish: true, canSubscribe: true, canPublishData: true });
+    return { token: await token.toJwt(), url: process.env.LIVEKIT_URL };
+  }
+
   // ── Membership ────────────────────────────────────────────────────────
 
   @Post(':slug/join')
@@ -78,8 +96,8 @@ export class ServersController {
   }
 
   @Get(':slug/members')
-  getMembers(@Param('slug') slug: string) {
-    return this.serversService.getMembers(slug);
+  getMembers(@Param('slug') slug: string, @Req() req: Request) {
+    return this.serversService.getMembers(slug, user(req).id);
   }
 
   @Delete(':slug/members/:userId')
@@ -166,8 +184,9 @@ export class ServersController {
   // ── Whitelist ─────────────────────────────────────────────────────────
 
   @Get(':slug/whitelist')
-  getWhitelist(@Param('slug') slug: string) {
-    return this.serversService.getWhitelist(slug);
+  getWhitelist(@Param('slug') slug: string, @Req() req: Request) {
+    const { id, role } = user(req);
+    return this.serversService.getWhitelist(slug, id, role);
   }
 
   @Post(':slug/whitelist')
@@ -193,8 +212,8 @@ export class ServersController {
   // ── Roles ─────────────────────────────────────────────────────────────
 
   @Get(':slug/roles')
-  getRoles(@Param('slug') slug: string) {
-    return this.serversService.getRoles(slug);
+  getRoles(@Param('slug') slug: string, @Req() req: Request) {
+    return this.serversService.getRoles(slug, user(req).id);
   }
 
   @Post(':slug/roles')

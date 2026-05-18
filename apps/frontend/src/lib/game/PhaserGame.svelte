@@ -6,8 +6,6 @@
 
 	const CANVAS_W = 800;
 	const CANVAS_H = 600;
-	// Socket.io: vacío en dev (proxy), URL directa en prod
-	const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || '';
 	const LIVEKIT_URL = import.meta.env.VITE_LIVEKIT_URL ?? '';
 
 	interface Props {
@@ -36,13 +34,12 @@
 			import('./GameScene.js'),
 		]);
 
-		const socketUrl = SOCKET_URL || window.location.origin;
-		const socket = (socketStore as any).connect(socketUrl, socketToken);
+		const socket = socketStore.connect(socketToken);
 
 		let livekitRoom: import('livekit-client').Room | undefined;
 		if (LIVEKIT_URL) {
 			try {
-				const res = await fetch(`/api/rooms/${roomSlug}/livekit-token`, {
+				const res = await fetch(`/api/servers/${roomSlug}/livekit-token`, {
 					credentials: 'include',
 				});
 				if (!res.ok) throw new Error(`Token endpoint: ${res.status}`);
@@ -79,7 +76,6 @@
 	});
 
 	onDestroy(() => {
-		socketStore.disconnect();
 		livekitStore.disconnect();
 		game?.destroy(true);
 	});
