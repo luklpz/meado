@@ -9,7 +9,7 @@ const MSG_SELECT = {
   createdAt: true,
   editedAt: true,
   channelId: true,
-  author: { select: { id: true, username: true, avatarUrl: true } },
+  author: { select: { id: true, username: true, name: true, avatarUrl: true } },
   attachments: { select: { id: true, url: true, name: true, size: true, mimeType: true } },
   reactions: { select: { userId: true, emoji: true } },
 } as const;

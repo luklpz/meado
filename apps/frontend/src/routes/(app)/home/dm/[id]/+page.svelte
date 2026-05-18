@@ -17,7 +17,7 @@
 		conversationId: string;
 		createdAt: string;
 		editedAt?: string | null;
-		author: { id: string; username: string; avatarUrl?: string | null };
+		author: { id: string; username: string; name?: string | null; avatarUrl?: string | null };
 		attachments: { id: string; url: string; name: string; size: number; mimeType: string }[];
 		reactions: { emoji: string; count: number; me: boolean }[];
 	};
@@ -25,7 +25,7 @@
 	type Conversation = {
 		id: string;
 		name: string | null;
-		members: { id: string; username: string; avatarUrl?: string | null }[];
+		members: { id: string; username: string; name?: string | null; avatarUrl?: string | null }[];
 		lastMessage: any;
 	};
 
@@ -53,7 +53,7 @@
 	const filteredConvs = $derived(
 		sidebarSearch.trim()
 			? conversations.filter(c => {
-					const name = c.name ?? c.members.filter(m => m.id !== user.id).map(m => m.username).join(' ');
+					const name = c.name ?? c.members.filter(m => m.id !== user.id).map(m => m.name || m.username).join(' ');
 					return name.toLowerCase().includes(sidebarSearch.toLowerCase());
 				})
 			: conversations
@@ -61,7 +61,7 @@
 
 	// Add member modal
 	let showAddMember = $state(false);
-	let addMemberFriends = $state<{ id: string; user: { id: string; username: string; avatarUrl?: string | null } }[]>([]);
+	let addMemberFriends = $state<{ id: string; user: { id: string; username: string; name?: string | null; avatarUrl?: string | null } }[]>([]);
 	let addMemberLoading = $state(false);
 	let addMemberError = $state('');
 
@@ -70,7 +70,7 @@
 	function convName(conv: Conversation) {
 		if (conv.name) return conv.name;
 		const others = conv.members.filter(m => m.id !== user.id);
-		return others.map(m => m.username).join(', ') || 'Conversación';
+		return others.map(m => m.name || m.username).join(', ') || 'Conversación';
 	}
 
 	function convAvatar(conv: Conversation) {
@@ -80,7 +80,7 @@
 
 	function convInitial(conv: Conversation) {
 		const others = conv.members.filter(m => m.id !== user.id);
-		return (others[0]?.username[0] ?? '?').toUpperCase();
+		return ((others[0]?.name || others[0]?.username || '?')[0]).toUpperCase();
 	}
 
 	function scrollToBottom(force = false) {
@@ -366,7 +366,7 @@
 				<div class="dm-info">
 					<div class="dm-name">{convName(conv)}</div>
 					{#if conv.lastMessage}
-						<div class="dm-last">{conv.lastMessage.author.username}: {conv.lastMessage.content ?? '📎'}</div>
+						<div class="dm-last">{conv.lastMessage.author.name || conv.lastMessage.author.username}: {conv.lastMessage.content ?? '📎'}</div>
 					{/if}
 				</div>
 			</a>
@@ -428,12 +428,12 @@
 								{#if msg.author.avatarUrl}
 									<img src={msg.author.avatarUrl} class="avatar-msg" alt="" />
 								{:else}
-									<div class="avatar-msg avatar-init">{avatarInitial(msg.author.username)}</div>
+									<div class="avatar-msg avatar-init">{avatarInitial(msg.author.name || msg.author.username)}</div>
 								{/if}
 							</div>
 							<div class="msg-body">
 								<div class="msg-header">
-									<span class="msg-author">{msg.author.username}</span>
+									<span class="msg-author">{msg.author.name || msg.author.username}</span>
 									<span class="msg-time">{formatTime(msg.createdAt)}</span>
 									{#if msg.editedAt}<span class="msg-edited">(editado)</span>{/if}
 								</div>
@@ -575,10 +575,10 @@
 								{#if f.user.avatarUrl}
 									<img src={f.user.avatarUrl} alt="" />
 								{:else}
-									<span>{f.user.username[0].toUpperCase()}</span>
+									<span>{(f.user.name || f.user.username)[0].toUpperCase()}</span>
 								{/if}
 							</div>
-							<span class="pick-name">{f.user.username}</span>
+							<span class="pick-name">{f.user.name || f.user.username}</span>
 							<span class="pick-add">+ Añadir</span>
 						</button>
 					{/each}

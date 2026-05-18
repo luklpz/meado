@@ -3,6 +3,7 @@
 export interface MessageAuthor {
   id: string;
   username: string;
+  name?: string | null;
   avatarUrl?: string | null;
 }
 

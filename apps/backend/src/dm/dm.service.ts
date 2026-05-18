@@ -9,7 +9,7 @@ const DM_MSG_SELECT = {
   createdAt: true,
   editedAt: true,
   conversationId: true,
-  author: { select: { id: true, username: true, avatarUrl: true } },
+  author: { select: { id: true, username: true, name: true, avatarUrl: true } },
   attachments: { select: { id: true, url: true, name: true, size: true, mimeType: true } },
   reactions: { select: { userId: true, emoji: true } },
 } as const;
@@ -40,11 +40,11 @@ export class DmService {
     const convs = await this.prisma.directConversation.findMany({
       where: { members: { some: { userId } } },
       include: {
-        members: { include: { user: { select: { id: true, username: true, avatarUrl: true } } } },
+        members: { include: { user: { select: { id: true, username: true, name: true, avatarUrl: true } } } },
         messages: {
           orderBy: { createdAt: 'desc' },
           take: 1,
-          select: { id: true, content: true, createdAt: true, author: { select: { username: true } } },
+          select: { id: true, content: true, createdAt: true, author: { select: { username: true, name: true } } },
         },
       },
       orderBy: { updatedAt: 'desc' },
@@ -70,7 +70,7 @@ export class DmService {
         },
         include: {
           members: {
-            include: { user: { select: { id: true, username: true, avatarUrl: true } } },
+            include: { user: { select: { id: true, username: true, name: true, avatarUrl: true } } },
           },
         },
       });
@@ -88,7 +88,7 @@ export class DmService {
       },
       include: {
         members: {
-          include: { user: { select: { id: true, username: true, avatarUrl: true } } },
+          include: { user: { select: { id: true, username: true, name: true, avatarUrl: true } } },
         },
       },
     });
@@ -104,7 +104,7 @@ export class DmService {
       },
       include: {
         members: {
-          include: { user: { select: { id: true, username: true, avatarUrl: true } } },
+          include: { user: { select: { id: true, username: true, name: true, avatarUrl: true } } },
         },
       },
     });
@@ -191,7 +191,7 @@ export class DmService {
 
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
-      select: { id: true, username: true, avatarUrl: true },
+      select: { id: true, username: true, name: true, avatarUrl: true },
     });
     if (!user) throw new NotFoundException('User not found');
 

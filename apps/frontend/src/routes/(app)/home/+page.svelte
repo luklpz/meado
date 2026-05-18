@@ -10,9 +10,9 @@
 	let { data } = $props();
 	const user = $derived(data.user as { id: string; username: string; role: string; avatarUrl?: string | null });
 
-	type Friend = { id: string; user: { id: string; username: string; avatarUrl?: string | null; online: boolean } };
-	type Pending = { id: string; direction: 'incoming' | 'outgoing'; user: { id: string; username: string; avatarUrl?: string | null }; createdAt: string };
-	type Conversation = { id: string; name: string | null; members: { id: string; username: string; avatarUrl?: string | null }[]; lastMessage: { content: string | null; createdAt: string; author: { username: string } } | null };
+	type Friend = { id: string; user: { id: string; username: string; name?: string | null; avatarUrl?: string | null; online: boolean } };
+	type Pending = { id: string; direction: 'incoming' | 'outgoing'; user: { id: string; username: string; name?: string | null; avatarUrl?: string | null }; createdAt: string };
+	type Conversation = { id: string; name: string | null; members: { id: string; username: string; name?: string | null; avatarUrl?: string | null }[]; lastMessage: { content: string | null; createdAt: string; author: { username: string; name?: string | null } } | null };
 
 	// svelte-ignore state_referenced_locally
 	let friends = $state<Friend[]>([...data.friends]);
@@ -166,7 +166,7 @@
 	function convName(conv: Conversation) {
 		if (conv.name) return conv.name;
 		const others = conv.members.filter(m => m.id !== user.id);
-		return others.map(m => m.username).join(', ') || 'Conversación';
+		return others.map(m => m.name || m.username).join(', ') || 'Conversación';
 	}
 
 	function convAvatar(conv: Conversation) {
@@ -176,7 +176,7 @@
 
 	function convInitial(conv: Conversation) {
 		const others = conv.members.filter(m => m.id !== user.id);
-		return (others[0]?.username[0] ?? '?').toUpperCase();
+		return ((others[0]?.name || others[0]?.username || '?')[0]).toUpperCase();
 	}
 
 	function formatTime(iso: string) {
@@ -223,7 +223,7 @@
 				<div class="dm-info">
 					<div class="dm-name">{convName(conv)}</div>
 					{#if conv.lastMessage}
-						<div class="dm-last" class:dm-last-unread={unread > 0}>{conv.lastMessage.author.username}: {conv.lastMessage.content ?? '📎'}</div>
+						<div class="dm-last" class:dm-last-unread={unread > 0}>{conv.lastMessage.author.name || conv.lastMessage.author.username}: {conv.lastMessage.content ?? '📎'}</div>
 					{/if}
 				</div>
 				{#if unread > 0}
@@ -269,12 +269,12 @@
 								{#if f.user.avatarUrl}
 									<img src={f.user.avatarUrl} alt={f.user.username} />
 								{:else}
-									<span>{f.user.username[0].toUpperCase()}</span>
+									<span>{(f.user.name || f.user.username)[0].toUpperCase()}</span>
 								{/if}
 								<div class="status-dot online"></div>
 							</div>
 							<div class="friend-info">
-								<span class="friend-name">{f.user.username}</span>
+								<span class="friend-name">{f.user.name || f.user.username}</span>
 								<span class="friend-status">En línea</span>
 							</div>
 							<div class="friend-actions">
@@ -296,12 +296,12 @@
 								{#if f.user.avatarUrl}
 									<img src={f.user.avatarUrl} alt={f.user.username} />
 								{:else}
-									<span>{f.user.username[0].toUpperCase()}</span>
+									<span>{(f.user.name || f.user.username)[0].toUpperCase()}</span>
 								{/if}
 								<div class="status-dot" class:online={f.user.online}></div>
 							</div>
 							<div class="friend-info">
-								<span class="friend-name">{f.user.username}</span>
+								<span class="friend-name">{f.user.name || f.user.username}</span>
 								<span class="friend-status">{f.user.online ? 'En línea' : 'Desconectado'}</span>
 							</div>
 							<div class="friend-actions">
@@ -324,11 +324,11 @@
 									{#if p.user.avatarUrl}
 										<img src={p.user.avatarUrl} alt={p.user.username} />
 									{:else}
-										<span>{p.user.username[0].toUpperCase()}</span>
+										<span>{(p.user.name || p.user.username)[0].toUpperCase()}</span>
 									{/if}
 								</div>
 								<div class="friend-info">
-									<span class="friend-name">{p.user.username}</span>
+									<span class="friend-name">{p.user.name || p.user.username}</span>
 									<span class="friend-status">Solicitud entrante</span>
 								</div>
 								<div class="friend-actions">
@@ -346,11 +346,11 @@
 									{#if p.user.avatarUrl}
 										<img src={p.user.avatarUrl} alt={p.user.username} />
 									{:else}
-										<span>{p.user.username[0].toUpperCase()}</span>
+										<span>{(p.user.name || p.user.username)[0].toUpperCase()}</span>
 									{/if}
 								</div>
 								<div class="friend-info">
-									<span class="friend-name">{p.user.username}</span>
+									<span class="friend-name">{p.user.name || p.user.username}</span>
 									<span class="friend-status">Solicitud enviada</span>
 								</div>
 								<div class="friend-actions">
@@ -431,10 +431,10 @@
 								{#if f.user.avatarUrl}
 									<img src={f.user.avatarUrl} alt="" />
 								{:else}
-									<span>{f.user.username[0].toUpperCase()}</span>
+									<span>{(f.user.name || f.user.username)[0].toUpperCase()}</span>
 								{/if}
 							</div>
-							<span class="pick-name">{f.user.username}</span>
+							<span class="pick-name">{f.user.name || f.user.username}</span>
 							<div class="pick-status" class:online={f.user.online}></div>
 						</button>
 					{/each}

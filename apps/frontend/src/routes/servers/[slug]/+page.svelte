@@ -126,7 +126,7 @@
 
 	function authorCardData(msg: MessagePayload): ProfileCardData {
 		const member = members.find(m => m.user.id === msg.author.id);
-		return { userId: msg.author.id, username: msg.author.username, avatarUrl: msg.author.avatarUrl, nickname: member?.nickname, role: member?.role };
+		return { userId: msg.author.id, username: msg.author.username, name: msg.author.name, avatarUrl: msg.author.avatarUrl, nickname: member?.nickname, role: member?.role };
 	}
 
 	// ── Profile dropdown ───────────────────────────────────────────────────
@@ -1130,13 +1130,13 @@
 										{#if msg.author.avatarUrl}
 											<img src={msg.author.avatarUrl} class="avatar-msg" alt="" />
 										{:else}
-											<div class="avatar-msg avatar-init">{avatarInitial(msg.author.username)}</div>
+											<div class="avatar-msg avatar-init">{avatarInitial(msg.author.name || msg.author.username)}</div>
 										{/if}
 									</button>
 								</div>
 								<div class="msg-body">
 									<div class="msg-header">
-										<button class="msg-author-btn" onclick={(e) => openProfileCard(authorCardData(msg), e)}>{msg.author.username}</button>
+										<button class="msg-author-btn" onclick={(e) => openProfileCard(authorCardData(msg), e)}>{msg.author.name || msg.author.username}</button>
 										<span class="msg-time">{formatTime(msg.createdAt)}</span>
 										{#if msg.editedAt}<span class="msg-edited">(editado)</span>{/if}
 									</div>
