@@ -2537,7 +2537,8 @@
 		display: flex;
 		flex-direction: column;
 		align-items: center;
-		justify-content: center;
+		justify-content: flex-start;
+		overflow-y: auto;
 		gap: 1.5rem;
 		padding: 2rem;
 	}

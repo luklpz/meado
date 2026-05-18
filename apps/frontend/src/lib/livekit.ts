@@ -41,6 +41,8 @@ function createLiveKitStore() {
 	let _audioCtx: AudioContext | null = null;
 	let _gainNode: GainNode | null = null;
 	let _rawStream: MediaStream | null = null;
+	let _screenVideoTrack: MediaStreamTrack | null = null;
+	let _screenAudioTrack: MediaStreamTrack | null = null;
 	let _rafId: number | null = null;
 	let _diagInterval: ReturnType<typeof setInterval> | null = null;
 	let _audioEls: HTMLAudioElement[] = [];
@@ -171,19 +173,14 @@ function createLiveKitStore() {
 		const { Track } = await import('livekit-client');
 
 		if (get(screenEnabled)) {
-			const pub = _room.localParticipant.getTrackPublication(Track.Source.ScreenShare);
-			if (pub?.track) {
-				const mst = (pub.track as any).mediaStreamTrack as MediaStreamTrack;
-				await _room.localParticipant.unpublishTrack(mst);
-				mst.stop();
-			}
-			const audioPub = _room.localParticipant.getTrackPublication(Track.Source.ScreenShareAudio);
-			if (audioPub?.track) {
-				const mst = (audioPub.track as any).mediaStreamTrack as MediaStreamTrack;
-				await _room.localParticipant.unpublishTrack(mst);
-				mst.stop();
-			}
+			// Set false BEFORE stopping tracks to prevent the 'ended' listener from re-triggering
 			screenEnabled.set(false);
+			const pub = _room.localParticipant.getTrackPublication(Track.Source.ScreenShare);
+			if (pub?.track) await _room.localParticipant.unpublishTrack((pub.track as any).mediaStreamTrack);
+			const audioPub = _room.localParticipant.getTrackPublication(Track.Source.ScreenShareAudio);
+			if (audioPub?.track) await _room.localParticipant.unpublishTrack((audioPub.track as any).mediaStreamTrack);
+			_screenVideoTrack?.stop(); _screenVideoTrack = null;
+			_screenAudioTrack?.stop(); _screenAudioTrack = null;
 		} else {
 			const q = get(screenQuality);
 			const preset = SCREEN_QUALITY[q];
@@ -198,12 +195,14 @@ function createLiveKitStore() {
 					audio: true,
 				});
 			} catch {
-				// User cancelled or browser denied — silent
-				return;
+				return; // User cancelled or browser denied — silent
 			}
 
 			const videoTrack = stream.getVideoTracks()[0];
 			const audioTrack = stream.getAudioTracks()[0];
+
+			_screenVideoTrack = videoTrack;
+			_screenAudioTrack = audioTrack ?? null;
 
 			// User clicked browser "Stop sharing" button
 			videoTrack.addEventListener('ended', async () => {
@@ -225,6 +224,8 @@ function createLiveKitStore() {
 			} catch {
 				videoTrack.stop();
 				audioTrack?.stop();
+				_screenVideoTrack = null;
+				_screenAudioTrack = null;
 				errorMessage.set('Error al compartir pantalla');
 			}
 		}
@@ -311,6 +312,8 @@ function createLiveKitStore() {
 		if (_rafId) cancelAnimationFrame(_rafId);
 		if (_diagInterval) { clearInterval(_diagInterval); _diagInterval = null; }
 		_rawStream?.getTracks().forEach((t) => t.stop());
+		_screenVideoTrack?.stop(); _screenVideoTrack = null;
+		_screenAudioTrack?.stop(); _screenAudioTrack = null;
 		_audioCtx?.close();
 		_audioEls.forEach((el) => el.remove());
 		_audioEls = [];
