@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { goto } from '$app/navigation';
+	import { goto, invalidateAll } from '$app/navigation';
 	import { authStore } from '$lib/auth.js';
 	import { themeStore, THEME_OPTIONS, type Theme } from '$lib/theme.js';
 
@@ -24,6 +24,7 @@
 	async function handleLogout() {
 		open = false;
 		await authStore.logout();
+		await invalidateAll();
 		goto('/login');
 	}
 

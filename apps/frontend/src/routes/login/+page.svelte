@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { goto } from '$app/navigation';
+	import { goto, invalidateAll } from '$app/navigation';
 	import { page } from '$app/stores';
 	import { authStore } from '$lib/auth.js';
 
@@ -18,7 +18,8 @@
 		loading = true;
 		try {
 			await authStore.login(email, password);
-			goto('/servers');
+			await invalidateAll();
+			goto('/home');
 		} catch (err) {
 			error = err instanceof Error ? err.message : 'Error al iniciar sesión.';
 		} finally {
