@@ -189,7 +189,22 @@
 	const screenQualityStore = livekitStore.screenQuality;
 	const screenSharesStore = livekitStore.screenShares;
 	const livekitError = livekitStore.errorMessage;
+	const livekitStatus = livekitStore.status;
 	let joiningVoice = $state(false);
+	let _reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+
+	$effect(() => {
+		if ($livekitStatus === 'error' && voiceChannelId && !joiningVoice) {
+			if (_reconnectTimer) clearTimeout(_reconnectTimer);
+			_reconnectTimer = setTimeout(async () => {
+				const ch = channels.find((c) => c.id === voiceChannelId);
+				if (ch && $livekitStatus === 'error') await joinVoiceChannel(ch);
+			}, 3000);
+		} else if ($livekitStatus !== 'error' && _reconnectTimer) {
+			clearTimeout(_reconnectTimer);
+			_reconnectTimer = null;
+		}
+	});
 
 	function attachScreenTrack(el: HTMLVideoElement, track: any) {
 		track.attach(el);

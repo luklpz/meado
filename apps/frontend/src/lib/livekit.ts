@@ -49,14 +49,60 @@ function createLiveKitStore() {
 
 	async function connect(url: string, token: string): Promise<Room> {
 		status.set('connecting');
+		errorMessage.set('');
 		try {
 		const { Room: LiveKitRoom, RoomEvent, Track } = await import('livekit-client');
 
-		const room = new LiveKitRoom({ dynacast: true, adaptiveStream: false });
+		const room = new LiveKitRoom({
+			dynacast: true,
+			adaptiveStream: false,
+			reconnectPolicy: { maxRetries: 5, minReconnectWait: 1000, maxReconnectWait: 5000 } as any,
+		});
 		await room.connect(url, token);
 		_room = room;
 		status.set('connected');
 		canPlayAudio.set(room.canPlaybackAudio);
+
+		room.on(RoomEvent.Reconnecting, () => {
+			status.set('connecting');
+			errorMessage.set('Reconectando con el canal de voz…');
+		});
+
+		room.on(RoomEvent.Reconnected, () => {
+			status.set('connected');
+			errorMessage.set('');
+		});
+
+		// Unexpected disconnect: _room is cleared first on explicit disconnect()
+		// so if _room still equals this room instance, it was unexpected
+		room.on(RoomEvent.Disconnected, () => {
+			if (_room !== room) return; // explicit disconnect — already handled
+			_room = null;
+			if (_rafId) { cancelAnimationFrame(_rafId); _rafId = null; }
+			if (_diagInterval) { clearInterval(_diagInterval); _diagInterval = null; }
+			_rawStream?.getTracks().forEach((t) => t.stop());
+			_rawStream = null;
+			_audioCtx?.close();
+			_audioCtx = null;
+			_gainNode = null;
+			_screenVideoTrack?.stop(); _screenVideoTrack = null;
+			_screenAudioTrack?.stop(); _screenAudioTrack = null;
+			_audioEls.forEach((el) => el.remove());
+			_audioEls = [];
+			micEnabled.set(false);
+			audioLevel.set(0);
+			activeSpeakers.set([]);
+			mutedParticipants.set(new Set());
+			screenEnabled.set(false);
+			screenShares.set(new Map());
+			status.set('error');
+			errorMessage.set('Se perdió la conexión con el canal de voz');
+		});
+
+		room.on(RoomEvent.MediaDevicesError, () => {
+			errorMessage.set('Error de dispositivo de audio — comprueba los permisos del micrófono');
+			micEnabled.set(false);
+		});
 
 		room.on(RoomEvent.TrackSubscribed, (track, _pub, participant) => {
 			if (track.kind === Track.Kind.Audio) {
@@ -236,6 +282,7 @@ function createLiveKitStore() {
 		const deviceId = get(selectedDeviceId);
 
 		_audioCtx = new AudioContext();
+		if (_audioCtx.state === 'suspended') await _audioCtx.resume();
 		_rawStream = await navigator.mediaDevices.getUserMedia({
 			audio: deviceId ? { deviceId: { exact: deviceId } } : true,
 			video: false,
@@ -309,7 +356,9 @@ function createLiveKitStore() {
 	}
 
 	function disconnect(): void {
-		if (_rafId) cancelAnimationFrame(_rafId);
+		const roomToDisconnect = _room;
+		_room = null; // null first so RoomEvent.Disconnected handler knows this is explicit
+		if (_rafId) { cancelAnimationFrame(_rafId); _rafId = null; }
 		if (_diagInterval) { clearInterval(_diagInterval); _diagInterval = null; }
 		_rawStream?.getTracks().forEach((t) => t.stop());
 		_screenVideoTrack?.stop(); _screenVideoTrack = null;
@@ -317,12 +366,10 @@ function createLiveKitStore() {
 		_audioCtx?.close();
 		_audioEls.forEach((el) => el.remove());
 		_audioEls = [];
-		_room?.disconnect();
-		_room = null;
+		roomToDisconnect?.disconnect();
 		_audioCtx = null;
 		_gainNode = null;
 		_rawStream = null;
-		_rafId = null;
 		micEnabled.set(false);
 		audioLevel.set(0);
 		activeSpeakers.set([]);
