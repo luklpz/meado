@@ -218,9 +218,15 @@ function createLiveKitStore() {
 		errorMessage.set('');
 		const { Track } = await import('livekit-client');
 
+		const localIdentity = _room.localParticipant.identity;
+
 		if (get(screenEnabled)) {
 			// Set false BEFORE stopping tracks to prevent the 'ended' listener from re-triggering
 			screenEnabled.set(false);
+			// Remove local screen share from the map
+			const cur = get(screenShares);
+			cur.delete(localIdentity);
+			screenShares.set(new Map(cur));
 			const pub = _room.localParticipant.getTrackPublication(Track.Source.ScreenShare);
 			if (pub?.track) await _room.localParticipant.unpublishTrack((pub.track as any).mediaStreamTrack);
 			const audioPub = _room.localParticipant.getTrackPublication(Track.Source.ScreenShareAudio);
@@ -256,7 +262,7 @@ function createLiveKitStore() {
 			}, { once: true });
 
 			try {
-				await _room.localParticipant.publishTrack(videoTrack, {
+				const pub = await _room.localParticipant.publishTrack(videoTrack, {
 					source: Track.Source.ScreenShare,
 					simulcast: false,
 					videoEncoding: { maxBitrate: preset.maxBitrate, maxFramerate: preset.frameRate },
@@ -265,6 +271,16 @@ function createLiveKitStore() {
 					await _room.localParticipant.publishTrack(audioTrack, {
 						source: Track.Source.ScreenShareAudio,
 					});
+				}
+				// Add local screen share to the map so the UI shows it
+				if (pub.track) {
+					const cur = get(screenShares);
+					cur.set(localIdentity, {
+						identity: localIdentity,
+						username: _room.localParticipant.name ?? localIdentity,
+						track: pub.track,
+					});
+					screenShares.set(new Map(cur));
 				}
 				screenEnabled.set(true);
 			} catch {

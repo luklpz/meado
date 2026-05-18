@@ -8,6 +8,11 @@
 	import { PERMISSION_LABELS, PERMISSION_CATEGORIES } from '$lib/permissions.js';
 	import PhaserGame from '$lib/game/PhaserGame.svelte';
 	import { uploadToDrive } from '$lib/driveUpload.js';
+	import {
+		Mic, MicOff, Monitor, MonitorOff, PhoneOff,
+		LayoutGrid, Focus, PanelRight,
+		Maximize2, X, Volume2, VolumeX, Users,
+	} from 'lucide-svelte';
 
 	let { data } = $props();
 	const user = $derived(data.user as { id: string; username: string; role: string; avatarUrl?: string | null });
@@ -996,7 +1001,7 @@
 			{#each voiceChannels as ch (ch.id)}
 				<div class="channel-row" class:active={voiceChannelId === ch.id}>
 					<button class="channel-btn" onclick={() => selectChannel(ch)}>
-						<span class="ch-prefix">🔊</span>
+						<span class="ch-prefix"><Volume2 size={14} /></span>
 						<span class="ch-name">{ch.name}</span>
 						{#if voiceChannelId === ch.id}<span class="voice-dot"></span>{/if}
 					</button>
@@ -1031,7 +1036,7 @@
 					<span class="voice-status-label">🟢 En voz</span>
 					<div class="voice-status-actions">
 						<button class="ctrl-btn" class:active={$micEnabledStore} title={$micEnabledStore ? 'Silenciar' : 'Activar micro'} onclick={() => livekitStore.toggleMic()}>
-							{$micEnabledStore ? '🎙️' : '🔇'}
+							{#if $micEnabledStore}<Mic size={14} />{:else}<MicOff size={14} />{/if}
 						</button>
 						<button class="ctrl-btn danger" title="Desconectar" onclick={leaveVoice}>📵</button>
 					</div>
@@ -1285,24 +1290,24 @@
 		{:else if selectedChannel.type === 'VOICE'}
 			<div class="content-header">
 				<button class="hamburger-btn" onclick={() => (sidebarOpen = true)} title="Canales">☰</button>
-				<span class="header-prefix">🔊</span>
+				<span class="header-prefix"><Volume2 size={16} /></span>
 				<strong class="header-name">{selectedChannel.name}</strong>
 				<div class="header-actions">
 					{#if voiceChannelId === selectedChannel.id}
 						<div class="layout-btns">
-							<button class="layout-btn" class:active={voiceLayout === 'grid'} title="Cuadrícula" onclick={() => voiceLayout = 'grid'}>⊞</button>
-							<button class="layout-btn" class:active={voiceLayout === 'spotlight'} title="Destacado" onclick={() => voiceLayout = 'spotlight'}>◉</button>
-							<button class="layout-btn" class:active={voiceLayout === 'sidebar'} title="Barra lateral" onclick={() => voiceLayout = 'sidebar'}>⊡</button>
+							<button class="layout-btn" class:active={voiceLayout === 'grid'} title="Cuadrícula" onclick={() => voiceLayout = 'grid'}><LayoutGrid size={15} /></button>
+							<button class="layout-btn" class:active={voiceLayout === 'spotlight'} title="Destacado" onclick={() => voiceLayout = 'spotlight'}><Focus size={15} /></button>
+							<button class="layout-btn" class:active={voiceLayout === 'sidebar'} title="Barra lateral" onclick={() => voiceLayout = 'sidebar'}><PanelRight size={15} /></button>
 						</div>
 					{/if}
-					<button class="icon-btn" class:active={showMembers} title="Miembros" onclick={toggleMembers}>👥</button>
+					<button class="icon-btn" class:active={showMembers} title="Miembros" onclick={toggleMembers}><Users size={16} /></button>
 				</div>
 			</div>
 
 			<div class="voice-view">
 				{#if voiceChannelId !== selectedChannel.id}
 					<div class="voice-join-prompt">
-						<div class="voice-icon-big">🔊</div>
+						<div class="voice-icon-big"><Volume2 size={48} strokeWidth={1.5} /></div>
 						<h3>{selectedChannel.name}</h3>
 						<p>{(voiceMembers.get(selectedChannel.id) ?? []).length} participante(s)</p>
 						<button class="btn-primary" disabled={joiningVoice} onclick={() => selectedChannel && joinVoiceChannel(selectedChannel)}>
@@ -1320,7 +1325,7 @@
 								<!-- svelte-ignore a11y_media_has_caption -->
 								<video use:attachScreenTrack={screenEntries[0][1].track} class="stage-video" autoplay playsinline muted></video>
 								<div class="stage-label">{screenEntries[0][1].username}</div>
-								<button class="expand-btn" onclick={() => fullscreenShare = screenEntries[0][0]} title="Pantalla completa">⤢</button>
+								<button class="expand-btn" onclick={() => fullscreenShare = screenEntries[0][0]} title="Pantalla completa"><Maximize2 size={15} /></button>
 							</div>
 							<div class="participants-strip vertical">
 								{#each currentVoiceMembers as m (m.userId)}
@@ -1356,7 +1361,7 @@
 									<!-- svelte-ignore a11y_media_has_caption -->
 									<video use:attachScreenTrack={screenEntries[0][1].track} class="stage-video" autoplay playsinline muted></video>
 									<div class="stage-label">{screenEntries[0][1].username}</div>
-									<button class="expand-btn" onclick={() => fullscreenShare = screenEntries[0][0]} title="Pantalla completa">⤢</button>
+									<button class="expand-btn" onclick={() => fullscreenShare = screenEntries[0][0]} title="Pantalla completa"><Maximize2 size={15} /></button>
 								{:else if spotlightSpeaker}
 									<div class="spotlight-avatar-wrap">
 										{#if spotlightSpeaker.avatarUrl}
@@ -1420,7 +1425,7 @@
 											<video use:attachScreenTrack={share.track} class="screen-video" autoplay playsinline muted></video>
 											<div class="screen-card-footer">
 												<span class="screen-card-name">{share.username}</span>
-												<button class="expand-btn-sm" onclick={() => fullscreenShare = id} title="Expandir">⤢</button>
+												<button class="expand-btn-sm" onclick={() => fullscreenShare = id} title="Expandir"><Maximize2 size={14} /></button>
 											</div>
 										</div>
 									{/each}
@@ -1431,7 +1436,7 @@
 
 					{#if !$canPlayAudioStore}
 						<button class="audio-unlock-banner" onclick={() => livekitStore.startAudio()}>
-							🔇 Audio bloqueado por el navegador — haz clic aquí para activarlo
+							<VolumeX size={15} /> Audio bloqueado por el navegador — haz clic aquí para activarlo
 						</button>
 					{/if}
 
@@ -1449,7 +1454,7 @@
 									title={$micEnabledStore ? 'Silenciar micrófono' : 'Activar micrófono'}
 									onclick={() => livekitStore.toggleMic()}
 								>
-									{$micEnabledStore ? '🎙️' : '🔇'}
+									{#if $micEnabledStore}<Mic size={20} />{:else}<MicOff size={20} />{/if}
 								</button>
 								{#if $micEnabledStore}
 									<div class="vc-mic-level">
@@ -1477,11 +1482,11 @@
 									class:vc-btn-active={$screenEnabledStore}
 									title={$screenEnabledStore ? 'Detener pantalla compartida' : 'Compartir pantalla'}
 									onclick={() => livekitStore.toggleScreen()}
-								>🖥️</button>
+								>{#if $screenEnabledStore}<MonitorOff size={20} />{:else}<Monitor size={20} />{/if}</button>
 							</div>
 						</div>
 						<div class="vc-right">
-							<button class="vc-btn vc-btn-danger" onclick={leaveVoice} title="Desconectar">📵</button>
+							<button class="vc-btn vc-btn-danger" onclick={leaveVoice} title="Desconectar"><PhoneOff size={20} /></button>
 						</div>
 					</div>
 				{/if}
@@ -1497,7 +1502,7 @@
 			<video use:attachScreenTrack={$screenSharesStore.get(fullscreenShare)!.track} class="fullscreen-video" autoplay playsinline muted></video>
 			<div class="fullscreen-info">{$screenSharesStore.get(fullscreenShare)!.username}</div>
 			<!-- svelte-ignore a11y_no_static_element_interactions -->
-			<button class="fullscreen-close" onclick={(e) => { e.stopPropagation(); fullscreenShare = null; }} title="Cerrar">✕</button>
+			<button class="fullscreen-close" onclick={(e) => { e.stopPropagation(); fullscreenShare = null; }} title="Cerrar"><X size={18} /></button>
 		</div>
 	{/if}
 
