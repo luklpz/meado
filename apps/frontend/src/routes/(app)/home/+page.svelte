@@ -6,6 +6,7 @@
 	import type { ChatSocket } from '$lib/socket.js';
 	import { dmUnread } from '$lib/dmStore.js';
 	import { playPing } from '$lib/ping.js';
+	import { Users, MessageSquare, X, Check } from 'lucide-svelte';
 
 	let { data } = $props();
 	const user = $derived(data.user as { id: string; username: string; role: string; avatarUrl?: string | null });
@@ -198,7 +199,7 @@
 		</div>
 
 		<button class="sidebar-nav-btn" onclick={() => (activeTab = 'online')}>
-			<span class="nav-icon">👥</span>
+			<span class="nav-icon"><Users size={16} /></span>
 			Amigos
 			{#if incomingPending.length > 0}
 				<span class="badge">{incomingPending.length}</span>
@@ -238,7 +239,7 @@
 	<!-- Main content -->
 	<main class="home-main">
 		<div class="friends-header">
-			<span class="friends-title">👥 Amigos</span>
+			<span class="friends-title"><Users size={16} /> Amigos</span>
 			<div class="tabs">
 				<button class="tab" class:active={activeTab === 'online'} onclick={() => (activeTab = 'online')}>
 					En línea
@@ -278,8 +279,8 @@
 								<span class="friend-status">En línea</span>
 							</div>
 							<div class="friend-actions">
-								<button class="icon-action" title="Mensaje" onclick={() => openOrCreateDm(f.user.id)}>💬</button>
-								<button class="icon-action danger" title="Eliminar" onclick={() => removeFriend(f.id)}>✕</button>
+								<button class="icon-action" title="Mensaje" onclick={() => openOrCreateDm(f.user.id)}><MessageSquare size={14} /></button>
+								<button class="icon-action danger" title="Eliminar" onclick={() => removeFriend(f.id)}><X size={14} /></button>
 							</div>
 						</div>
 					{/each}
@@ -305,8 +306,8 @@
 								<span class="friend-status">{f.user.online ? 'En línea' : 'Desconectado'}</span>
 							</div>
 							<div class="friend-actions">
-								<button class="icon-action" title="Mensaje" onclick={() => openOrCreateDm(f.user.id)}>💬</button>
-								<button class="icon-action danger" title="Eliminar" onclick={() => removeFriend(f.id)}>✕</button>
+								<button class="icon-action" title="Mensaje" onclick={() => openOrCreateDm(f.user.id)}><MessageSquare size={14} /></button>
+								<button class="icon-action danger" title="Eliminar" onclick={() => removeFriend(f.id)}><X size={14} /></button>
 							</div>
 						</div>
 					{/each}
@@ -332,8 +333,8 @@
 									<span class="friend-status">Solicitud entrante</span>
 								</div>
 								<div class="friend-actions">
-									<button class="icon-action success" title="Aceptar" onclick={() => acceptFriend(p.id)}>✓</button>
-									<button class="icon-action danger" title="Rechazar" onclick={() => removeFriend(p.id)}>✕</button>
+									<button class="icon-action success" title="Aceptar" onclick={() => acceptFriend(p.id)}><Check size={14} /></button>
+									<button class="icon-action danger" title="Rechazar" onclick={() => removeFriend(p.id)}><X size={14} /></button>
 								</div>
 							</div>
 						{/each}
@@ -354,7 +355,7 @@
 									<span class="friend-status">Solicitud enviada</span>
 								</div>
 								<div class="friend-actions">
-									<button class="icon-action danger" title="Cancelar" onclick={() => removeFriend(p.id)}>✕</button>
+									<button class="icon-action danger" title="Cancelar" onclick={() => removeFriend(p.id)}><X size={14} /></button>
 								</div>
 							</div>
 						{/each}
@@ -415,7 +416,7 @@
 		<div class="new-dm-modal">
 			<div class="new-dm-header">
 				<h4>Nueva conversación</h4>
-				<button class="close-btn" onclick={() => (showNewDm = false)}>✕</button>
+				<button class="close-btn" onclick={() => (showNewDm = false)}><X size={14} /></button>
 			</div>
 			{#if friends.length === 0}
 				<p class="empty-modal">No tienes amigos todavía.</p>

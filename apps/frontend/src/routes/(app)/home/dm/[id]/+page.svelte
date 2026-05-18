@@ -6,6 +6,7 @@
 	import type { ChatSocket } from '$lib/socket.js';
 	import { clearUnread } from '$lib/dmStore.js';
 	import { playPing } from '$lib/ping.js';
+	import { Users, UserPlus, Pencil, Trash2 } from 'lucide-svelte';
 	import { uploadToDrive } from '$lib/driveUpload.js';
 
 	let { data } = $props();
@@ -345,7 +346,7 @@
 		</div>
 
 		<a href="/home" class="sidebar-nav-btn">
-			<span class="nav-icon">👥</span>
+			<span class="nav-icon"><Users size={16} /></span>
 			Amigos
 		</a>
 
@@ -388,7 +389,7 @@
 				<span class="member-count">{conversation.members.length} miembros</span>
 			{/if}
 			<div class="header-actions">
-				<button class="icon-btn" title="Añadir al grupo" onclick={openAddMember}>👥+</button>
+				<button class="icon-btn" title="Añadir al grupo" onclick={openAddMember}><UserPlus size={16} /></button>
 			</div>
 		</div>
 
@@ -525,8 +526,8 @@
 						{/if}
 						{#if hoveredId === msg.id && msg.author.id === user.id && editingId !== msg.id}
 							<div class="msg-actions">
-								<button class="msg-action-btn" onclick={() => startEdit(msg)} title="Editar">✏️</button>
-								<button class="msg-action-btn danger" onclick={() => deleteMsg(msg)} title="Borrar">🗑️</button>
+								<button class="msg-action-btn" onclick={() => startEdit(msg)} title="Editar"><Pencil size={14} /></button>
+								<button class="msg-action-btn danger" onclick={() => deleteMsg(msg)} title="Borrar"><Trash2 size={14} /></button>
 							</div>
 						{/if}
 					</div>

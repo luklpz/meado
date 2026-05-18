@@ -2,6 +2,7 @@
 	import { goto, invalidateAll } from '$app/navigation';
 	import { authStore } from '$lib/auth.js';
 	import { themeStore, THEME_OPTIONS, type Theme } from '$lib/theme.js';
+	import { Check, X, LogOut, UserRound } from 'lucide-svelte';
 
 	const { user } = authStore;
 
@@ -83,7 +84,7 @@
 		{:else if $user}
 			<span class="avatar-initial">{$user.username[0].toUpperCase()}</span>
 		{:else}
-			<span class="avatar-icon">◐</span>
+			<span class="avatar-icon"><UserRound size={28} /></span>
 		{/if}
 	</button>
 
@@ -108,8 +109,8 @@
 									maxlength="64"
 									onkeydown={e => { if (e.key === 'Enter') saveName(); if (e.key === 'Escape') editingName = false; }}
 								/>
-								<button class="name-save-btn" onclick={saveName}>✓</button>
-								<button class="name-cancel-btn" onclick={() => editingName = false}>✕</button>
+								<button class="name-save-btn" onclick={saveName}><Check size={14} /></button>
+								<button class="name-cancel-btn" onclick={() => editingName = false}><X size={14} /></button>
 							</div>
 							{#if nameError}<span class="name-error">{nameError}</span>{/if}
 						{:else}
@@ -163,7 +164,7 @@
 			{#if $user}
 				<div class="sep"></div>
 				<button class="danger-item" onclick={handleLogout}>
-					<span class="action-icon">→</span>
+					<span class="action-icon"><LogOut size={14} /></span>
 					Cerrar sesión
 				</button>
 			{/if}

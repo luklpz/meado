@@ -12,6 +12,8 @@
 		Mic, MicOff, Monitor, MonitorOff, PhoneOff,
 		LayoutGrid, Focus, PanelRight,
 		Maximize2, X, Volume2, VolumeX, Users,
+		Pencil, Trash2, Settings, MessageSquare,
+		ChevronDown, Menu, Check,
 	} from 'lucide-svelte';
 
 	let { data } = $props();
@@ -928,7 +930,7 @@
 				aria-expanded={showServerMenu}
 			>
 				<span class="server-name-text">{server.name}</span>
-				<span class="server-name-chevron">{showServerMenu ? '✕' : '⌄'}</span>
+				<span class="server-name-chevron"><ChevronDown size={14} /></span>
 			</button>
 		</div>
 
@@ -953,7 +955,7 @@
 					/>
 					<div class="create-ch-actions">
 						<button class="ch-action-cancel" onclick={() => (createChannelType = null)}>Esc</button>
-						<button class="ch-action-ok" onclick={createChannel} disabled={createChannelLoading}>✓</button>
+						<button class="ch-action-ok" onclick={createChannel} disabled={createChannelLoading}><Check size={14} /></button>
 					</div>
 				</div>
 			{/if}
@@ -968,7 +970,7 @@
 						{/if}
 					</button>
 					{#if canManage}
-						<button class="ch-del-btn" title="Eliminar canal" onclick={() => deleteChannel(ch)}>✕</button>
+						<button class="ch-del-btn" title="Eliminar canal" onclick={() => deleteChannel(ch)}><X size={14} /></button>
 					{/if}
 				</div>
 			{/each}
@@ -993,7 +995,7 @@
 					/>
 					<div class="create-ch-actions">
 						<button class="ch-action-cancel" onclick={() => (createChannelType = null)}>Esc</button>
-						<button class="ch-action-ok" onclick={createChannel} disabled={createChannelLoading}>✓</button>
+						<button class="ch-action-ok" onclick={createChannel} disabled={createChannelLoading}><Check size={14} /></button>
 					</div>
 				</div>
 			{/if}
@@ -1006,7 +1008,7 @@
 						{#if voiceChannelId === ch.id}<span class="voice-dot"></span>{/if}
 					</button>
 					{#if canManage}
-						<button class="ch-del-btn" title="Eliminar canal" onclick={() => deleteChannel(ch)}>✕</button>
+						<button class="ch-del-btn" title="Eliminar canal" onclick={() => deleteChannel(ch)}><X size={14} /></button>
 					{/if}
 				</div>
 				{#if (voiceMembers.get(ch.id) ?? []).length > 0}
@@ -1078,7 +1080,7 @@
 				<div class="smenu-sep"></div>
 				<button class="smenu-item" onclick={() => { showServerMenu = false; openSettings('overview'); }}>
 					<span class="smenu-label">Ajustes del servidor</span>
-					<span class="smenu-icon">⚙️</span>
+					<span class="smenu-icon"><Settings size={15} /></span>
 				</button>
 				<button class="smenu-item" onclick={() => { showServerMenu = false; openSettings('roles'); }}>
 					<span class="smenu-label">Gestionar roles</span>
@@ -1086,7 +1088,7 @@
 				</button>
 				<button class="smenu-item" onclick={() => { showServerMenu = false; openSettings('members'); }}>
 					<span class="smenu-label">Gestionar miembros</span>
-					<span class="smenu-icon">👥</span>
+					<span class="smenu-icon"><Users size={15} /></span>
 				</button>
 			{/if}
 
@@ -1108,11 +1110,11 @@
 
 		{:else if selectedChannel.type === 'TEXT'}
 			<div class="content-header">
-				<button class="hamburger-btn" onclick={() => (sidebarOpen = true)} title="Canales">☰</button>
+				<button class="hamburger-btn" onclick={() => (sidebarOpen = true)} title="Canales"><Menu size={18} /></button>
 				<span class="header-prefix">#</span>
 				<strong class="header-name">{selectedChannel.name}</strong>
 				<div class="header-actions">
-					<button class="icon-btn" class:active={showMembers} title="Miembros" onclick={toggleMembers}>👥</button>
+					<button class="icon-btn" class:active={showMembers} title="Miembros" onclick={toggleMembers}><Users size={16} /></button>
 				</div>
 			</div>
 
@@ -1255,8 +1257,8 @@
 											<button class="emoji-pick-btn" onclick={() => toggleReaction(msg, emoji)}>{emoji}</button>
 										{/each}
 									</div>
-									{#if canEditMsg(msg)}<button class="msg-action-btn" title="Editar" onclick={() => startEdit(msg)}>✏️</button>{/if}
-									{#if canDeleteMsg(msg)}<button class="msg-action-btn danger" title="Eliminar" onclick={() => deleteMsg(msg)}>🗑️</button>{/if}
+									{#if canEditMsg(msg)}<button class="msg-action-btn" title="Editar" onclick={() => startEdit(msg)}><Pencil size={14} /></button>{/if}
+									{#if canDeleteMsg(msg)}<button class="msg-action-btn danger" title="Eliminar" onclick={() => deleteMsg(msg)}><Trash2 size={14} /></button>{/if}
 								</div>
 							{/if}
 						</div>
@@ -1289,7 +1291,7 @@
 
 		{:else if selectedChannel.type === 'VOICE'}
 			<div class="content-header">
-				<button class="hamburger-btn" onclick={() => (sidebarOpen = true)} title="Canales">☰</button>
+				<button class="hamburger-btn" onclick={() => (sidebarOpen = true)} title="Canales"><Menu size={18} /></button>
 				<span class="header-prefix"><Volume2 size={16} /></span>
 				<strong class="header-name">{selectedChannel.name}</strong>
 				<div class="header-actions">
@@ -1745,7 +1747,7 @@
 
 			<!-- Close button -->
 			<button class="settings-close-btn" onclick={() => showSettings = false} title="Cerrar (Esc)">
-				<span>✕</span>
+				<X size={16} />
 				<span class="settings-close-label">ESC</span>
 			</button>
 		</div>
@@ -1790,10 +1792,10 @@
 								{/if}
 							</div>
 							{#if m.user.id !== user.id}
-								<button class="dm-btn" title="Mensaje directo" onclick={(e) => { e.stopPropagation(); openDm(m.user.id); }}>💬</button>
+								<button class="dm-btn" title="Mensaje directo" onclick={(e) => { e.stopPropagation(); openDm(m.user.id); }}><MessageSquare size={14} /></button>
 							{/if}
 							{#if canManage && m.user.id !== user.id}
-								<button class="kick-btn" title="Expulsar" onclick={(e) => { e.stopPropagation(); kickMember(m.user.id, m.user.username); }}>✕</button>
+								<button class="kick-btn" title="Expulsar" onclick={(e) => { e.stopPropagation(); kickMember(m.user.id, m.user.username); }}><X size={14} /></button>
 							{/if}
 						</li>
 					{/each}
@@ -1834,7 +1836,7 @@
 			{#if profileCard.userId !== user.id}
 				<div class="pc-actions">
 					<button class="pc-dm-btn" onclick={() => { const uid = profileCard!.userId; profileCard = null; openDm(uid); }}>
-						💬 Enviar mensaje
+						<MessageSquare size={14} /> Enviar mensaje
 					</button>
 					{#if canManage}
 						<button class="pc-kick-btn" onclick={() => { const u = profileCard!; profileCard = null; kickMember(u.userId, u.username); }}>

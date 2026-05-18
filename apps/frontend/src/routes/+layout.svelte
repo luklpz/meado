@@ -10,6 +10,7 @@
 	import type { ChatSocket } from '$lib/socket.js';
 	import { playPing } from '$lib/ping.js';
 	import { uploadStore, formatSpeed } from '$lib/uploadStore.svelte.js';
+	import { X, Check, MessageSquare, Map } from 'lucide-svelte';
 
 	let { data, children } = $props();
 
@@ -235,7 +236,7 @@
 					<div class="upload-header">
 						<span class="upload-filename" title={u.filename}>{u.filename}</span>
 						{#if u.done || u.error}
-							<button class="upload-close" onclick={() => uploadStore.remove(u.id)} aria-label="Cerrar">✕</button>
+							<button class="upload-close" onclick={() => uploadStore.remove(u.id)} aria-label="Cerrar"><X size={16} /></button>
 						{/if}
 					</div>
 					{#if !u.done && !u.error}
@@ -247,7 +248,7 @@
 							{#if u.speed > 0}<span class="upload-speed">{formatSpeed(u.speed)}</span>{/if}
 						</div>
 					{:else if u.done && !u.error}
-						<p class="upload-status-ok">✓ Subido</p>
+						<p class="upload-status-ok"><Check size={14} /> Subido</p>
 					{:else}
 						<p class="upload-status-err">{u.error}</p>
 					{/if}
@@ -271,7 +272,7 @@
 							</button>
 						{/if}
 					</div>
-					<button class="close-btn" onclick={closeModal} aria-label="Cerrar">✕</button>
+					<button class="close-btn" onclick={closeModal} aria-label="Cerrar"><X size={16} /></button>
 				</div>
 
 				{#if modalTab === 'explore'}
@@ -346,10 +347,10 @@
 
 						<div class="type-options">
 							<button type="button" class="type-opt" class:selected={newType === 'DISCORD'} onclick={() => (newType = 'DISCORD')}>
-								<span>💬</span> Discord
+								<span><MessageSquare size={16} /></span> Discord
 							</button>
 							<button type="button" class="type-opt" class:selected={newType === 'SPATIAL'} onclick={() => (newType = 'SPATIAL')}>
-								<span>🗺️</span> Espacial
+								<span><Map size={16} /></span> Espacial
 							</button>
 						</div>
 
