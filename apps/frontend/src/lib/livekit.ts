@@ -2,11 +2,24 @@ import { writable, get } from 'svelte/store';
 import type { Room } from 'livekit-client';
 
 export type LiveKitStatus = 'idle' | 'connecting' | 'connected' | 'error';
+export type ScreenQuality = 'low' | 'medium' | 'high';
 
 export interface AudioDevice {
 	deviceId: string;
 	label: string;
 }
+
+export interface ScreenShare {
+	identity: string;
+	username: string;
+	track: any;
+}
+
+const SCREEN_QUALITY: Record<ScreenQuality, { width: number; height: number; frameRate: number; maxBitrate: number }> = {
+	low:    { width: 1280, height: 720,  frameRate: 15, maxBitrate: 1_000_000 },
+	medium: { width: 1920, height: 1080, frameRate: 30, maxBitrate: 3_000_000 },
+	high:   { width: 1920, height: 1080, frameRate: 60, maxBitrate: 6_000_000 },
+};
 
 function createLiveKitStore() {
 	const micEnabled = writable(false);
@@ -18,6 +31,11 @@ function createLiveKitStore() {
 	const canPlayAudio = writable(false);
 	const diagnostics = writable('');
 	const micGain = writable(1);
+	const activeSpeakers = writable<string[]>([]);
+	const mutedParticipants = writable<Set<string>>(new Set());
+	const screenEnabled = writable(false);
+	const screenQuality = writable<ScreenQuality>('medium');
+	const screenShares = writable<Map<string, ScreenShare>>(new Map());
 
 	let _room: Room | null = null;
 	let _audioCtx: AudioContext | null = null;
@@ -29,30 +47,44 @@ function createLiveKitStore() {
 
 	async function connect(url: string, token: string): Promise<Room> {
 		status.set('connecting');
+		try {
 		const { Room: LiveKitRoom, RoomEvent, Track } = await import('livekit-client');
 
-		// adaptiveStream pauses tracks on hidden elements — disable it
 		const room = new LiveKitRoom({ dynacast: true, adaptiveStream: false });
 		await room.connect(url, token);
 		_room = room;
 		status.set('connected');
 		canPlayAudio.set(room.canPlaybackAudio);
 
-		// Attach incoming audio tracks to DOM <audio> elements so they play
-		room.on(RoomEvent.TrackSubscribed, (track) => {
-			if (track.kind !== Track.Kind.Audio) return;
-			const el = track.attach() as HTMLAudioElement;
-			el.volume = 1;
-			el.style.display = 'none';
-			document.body.appendChild(el);
-			_audioEls.push(el);
+		room.on(RoomEvent.TrackSubscribed, (track, _pub, participant) => {
+			if (track.kind === Track.Kind.Audio) {
+				const el = track.attach() as HTMLAudioElement;
+				el.volume = 1;
+				el.style.display = 'none';
+				document.body.appendChild(el);
+				_audioEls.push(el);
+			} else if (track.source === Track.Source.ScreenShare) {
+				const cur = get(screenShares);
+				cur.set(participant.identity, {
+					identity: participant.identity,
+					username: participant.name ?? participant.identity,
+					track,
+				});
+				screenShares.set(new Map(cur));
+			}
 		});
 
-		room.on(RoomEvent.TrackUnsubscribed, (track) => {
-			if (track.kind !== Track.Kind.Audio) return;
-			const detached = track.detach();
-			detached.forEach((el) => el.remove());
-			_audioEls = _audioEls.filter((el) => !detached.includes(el));
+		room.on(RoomEvent.TrackUnsubscribed, (track, _pub, participant) => {
+			if (track.kind === Track.Kind.Audio) {
+				const detached = track.detach();
+				detached.forEach((el) => el.remove());
+				_audioEls = _audioEls.filter((el) => !detached.includes(el));
+			} else if (track.source === Track.Source.ScreenShare) {
+				track.detach();
+				const cur = get(screenShares);
+				cur.delete(participant.identity);
+				screenShares.set(new Map(cur));
+			}
 		});
 
 		const updateDiag = () => {
@@ -67,11 +99,38 @@ function createLiveKitStore() {
 		room.on(RoomEvent.ParticipantDisconnected, updateDiag);
 		room.on(RoomEvent.TrackSubscribed, updateDiag);
 		room.on(RoomEvent.TrackUnsubscribed, updateDiag);
+		room.on(RoomEvent.ActiveSpeakersChanged, (speakers) => {
+			activeSpeakers.set(speakers.map((p) => p.identity));
+		});
+
+		const updateMuted = () => {
+			const muted = new Set<string>();
+			room.remoteParticipants.forEach((p) => {
+				const hasActiveMic = Array.from(p.audioTrackPublications.values())
+					.some((pub) => !pub.isMuted && pub.track !== null);
+				if (!hasActiveMic) muted.add(p.identity);
+			});
+			mutedParticipants.set(muted);
+		};
+		room.on(RoomEvent.TrackPublished, updateMuted);
+		room.on(RoomEvent.TrackUnpublished, updateMuted);
+		room.on(RoomEvent.TrackMuted, updateMuted);
+		room.on(RoomEvent.TrackUnmuted, updateMuted);
+		room.on(RoomEvent.ParticipantConnected, updateMuted);
+		room.on(RoomEvent.ParticipantDisconnected, updateMuted);
+		room.on(RoomEvent.TrackSubscribed, updateMuted);
+		room.on(RoomEvent.TrackUnsubscribed, updateMuted);
+
 		_diagInterval = setInterval(updateDiag, 1000);
 		updateDiag();
 
 		await enumerateDevices();
 		return room;
+		} catch (err) {
+			status.set('error');
+			errorMessage.set('Error al conectar con el canal de voz');
+			throw err;
+		}
 	}
 
 	async function enumerateDevices(): Promise<void> {
@@ -89,16 +148,86 @@ function createLiveKitStore() {
 		if (!_room) return;
 		await _room.startAudio();
 		canPlayAudio.set(_room.canPlaybackAudio);
-		// Unmute any already-attached elements
 		_audioEls.forEach((el) => { el.muted = false; });
 	}
 
 	async function toggleMic(): Promise<void> {
 		if (!_room) { errorMessage.set('LiveKit no conectado'); return; }
+		errorMessage.set('');
 		await startAudio();
 		const next = !get(micEnabled);
-		if (next) await _enableMic(); else await _disableMic();
-		micEnabled.set(next);
+		try {
+			if (next) await _enableMic(); else await _disableMic();
+			micEnabled.set(next);
+		} catch {
+			errorMessage.set('Error al cambiar el micrófono');
+			if (next) try { await _disableMic(); } catch { /* already failed */ }
+		}
+	}
+
+	async function toggleScreen(): Promise<void> {
+		if (!_room) return;
+		errorMessage.set('');
+		const { Track } = await import('livekit-client');
+
+		if (get(screenEnabled)) {
+			const pub = _room.localParticipant.getTrackPublication(Track.Source.ScreenShare);
+			if (pub?.track) {
+				const mst = (pub.track as any).mediaStreamTrack as MediaStreamTrack;
+				await _room.localParticipant.unpublishTrack(mst);
+				mst.stop();
+			}
+			const audioPub = _room.localParticipant.getTrackPublication(Track.Source.ScreenShareAudio);
+			if (audioPub?.track) {
+				const mst = (audioPub.track as any).mediaStreamTrack as MediaStreamTrack;
+				await _room.localParticipant.unpublishTrack(mst);
+				mst.stop();
+			}
+			screenEnabled.set(false);
+		} else {
+			const q = get(screenQuality);
+			const preset = SCREEN_QUALITY[q];
+			let stream: MediaStream;
+			try {
+				stream = await navigator.mediaDevices.getDisplayMedia({
+					video: {
+						width: { ideal: preset.width },
+						height: { ideal: preset.height },
+						frameRate: { ideal: preset.frameRate },
+					},
+					audio: true,
+				});
+			} catch {
+				// User cancelled or browser denied — silent
+				return;
+			}
+
+			const videoTrack = stream.getVideoTracks()[0];
+			const audioTrack = stream.getAudioTracks()[0];
+
+			// User clicked browser "Stop sharing" button
+			videoTrack.addEventListener('ended', async () => {
+				if (get(screenEnabled)) await toggleScreen();
+			}, { once: true });
+
+			try {
+				await _room.localParticipant.publishTrack(videoTrack, {
+					source: Track.Source.ScreenShare,
+					simulcast: false,
+					videoEncoding: { maxBitrate: preset.maxBitrate, maxFramerate: preset.frameRate },
+				});
+				if (audioTrack) {
+					await _room.localParticipant.publishTrack(audioTrack, {
+						source: Track.Source.ScreenShareAudio,
+					});
+				}
+				screenEnabled.set(true);
+			} catch {
+				videoTrack.stop();
+				audioTrack?.stop();
+				errorMessage.set('Error al compartir pantalla');
+			}
+		}
 	}
 
 	async function _enableMic(): Promise<void> {
@@ -163,8 +292,13 @@ function createLiveKitStore() {
 	async function selectDevice(deviceId: string): Promise<void> {
 		selectedDeviceId.set(deviceId);
 		if (get(micEnabled) && _room) {
-			await _disableMic();
-			await _enableMic();
+			try {
+				await _disableMic();
+				await _enableMic();
+			} catch {
+				micEnabled.set(false);
+				errorMessage.set('Error al cambiar el micrófono');
+			}
 		}
 	}
 
@@ -188,14 +322,20 @@ function createLiveKitStore() {
 		_rafId = null;
 		micEnabled.set(false);
 		audioLevel.set(0);
+		activeSpeakers.set([]);
+		mutedParticipants.set(new Set());
+		screenEnabled.set(false);
+		screenShares.set(new Map());
 		status.set('idle');
 		errorMessage.set('');
 	}
 
 	return {
 		micEnabled, status, errorMessage, audioLevel, micDevices, selectedDeviceId,
-		canPlayAudio, diagnostics, micGain,
-		connect, enumerateDevices, startAudio, toggleMic, setGain, selectDevice, setError, disconnect,
+		canPlayAudio, diagnostics, micGain, activeSpeakers, mutedParticipants,
+		screenEnabled, screenQuality, screenShares,
+		connect, enumerateDevices, startAudio, toggleMic, toggleScreen,
+		setGain, selectDevice, setError, disconnect,
 	};
 }
 

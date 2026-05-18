@@ -6,9 +6,12 @@
 	import { livekitStore } from '$lib/livekit.js';
 	import type { MessagePayload, VoiceMember, MessageReaction } from '$lib/types/socket-events.types.js';
 	import { PERMISSION_LABELS, PERMISSION_CATEGORIES } from '$lib/permissions.js';
+	import PhaserGame from '$lib/game/PhaserGame.svelte';
+	import { uploadToDrive } from '$lib/driveUpload.js';
 
 	let { data } = $props();
-	const { user, server } = data;
+	const user = $derived(data.user as { id: string; username: string; role: string; avatarUrl?: string | null });
+	const server = $derived(data.server as any);
 
 	// ── Types ──────────────────────────────────────────────────────────────
 	interface Channel { id: string; name: string; type: 'TEXT' | 'VOICE'; position: number; }
@@ -20,11 +23,12 @@
 	}
 
 	// ── Permissions ────────────────────────────────────────────────────────
-	const isOwner = server.ownerId === user.id;
-	const isSuperAdmin = user.role === 'SUPERADMIN';
-	const canManage = isOwner || isSuperAdmin;
+	const isOwner = $derived(server.ownerId === user.id);
+	const isSuperAdmin = $derived(user.role === 'SUPERADMIN');
+	const canManage = $derived(isOwner || isSuperAdmin);
 
 	// ── State ──────────────────────────────────────────────────────────────
+	// svelte-ignore state_referenced_locally
 	let channels = $state<Channel[]>([...server.channels]);
 	let selectedChannel = $state<Channel | null>(null);
 	let messages = $state<MessagePayload[]>([]);
@@ -60,7 +64,7 @@
 
 	// ── Server header dropdown ─────────────────────────────────────────────
 	let showServerMenu = $state(false);
-	let serverMenuBtnEl: HTMLButtonElement | undefined;
+	let serverMenuBtnEl = $state<HTMLButtonElement | undefined>(undefined);
 	let serverMenuTop = $state(0);
 	let serverMenuLeft = $state(0);
 	let serverMenuWidth = $state(0);
@@ -78,8 +82,11 @@
 	// ── Server settings ────────────────────────────────────────────────────
 	let showSettings = $state(false);
 	let settingsSection = $state<'overview' | 'roles' | 'role-edit' | 'members' | 'whitelist' | 'bans' | 'danger'>('overview');
+	// svelte-ignore state_referenced_locally
 	let settingsName = $state(server.name);
+	// svelte-ignore state_referenced_locally
 	let settingsDesc = $state(server.description ?? '');
+	// svelte-ignore state_referenced_locally
 	let settingsAccess = $state<'PUBLIC' | 'PASSWORD' | 'WHITELIST'>(server.accessType as any);
 	let settingsPassword = $state('');
 	let settingsLoading = $state(false);
@@ -127,6 +134,7 @@
 
 	// ── Icon upload ────────────────────────────────────────────────────────
 	let iconUploadError = $state('');
+	// svelte-ignore state_referenced_locally
 	let serverIconUrl = $state<string | null>(server.iconUrl ?? null);
 
 	// ── Connection status ─────────────────────────────────────────────────
@@ -151,8 +159,10 @@
 
 	// ── Reactive avatar from auth store ───────────────────────────────────
 	const authUser = authStore.user;
+	// svelte-ignore state_referenced_locally
 	let localAvatarUrl = $state(user.avatarUrl ?? null);
 	$effect(() => { if ($authUser?.avatarUrl) localAvatarUrl = $authUser.avatarUrl; });
+	$effect(() => { if ($livekitError) showToast($livekitError); });
 
 	// ── Unread counts ──────────────────────────────────────────────────────
 	let unread = $state<Map<string, number>>(new Map());
@@ -169,6 +179,26 @@
 	let voiceChannels = $derived(channels.filter((c) => c.type === 'VOICE'));
 	let currentVoiceMembers = $derived(voiceChannelId ? (voiceMembers.get(voiceChannelId) ?? []) : []);
 	const micEnabledStore = livekitStore.micEnabled;
+	const activeSpeakersStore = livekitStore.activeSpeakers;
+	const mutedStore = livekitStore.mutedParticipants;
+	const audioLevelStore = livekitStore.audioLevel;
+	const canPlayAudioStore = livekitStore.canPlayAudio;
+	const micDevicesStore = livekitStore.micDevices;
+	const selectedDeviceIdStore = livekitStore.selectedDeviceId;
+	const screenEnabledStore = livekitStore.screenEnabled;
+	const screenQualityStore = livekitStore.screenQuality;
+	const screenSharesStore = livekitStore.screenShares;
+	const livekitError = livekitStore.errorMessage;
+	let joiningVoice = $state(false);
+
+	function attachScreenTrack(el: HTMLVideoElement, track: any) {
+		track.attach(el);
+		return {
+			update(newTrack: any) { track.detach(el); newTrack.attach(el); },
+			destroy() { track.detach(el); },
+		};
+	}
+	let prevTextChannel = $state<Channel | null>(null);
 
 	// ── Socket setup ───────────────────────────────────────────────────────
 	onMount(() => {
@@ -213,7 +243,23 @@
 			messages = messages.map((m) => m.id === messageId ? { ...m, reactions } : m);
 		});
 		socket.on('disconnect', () => { socketConnected = false; });
-		socket.on('connect', () => { socketConnected = true; });
+		socket.on('connect', () => {
+			socketConnected = true;
+			voiceMembers = new Map();
+			socket.emit('server:subscribe', {
+				serverId: server.id,
+				channelIds: channels.filter((c) => c.type === 'VOICE').map((c) => c.id),
+			});
+			if (selectedChannel) {
+				socket.emit('channel:join', { channelId: selectedChannel.id });
+				if (selectedChannel.type === 'TEXT') loadMessages(selectedChannel.id);
+			}
+		});
+
+		socket.emit('server:subscribe', {
+			serverId: server.id,
+			channelIds: channels.filter((c) => c.type === 'VOICE').map((c) => c.id),
+		});
 
 		if (textChannels.length > 0) selectChannel(textChannels[0]);
 
@@ -224,6 +270,11 @@
 			socket.off('voice:state');
 			socket.off('voice:joined');
 			socket.off('voice:left');
+			socket.off('typing:update');
+			socket.off('reaction:updated');
+			socket.off('disconnect');
+			socket.off('connect');
+			clearTimeout(typingTimer);
 			if (selectedChannel) socket.emit('channel:leave', { channelId: selectedChannel.id });
 			if (voiceChannelId) { socket.emit('voice:leave', { channelId: voiceChannelId }); livekitStore.disconnect(); }
 		};
@@ -233,7 +284,8 @@
 	async function selectChannel(ch: Channel) {
 		const socket = socketStore.raw();
 		if (!socket) return;
-		if (selectedChannel?.id !== ch.id) socket.emit('channel:leave', { channelId: selectedChannel?.id ?? '' });
+		if (selectedChannel && selectedChannel.id !== ch.id) socket.emit('channel:leave', { channelId: selectedChannel.id });
+		if (ch.type === 'TEXT') prevTextChannel = ch;
 		selectedChannel = ch;
 		unread = new Map(unread).set(ch.id, 0);
 		typingUsernames = [];
@@ -350,15 +402,47 @@
 		socket.emit('reaction:toggle', { messageId: msg.id, emoji });
 	}
 
+	let imageUploading = $state(false);
+
 	async function sendFile(file: File) {
 		if (!selectedChannel) return;
-		const fd = new FormData();
-		fd.append('file', file);
-		if (msgInput.trim()) fd.append('content', msgInput.trim());
+
+		if (file.type.startsWith('image/')) {
+			imageUploading = true;
+			try {
+				const fd = new FormData();
+				fd.append('file', file);
+				if (msgInput.trim()) fd.append('content', msgInput.trim());
+				msgInput = '';
+				const res = await fetch(`/api/channels/${selectedChannel.id}/messages`, {
+					method: 'POST', credentials: 'include', body: fd,
+				});
+				if (!res.ok) showToast('Error al enviar la imagen');
+			} finally {
+				imageUploading = false;
+			}
+			return;
+		}
+
+		// Non-image → Drive direct upload (global tray tracks progress)
+		const content = msgInput.trim();
 		msgInput = '';
-		await fetch(`/api/channels/${selectedChannel.id}/messages`, {
-			method: 'POST', credentials: 'include', body: fd,
-		});
+		const channelId = selectedChannel.id;
+		try {
+			const driveFile = await uploadToDrive(file);
+			const fd = new FormData();
+			if (content) fd.append('content', content);
+			fd.append('attachmentUrl', driveFile.url);
+			fd.append('attachmentName', file.name);
+			fd.append('attachmentSize', String(file.size));
+			fd.append('attachmentMimeType', file.type || 'application/octet-stream');
+			const msgRes = await fetch(`/api/channels/${channelId}/messages`, {
+				method: 'POST', credentials: 'include', body: fd,
+			});
+			if (!msgRes.ok) showToast('Error al enviar el mensaje');
+		} catch {
+			showToast('Error al subir el archivo');
+		}
 	}
 
 	function startEdit(msg: MessagePayload) {
@@ -382,9 +466,10 @@
 
 	async function deleteMsg(msg: MessagePayload) {
 		if (!selectedChannel) return;
-		await fetch(`/api/channels/${selectedChannel.id}/messages/${msg.id}`, {
+		const res = await fetch(`/api/channels/${selectedChannel.id}/messages/${msg.id}`, {
 			method: 'DELETE', credentials: 'include',
 		});
+		if (!res.ok) showToast('Error al borrar el mensaje');
 	}
 
 	function onEditKeydown(e: KeyboardEvent, msg: MessagePayload) {
@@ -459,15 +544,26 @@
 
 	// ── Voice ─────────────────────────────────────────────────────────────
 	async function joinVoiceChannel(ch: Channel) {
-		if (voiceChannelId) await leaveVoice();
-		const res = await fetch(`/api/channels/${ch.id}/livekit-token`, { credentials: 'include' });
-		if (!res.ok) return;
-		const { token, url } = await res.json();
-		const socket = socketStore.raw();
-		socket?.emit('voice:join', { channelId: ch.id });
-		voiceChannelId = ch.id;
-		await livekitStore.connect(url, token);
-		selectedChannel = ch;
+		if (joiningVoice) return;
+		joiningVoice = true;
+		try {
+			if (voiceChannelId) await leaveVoice();
+			const res = await fetch(`/api/channels/${ch.id}/livekit-token`, { credentials: 'include' });
+			if (!res.ok) { showToast('No se pudo obtener acceso al canal de voz'); return; }
+			const { token, url } = await res.json();
+			try {
+				await livekitStore.connect(url, token);
+			} catch {
+				showToast('Error al conectar con el canal de voz');
+				return;
+			}
+			const socket = socketStore.raw();
+			socket?.emit('voice:join', { channelId: ch.id });
+			voiceChannelId = ch.id;
+			selectedChannel = ch;
+		} finally {
+			joiningVoice = false;
+		}
 	}
 
 	async function leaveVoice() {
@@ -476,7 +572,8 @@
 		socket?.emit('voice:leave', { channelId: voiceChannelId });
 		livekitStore.disconnect();
 		voiceChannelId = null;
-		if (textChannels.length > 0) selectChannel(textChannels[0]);
+		const dest = prevTextChannel ?? (textChannels.length > 0 ? textChannels[0] : null);
+		if (dest) selectChannel(dest);
 	}
 
 	// ── Server settings ───────────────────────────────────────────────────
@@ -643,7 +740,8 @@
 	}
 
 	async function removeFromWhitelist(userId: string) {
-		await fetch(`/api/servers/${server.slug}/whitelist/${userId}`, { method: 'DELETE', credentials: 'include' });
+		const res = await fetch(`/api/servers/${server.slug}/whitelist/${userId}`, { method: 'DELETE', credentials: 'include' });
+		if (!res.ok) { showToast('Error al eliminar de la lista blanca'); return; }
 		whitelist = whitelist.filter((w) => w.user.id !== userId);
 	}
 
@@ -702,8 +800,12 @@
 	async function uploadAvatar(e: Event) {
 		const file = (e.target as HTMLInputElement).files?.[0];
 		if (!file) return;
-		showProfile = false;
-		await authStore.updateAvatar(file);
+		try {
+			await authStore.updateAvatar(file);
+			showProfile = false;
+		} catch {
+			showToast('Error al subir el avatar');
+		}
 		(e.target as HTMLInputElement).value = '';
 	}
 
@@ -755,10 +857,22 @@
 	function fileSize(bytes: number) {
 		if (bytes < 1024) return `${bytes} B`;
 		if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-		return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+		if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+		return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
 	}
 
 	const isImage = (mime: string) => mime.startsWith('image/');
+
+	function fileIcon(mime: string): string {
+		if (mime.startsWith('video/')) return '🎬';
+		if (mime.startsWith('audio/')) return '🎵';
+		if (mime === 'application/pdf') return '📄';
+		if (mime.includes('word') || mime.includes('document')) return '📝';
+		if (mime.includes('excel') || mime.includes('spreadsheet') || mime.includes('csv')) return '📊';
+		if (mime.includes('zip') || mime.includes('rar') || mime.includes('tar') || mime.includes('gzip') || mime.includes('7z')) return '📦';
+		if (mime.startsWith('text/')) return '📋';
+		return '📎';
+	}
 
 	function canEditMsg(msg: MessagePayload) { return msg.author.id === user.id; }
 	function canDeleteMsg(msg: MessagePayload) { return msg.author.id === user.id || canManage; }
@@ -766,6 +880,11 @@
 
 <svelte:head><title>{totalUnread > 0 ? `(${totalUnread}) ` : ''}{server.name} — Meado</title></svelte:head>
 
+{#if server.serverType === 'SPATIAL'}
+	<div class="spatial-shell">
+		<PhaserGame roomSlug={server.slug} username={user.username} />
+	</div>
+{:else}
 <div class="discord-layout" class:show-members={showMembers} class:sidebar-open={sidebarOpen}>
 	{#if !socketConnected}
 		<div class="reconnect-banner">Conexión perdida — reconectando…</div>
@@ -801,6 +920,7 @@
 
 			{#if createChannelType === 'TEXT'}
 				<div class="create-channel-inline">
+					<!-- svelte-ignore a11y_autofocus -->
 					<input
 						class="create-ch-input"
 						placeholder="nombre-canal"
@@ -840,6 +960,7 @@
 
 			{#if createChannelType === 'VOICE'}
 				<div class="create-channel-inline">
+					<!-- svelte-ignore a11y_autofocus -->
 					<input
 						class="create-ch-input"
 						placeholder="nombre-canal"
@@ -856,7 +977,7 @@
 
 			{#each voiceChannels as ch (ch.id)}
 				<div class="channel-row" class:active={voiceChannelId === ch.id}>
-					<button class="channel-btn" onclick={() => joinVoiceChannel(ch)}>
+					<button class="channel-btn" onclick={() => selectChannel(ch)}>
 						<span class="ch-prefix">🔊</span>
 						<span class="ch-name">{ch.name}</span>
 						{#if voiceChannelId === ch.id}<span class="voice-dot"></span>{/if}
@@ -868,13 +989,16 @@
 				{#if (voiceMembers.get(ch.id) ?? []).length > 0}
 					<div class="voice-participants-sidebar">
 						{#each voiceMembers.get(ch.id) ?? [] as m (m.userId)}
-							<div class="voice-participant-item">
+							<div class="voice-participant-item" class:vp-speaking={$activeSpeakersStore.includes(m.userId)}>
 								{#if m.avatarUrl}
 									<img src={m.avatarUrl} class="avatar-xs" alt="" />
 								{:else}
 									<div class="avatar-xs avatar-init">{avatarInitial(m.username)}</div>
 								{/if}
 								<span class="vp-name">{m.username}</span>
+								{#if m.userId !== user.id && $mutedStore.has(m.userId)}
+									<span class="vp-muted">🔇</span>
+								{/if}
 							</div>
 						{/each}
 					</div>
@@ -1017,7 +1141,8 @@
 									</div>
 									{#if editingId === msg.id}
 										<div class="edit-box">
-											<textarea class="edit-input" bind:value={editingContent} onkeydown={(e) => onEditKeydown(e, msg)} rows="2" autofocus></textarea>
+											<!-- svelte-ignore a11y_autofocus -->
+										<textarea class="edit-input" bind:value={editingContent} onkeydown={(e) => onEditKeydown(e, msg)} rows="2" autofocus></textarea>
 											<div class="edit-actions">
 												<button class="edit-cancel" onclick={cancelEdit}>Cancelar</button>
 												<button class="edit-save" onclick={() => submitEdit(msg)}>Guardar</button>
@@ -1029,9 +1154,18 @@
 									{#each msg.attachments as att (att.id)}
 										<div class="attachment">
 											{#if isImage(att.mimeType)}
-												<img src={att.url} class="att-img" alt={att.name} />
+												<a href={att.url} target="_blank" rel="noreferrer" class="att-img-wrap">
+													<img src={att.url} class="att-img" alt={att.name} loading="lazy" />
+												</a>
 											{:else}
-												<a href={att.url} target="_blank" class="att-file">📎 {att.name} <span class="att-size">({fileSize(att.size)})</span></a>
+												<div class="att-file">
+													<span class="att-icon">{fileIcon(att.mimeType)}</span>
+													<div class="att-info">
+														<a href={att.url} target="_blank" rel="noreferrer" class="att-name">{att.name}</a>
+														<span class="att-size">{fileSize(att.size)}</span>
+													</div>
+													<a href={att.url} download={att.name} rel="noreferrer" class="att-dl" aria-label="Descargar">↓</a>
+												</div>
 											{/if}
 										</div>
 									{/each}
@@ -1052,7 +1186,8 @@
 								<div class="msg-body">
 									{#if editingId === msg.id}
 										<div class="edit-box">
-											<textarea class="edit-input" bind:value={editingContent} onkeydown={(e) => onEditKeydown(e, msg)} rows="2" autofocus></textarea>
+											<!-- svelte-ignore a11y_autofocus -->
+										<textarea class="edit-input" bind:value={editingContent} onkeydown={(e) => onEditKeydown(e, msg)} rows="2" autofocus></textarea>
 											<div class="edit-actions">
 												<button class="edit-cancel" onclick={cancelEdit}>Cancelar</button>
 												<button class="edit-save" onclick={() => submitEdit(msg)}>Guardar</button>
@@ -1064,9 +1199,18 @@
 									{#each msg.attachments as att (att.id)}
 										<div class="attachment">
 											{#if isImage(att.mimeType)}
-												<img src={att.url} class="att-img" alt={att.name} />
+												<a href={att.url} target="_blank" rel="noreferrer" class="att-img-wrap">
+													<img src={att.url} class="att-img" alt={att.name} loading="lazy" />
+												</a>
 											{:else}
-												<a href={att.url} target="_blank" class="att-file">📎 {att.name} <span class="att-size">({fileSize(att.size)})</span></a>
+												<div class="att-file">
+													<span class="att-icon">{fileIcon(att.mimeType)}</span>
+													<div class="att-info">
+														<a href={att.url} target="_blank" rel="noreferrer" class="att-name">{att.name}</a>
+														<span class="att-size">{fileSize(att.size)}</span>
+													</div>
+													<a href={att.url} download={att.name} rel="noreferrer" class="att-dl" aria-label="Descargar">↓</a>
+												</div>
 											{/if}
 										</div>
 									{/each}
@@ -1113,9 +1257,9 @@
 			{/if}
 			<div class="input-area">
 				<div class="input-box">
-					<button class="attach-btn" title="Adjuntar archivo" onclick={() => fileInput?.click()}>+</button>
+					<button class="attach-btn" title="Adjuntar archivo" disabled={imageUploading} onclick={() => fileInput?.click()}>+</button>
 					<input class="hidden-file" type="file" accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.zip,.rar" bind:this={fileInput} onchange={onFileChange} />
-					<textarea class="msg-input" placeholder="Escribir en #{selectedChannel.name}" bind:value={msgInput} onkeydown={onKeydown} rows="1"></textarea>
+					<textarea class="msg-input" placeholder="Escribir en #{selectedChannel.name}" bind:value={msgInput} onkeydown={onKeydown} rows="1" maxlength="4000"></textarea>
 					<button class="send-btn" disabled={!msgInput.trim() || sendingMsg} onclick={() => sendMessage()}>↑</button>
 				</div>
 			</div>
@@ -1136,25 +1280,93 @@
 						<div class="voice-icon-big">🔊</div>
 						<h3>{selectedChannel.name}</h3>
 						<p>{(voiceMembers.get(selectedChannel.id) ?? []).length} participante(s)</p>
-						<button class="btn-primary" onclick={() => selectedChannel && joinVoiceChannel(selectedChannel)}>Unirse al canal de voz</button>
+						<button
+							class="btn-primary"
+							disabled={joiningVoice}
+							onclick={() => selectedChannel && joinVoiceChannel(selectedChannel)}
+						>
+							{joiningVoice ? 'Conectando...' : 'Unirse al canal de voz'}
+						</button>
 					</div>
 				{:else}
 					<div class="voice-participants-grid">
 						{#each currentVoiceMembers as m (m.userId)}
-							<div class="voice-card" class:is-you={m.userId === user.id}>
-								{#if m.avatarUrl}
-									<img src={m.avatarUrl} class="voice-avatar" alt="" />
-								{:else}
-									<div class="voice-avatar avatar-init">{avatarInitial(m.username)}</div>
-								{/if}
+							{@const isSpeaking = $activeSpeakersStore.includes(m.userId)}
+							{@const isMuted = m.userId !== user.id && $mutedStore.has(m.userId)}
+							<div class="voice-card" class:is-you={m.userId === user.id} class:speaking={isSpeaking}>
+								<div class="voice-avatar-wrap">
+									{#if m.avatarUrl}
+										<img src={m.avatarUrl} class="voice-avatar" alt="" />
+									{:else}
+										<div class="voice-avatar avatar-init">{avatarInitial(m.username)}</div>
+									{/if}
+									{#if isSpeaking}
+										<span class="speaking-ring"></span>
+									{/if}
+									{#if isMuted}
+										<span class="muted-badge">🔇</span>
+									{/if}
+								</div>
 								<span class="voice-card-name">{m.username}{m.userId === user.id ? ' (tú)' : ''}</span>
 							</div>
 						{/each}
 					</div>
-					<div class="voice-controls-bar">
-						<button class="ctrl-btn-lg" class:active={$micEnabledStore} onclick={() => livekitStore.toggleMic()}>
-							{$micEnabledStore ? '🎙️ Micro activo' : '🔇 Micro silenciado'}
+					{#if $screenSharesStore.size > 0}
+						<div class="screen-shares-section">
+							<div class="screen-shares-label">Pantallas compartidas</div>
+							<div class="screen-shares-grid">
+								{#each [...$screenSharesStore.entries()] as [identity, share] (identity)}
+									<div class="screen-card">
+										<!-- svelte-ignore a11y_media_has_caption -->
+										<video use:attachScreenTrack={share.track} class="screen-video" autoplay playsinline muted></video>
+										<div class="screen-card-name">{share.username}</div>
+									</div>
+								{/each}
+							</div>
+						</div>
+					{/if}
+					{#if !$canPlayAudioStore}
+						<button class="audio-unlock-banner" onclick={() => livekitStore.startAudio()}>
+							🔇 Audio bloqueado por el navegador — haz clic aquí para activarlo
 						</button>
+					{/if}
+					<div class="voice-controls-bar">
+						<div class="mic-control">
+							<button class="ctrl-btn-lg" class:active={$micEnabledStore} onclick={() => livekitStore.toggleMic()}>
+								{$micEnabledStore ? '🎙️ Micro activo' : '🔇 Micro silenciado'}
+							</button>
+							{#if $micEnabledStore}
+								<div class="mic-level-bar" title="Nivel de micrófono">
+									<div class="mic-level-fill" style="width: {Math.round($audioLevelStore * 100)}%"></div>
+								</div>
+							{/if}
+							{#if $micDevicesStore.length > 1}
+								<select
+									class="device-select"
+									value={$selectedDeviceIdStore}
+									onchange={(e) => livekitStore.selectDevice(e.currentTarget.value)}
+								>
+									{#each $micDevicesStore as d (d.deviceId)}
+										<option value={d.deviceId}>{d.label}</option>
+									{/each}
+								</select>
+							{/if}
+						</div>
+						<div class="screen-control">
+							<select
+								class="device-select"
+								value={$screenQualityStore}
+								onchange={(e) => screenQualityStore.set(e.currentTarget.value as any)}
+								disabled={$screenEnabledStore}
+							>
+								<option value="low">720p · 15fps</option>
+								<option value="medium">1080p · 30fps</option>
+								<option value="high">1080p · 60fps</option>
+							</select>
+							<button class="ctrl-btn-lg" class:active={$screenEnabledStore} onclick={() => livekitStore.toggleScreen()}>
+								{$screenEnabledStore ? '🖥️ Detener' : '🖥️ Compartir pantalla'}
+							</button>
+						</div>
 						<button class="ctrl-btn-lg danger" onclick={leaveVoice}>📵 Desconectar</button>
 					</div>
 				{/if}
@@ -1165,7 +1377,7 @@
 	<!-- Settings full-screen -->
 	{#if showSettings}
 		<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-		<div class="settings-fullscreen" role="dialog" onkeydown={(e) => { if (e.key === 'Escape') showSettings = false; }}>
+		<div class="settings-fullscreen" role="dialog" tabindex="-1" onkeydown={(e) => { if (e.key === 'Escape') showSettings = false; }}>
 			<!-- Left nav -->
 			<aside class="settings-nav">
 				<div class="settings-nav-server">{server.name}</div>
@@ -1502,8 +1714,17 @@
 		</div>
 	{/if}
 </div>
+{/if}
 
 <style>
+	.spatial-shell {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		height: 100%;
+		background: var(--bg-base);
+	}
+
 	/* ── Layout ──────────────────────────────────────────────────────────── */
 	.discord-layout {
 		display: grid;
@@ -1796,7 +2017,7 @@
 	.voice-dot {
 		width: 7px; height: 7px;
 		border-radius: 50%;
-		background: #22c55e;
+		background: var(--success);
 		flex-shrink: 0;
 	}
 
@@ -1866,7 +2087,11 @@
 		color: var(--text-muted);
 	}
 
-	.vp-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+	.vp-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+
+	.voice-participant-item.vp-speaking .vp-name { color: #22c55e; }
+
+	.vp-muted { font-size: 0.65rem; opacity: 0.6; flex-shrink: 0; }
 
 	/* User area */
 	.user-area {
@@ -2030,8 +2255,6 @@
 
 	.msg-header { display: flex; align-items: baseline; gap: 0.4rem; }
 
-	.msg-author { font-size: 0.875rem; font-weight: 600; color: var(--text-primary); }
-
 	.avatar-btn-msg {
 		background: transparent; border: none; padding: 0; cursor: pointer;
 		border-radius: 50%; display: block;
@@ -2174,29 +2397,70 @@
 	}
 
 	/* Attachments */
-	.attachment { margin-top: 0.25rem; }
+	.attachment { margin-top: 0.3rem; }
+
+	.att-img-wrap { display: inline-block; }
 
 	.att-img {
 		max-width: 400px;
 		max-height: 300px;
 		border-radius: var(--radius);
 		display: block;
+		cursor: zoom-in;
 	}
 
 	.att-file {
 		display: inline-flex;
 		align-items: center;
-		gap: 0.3rem;
-		font-size: 0.8rem;
-		color: var(--accent);
-		text-decoration: none;
-		padding: 0.35rem 0.6rem;
+		gap: 0.5rem;
+		padding: 0.45rem 0.6rem;
 		background: var(--bg-elevated);
-		border-radius: var(--radius);
+		border-radius: var(--radius-lg);
 		border: 1px solid var(--border);
+		max-width: 320px;
 	}
 
-	.att-size { color: var(--text-muted); font-size: 0.7rem; }
+	.att-icon { font-size: 1.2rem; flex-shrink: 0; }
+
+	.att-info {
+		flex: 1;
+		display: flex;
+		flex-direction: column;
+		gap: 0.1rem;
+		overflow: hidden;
+	}
+
+	.att-name {
+		font-size: 0.8rem;
+		font-weight: 600;
+		color: var(--accent);
+		text-decoration: none;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.att-name:hover { text-decoration: underline; }
+
+	.att-size { color: var(--text-muted); font-size: 0.68rem; }
+
+	.att-dl {
+		flex-shrink: 0;
+		width: 24px;
+		height: 24px;
+		border-radius: var(--radius-sm);
+		background: var(--bg-base);
+		border: 1px solid var(--border);
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		font-size: 0.8rem;
+		color: var(--text-secondary);
+		text-decoration: none;
+		transition: background var(--transition), color var(--transition);
+	}
+
+	.att-dl:hover { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
 
 	/* ── Message input ────────────────────────────────────────────────────── */
 	.input-area {
@@ -2313,6 +2577,101 @@
 
 	.voice-card.is-you { border-color: var(--accent); }
 
+	.voice-card.speaking { border-color: #22c55e; box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.25); }
+
+	.voice-avatar-wrap {
+		position: relative;
+		width: 64px; height: 64px;
+		display: flex; align-items: center; justify-content: center;
+		flex-shrink: 0;
+	}
+
+	.speaking-ring {
+		position: absolute; inset: -4px;
+		border-radius: 50%;
+		border: 2px solid #22c55e;
+		animation: speaking-pulse 1s ease-in-out infinite;
+		pointer-events: none;
+	}
+
+	@keyframes speaking-pulse {
+		0%, 100% { opacity: 1; transform: scale(1); }
+		50% { opacity: 0.5; transform: scale(1.08); }
+	}
+
+	.muted-badge {
+		position: absolute;
+		bottom: -2px; right: -2px;
+		font-size: 0.7rem;
+		line-height: 1;
+		background: var(--bg-secondary);
+		border-radius: 50%;
+		padding: 1px;
+	}
+
+	.device-select {
+		font-size: 0.72rem;
+		background: var(--bg-tertiary);
+		color: var(--text-secondary);
+		border: 1px solid var(--border);
+		border-radius: var(--radius);
+		padding: 0.15rem 0.35rem;
+		cursor: pointer;
+		width: 100%;
+	}
+	.device-select:focus { outline: none; border-color: var(--accent); }
+
+	.screen-control { display: flex; flex-direction: column; gap: 0.3rem; align-items: stretch; }
+
+	/* Screen share viewer */
+	.screen-shares-section {
+		width: 100%;
+		max-width: 800px;
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+	}
+
+	.screen-shares-label {
+		font-size: 0.72rem;
+		text-transform: uppercase;
+		letter-spacing: 0.06em;
+		color: var(--text-muted);
+	}
+
+	.screen-shares-grid {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.75rem;
+	}
+
+	.screen-card {
+		display: flex;
+		flex-direction: column;
+		gap: 0.35rem;
+		background: var(--bg-secondary);
+		border: 1px solid var(--border);
+		border-radius: var(--radius);
+		overflow: hidden;
+		flex: 1;
+		min-width: 280px;
+		max-width: 560px;
+	}
+
+	.screen-video {
+		width: 100%;
+		aspect-ratio: 16 / 9;
+		object-fit: contain;
+		background: #000;
+		display: block;
+	}
+
+	.screen-card-name {
+		font-size: 0.78rem;
+		color: var(--text-muted);
+		padding: 0.25rem 0.5rem 0.35rem;
+	}
+
 	.voice-avatar {
 		width: 64px; height: 64px;
 		border-radius: 50%;
@@ -2322,7 +2681,36 @@
 
 	.voice-card-name { font-size: 0.82rem; color: var(--text-secondary); }
 
-	.voice-controls-bar { display: flex; gap: 0.75rem; }
+	.audio-unlock-banner {
+		background: rgba(239, 68, 68, 0.12);
+		border: 1px solid rgba(239, 68, 68, 0.4);
+		color: #fca5a5;
+		border-radius: var(--radius);
+		padding: 0.5rem 1rem;
+		font-size: 0.82rem;
+		cursor: pointer;
+		width: 100%; max-width: 480px;
+		text-align: center;
+	}
+	.audio-unlock-banner:hover { background: rgba(239, 68, 68, 0.2); }
+
+	.voice-controls-bar { display: flex; gap: 0.75rem; align-items: center; }
+
+	.mic-control { display: flex; flex-direction: column; align-items: stretch; gap: 0.3rem; }
+
+	.mic-level-bar {
+		height: 3px;
+		background: rgba(255,255,255,0.1);
+		border-radius: 2px;
+		overflow: hidden;
+		width: 100%;
+	}
+	.mic-level-fill {
+		height: 100%;
+		background: #22c55e;
+		border-radius: 2px;
+		transition: width 0.05s linear;
+	}
 
 	.ctrl-btn-lg {
 		padding: 0.6rem 1.25rem;
@@ -2481,9 +2869,6 @@
 	.btn-primary:hover { opacity: 0.85; }
 	.btn-primary:disabled { opacity: 0.45; cursor: not-allowed; }
 
-	/* ── Server header actions ───────────────────────────────────────────── */
-	.server-header-actions { display: flex; align-items: center; gap: 0.1rem; }
-
 	/* ── Profile ─────────────────────────────────────────────────────────── */
 	.user-info-row { position: relative; }
 
@@ -2535,82 +2920,9 @@
 	.profile-menu-item.danger { color: #f87171; }
 	.profile-menu-item.danger:hover { background: rgba(239,68,68,0.12); }
 
-	/* ── Settings modal ──────────────────────────────────────────────────── */
-	.modal-overlay {
-		position: fixed;
-		inset: 0;
-		background: rgba(0,0,0,0.65);
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		z-index: 200;
-	}
-
-	.settings-modal {
-		background: var(--bg-surface);
-		border: 1px solid var(--border-strong);
-		border-radius: var(--radius-lg);
-		width: 100%;
-		max-width: 480px;
-		max-height: 90vh;
-		overflow-y: auto;
-		display: flex;
-		flex-direction: column;
-	}
-
-	.settings-header {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		padding: 1rem 1.25rem;
-		border-bottom: 1px solid var(--border);
-		flex-shrink: 0;
-	}
-
-	.settings-header h3 { font-size: 0.9rem; color: var(--text-primary); }
-
 	.optional { font-weight: 400; text-transform: none; letter-spacing: 0; color: var(--text-muted); }
 
 	.error { font-size: 0.75rem; color: var(--error); }
-
-	.danger-title {
-		font-size: 0.7rem;
-		font-weight: 700;
-		text-transform: uppercase;
-		letter-spacing: 0.08em;
-		color: #f87171;
-		margin: 0 0 0.25rem;
-	}
-
-	.btn-danger-outline {
-		padding: 0.4rem 0.85rem;
-		background: transparent;
-		border: 1px solid rgba(239,68,68,0.4);
-		border-radius: var(--radius);
-		color: #f87171;
-		font-size: 0.82rem;
-		font-family: inherit;
-		cursor: pointer;
-		transition: background var(--transition), border-color var(--transition);
-		text-align: left;
-	}
-
-	.btn-danger-outline:hover { background: rgba(239,68,68,0.1); border-color: #f87171; }
-
-	.btn-danger-solid {
-		padding: 0.4rem 0.85rem;
-		background: rgba(239,68,68,0.15);
-		border: 1px solid rgba(239,68,68,0.4);
-		border-radius: var(--radius);
-		color: #f87171;
-		font-size: 0.82rem;
-		font-family: inherit;
-		cursor: pointer;
-		transition: background var(--transition);
-		text-align: left;
-	}
-
-	.btn-danger-solid:hover { background: rgba(239,68,68,0.25); }
 
 	/* ── Role select in members panel ───────────────────────────────────── */
 	.role-select {
@@ -2746,15 +3058,6 @@
 
 	.role-name-input:focus { border-color: var(--border-focus); }
 
-	/* ── Settings icon section ───────────────────────────────────────────── */
-	.settings-icon-section {
-		display: flex;
-		align-items: center;
-		gap: 1rem;
-		padding: 1rem 1.25rem;
-		border-bottom: 1px solid var(--border);
-	}
-
 	.server-icon-preview {
 		width: 64px;
 		height: 64px;
@@ -2783,26 +3086,11 @@
 
 	.icon-upload-label:hover { background: rgba(99,102,241,0.1); }
 
-	/* ── Settings modal wide / tabs ─────────────────────────────────────── */
-	.settings-modal-wide { max-width: 700px; width: 100%; max-height: 85vh; display: flex; flex-direction: column; }
-	.settings-tabs { display: flex; border-bottom: 1px solid var(--border); flex-shrink: 0; }
-	.stab { flex: 1; padding: 0.6rem; background: transparent; border: none; border-bottom: 2px solid transparent; color: var(--text-muted); cursor: pointer; font-size: 0.78rem; transition: all var(--transition); font-family: inherit; }
-	.stab:hover { color: var(--text-primary); }
-	.stab.active { color: var(--accent); border-bottom-color: var(--accent); }
-	.settings-body-scroll { overflow-y: auto; flex: 1; }
-	.settings-section { padding: 1.25rem; display: flex; flex-direction: column; gap: 0.85rem; }
-	.settings-form { display: flex; flex-direction: column; gap: 0.65rem; }
-	.settings-form label { display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.75rem; color: var(--text-secondary); }
-	.settings-form input, .settings-form select { font-size: 0.82rem; padding: 0.45rem 0.6rem; background: var(--bg-elevated); border: 1px solid var(--border); border-radius: var(--radius); color: var(--text-primary); outline: none; font-family: inherit; }
-	.settings-form input:focus, .settings-form select:focus { border-color: var(--border-focus); }
-	.section-title { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-muted); margin-bottom: 0.25rem; }
 	.role-row-v2 { display: flex; align-items: center; gap: 0.5rem; padding: 0.45rem 0.5rem; border-radius: var(--radius); background: var(--bg-elevated); }
 	.role-row-v2 .role-row-name { flex: 1; font-size: 0.82rem; }
 	.icon-btn-sm { background: transparent; border: none; cursor: pointer; font-size: 0.8rem; padding: 0.15rem 0.35rem; border-radius: var(--radius-sm); color: var(--text-muted); transition: color var(--transition), background var(--transition); }
 	.icon-btn-sm:hover { color: var(--text-primary); background: var(--bg-surface); }
 	.icon-btn-sm.danger:hover { color: var(--error); }
-	.role-editor { display: flex; flex-direction: column; gap: 0.85rem; }
-	.role-editor-header { display: flex; align-items: center; gap: 0.75rem; }
 	.back-btn { background: transparent; border: none; color: var(--accent); cursor: pointer; font-size: 0.78rem; padding: 0; font-family: inherit; }
 	.role-editor-basic { display: flex; align-items: center; gap: 0.5rem; }
 	.perm-categories { display: flex; flex-direction: column; gap: 1rem; }
@@ -2810,7 +3098,6 @@
 	.perm-cat-label { font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-muted); margin-bottom: 0.1rem; }
 	.perm-row { display: flex; align-items: center; gap: 0.5rem; font-size: 0.8rem; color: var(--text-secondary); cursor: pointer; padding: 0.2rem 0; }
 	.perm-row input[type="checkbox"] { accent-color: var(--accent); width: 14px; height: 14px; }
-	.role-editor-actions { display: flex; gap: 0.5rem; }
 	.btn-ghost { background: transparent; border: 1px solid var(--border); color: var(--text-secondary); border-radius: var(--radius); padding: 0.45rem 0.85rem; cursor: pointer; font-size: 0.8rem; font-family: inherit; }
 	.btn-ghost:hover { background: var(--bg-elevated); }
 	.member-settings-row { display: flex; align-items: center; gap: 0.6rem; padding: 0.45rem 0.5rem; border-radius: var(--radius); background: var(--bg-elevated); }
@@ -2820,12 +3107,8 @@
 	.ms-tag { font-size: 0.65rem; color: var(--text-muted); }
 	.ms-actions { display: flex; align-items: center; gap: 0.3rem; flex-shrink: 0; }
 	.owner-badge { font-size: 0.62rem; padding: 0.1rem 0.4rem; border: 1px solid #f59e0b; color: #f59e0b; border-radius: 2px; flex-shrink: 0; }
-	.role-chip { font-size: 0.62rem; padding: 0.1rem 0.4rem; border: 1px solid; border-radius: 2px; flex-shrink: 0; }
 	.role-select-sm { font-size: 0.72rem; padding: 0.15rem 0.35rem; background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text-primary); max-width: 110px; font-family: inherit; }
 	.ban-reason { font-size: 0.65rem; color: var(--text-muted); font-style: italic; }
-	.danger-item-row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0.85rem; border: 1px solid var(--error); border-radius: var(--radius); }
-	.danger-item-row p { font-size: 0.75rem; color: var(--text-muted); margin-top: 0.2rem; }
-	.danger-title { color: var(--error) !important; }
 
 	/* ── Load more / channel start ───────────────────────────────────────── */
 	.loading-more {

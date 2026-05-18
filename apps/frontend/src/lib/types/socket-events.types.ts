@@ -50,6 +50,7 @@ export interface ClientToServerEvents {
   'channel:join': (payload: { channelId: string }) => void;
   'channel:leave': (payload: { channelId: string }) => void;
   'message:send': (payload: { channelId: string; content: string }) => void;
+  'server:subscribe': (payload: { serverId: string; channelIds: string[] }) => void;
   'voice:join': (payload: { channelId: string }) => void;
   'voice:leave': (payload: { channelId: string }) => void;
   'typing:start': (payload: { channelId: string }) => void;
@@ -72,6 +73,9 @@ export interface ServerToClientEvents {
   'typing:update': (payload: { channelId: string; usernames: string[] }) => void;
   'reaction:updated': (payload: { messageId: string; channelId: string; reactions: MessageReaction[] }) => void;
   'dm:message:created': (payload: DmMessagePayload) => void;
+  'dm:message:updated': (payload: DmMessagePayload) => void;
+  'dm:message:deleted': (payload: { messageId: string; conversationId: string }) => void;
   'dm:typing:update': (payload: { conversationId: string; usernames: string[] }) => void;
   'presence:update': (payload: { userId: string; online: boolean }) => void;
+  'friend:request': (payload: { id: string; user: { id: string; username: string; avatarUrl?: string | null }; createdAt: string }) => void;
 }

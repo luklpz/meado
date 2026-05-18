@@ -55,6 +55,8 @@ export class MessagesService {
     if (!content?.trim() && (!attachments || attachments.length === 0)) {
       throw new BadRequestException('Message must have content or attachment');
     }
+    const isMember = await this.verifyChannelMember(channelId, authorId);
+    if (!isMember) throw new ForbiddenException('Not a member of this server');
     const msg = await this.prisma.message.create({
       data: {
         channelId,
@@ -101,11 +103,13 @@ export class MessagesService {
     if (!msg) throw new NotFoundException('Message not found');
     if (msg.authorId !== userId) throw new ForbiddenException('Not your message');
     if (!content?.trim()) throw new BadRequestException('Content required');
-    return this.prisma.message.update({
+    if (content.length > 4000) throw new BadRequestException('Message too long (max 4000 chars)');
+    const updated = await this.prisma.message.update({
       where: { id: messageId },
       data: { content: content.trim(), editedAt: new Date() },
       select: MSG_SELECT,
     });
+    return { ...updated, reactions: formatReactions(updated.reactions, userId) };
   }
 
   async deleteMessage(messageId: string, userId: string, userRole: string) {
@@ -140,6 +144,13 @@ export class MessagesService {
     if (!channel) return false;
     const member = await this.prisma.serverMember.findUnique({
       where: { userId_serverId: { userId, serverId: channel.serverId } },
+    });
+    return !!member;
+  }
+
+  async verifyServerMember(serverId: string, userId: string): Promise<boolean> {
+    const member = await this.prisma.serverMember.findUnique({
+      where: { userId_serverId: { userId, serverId } },
     });
     return !!member;
   }
