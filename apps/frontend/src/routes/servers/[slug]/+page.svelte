@@ -191,6 +191,8 @@
 	const livekitError = livekitStore.errorMessage;
 	const livekitStatus = livekitStore.status;
 	let joiningVoice = $state(false);
+	let voiceLayout = $state<'grid' | 'spotlight' | 'sidebar'>('grid');
+	let fullscreenShare = $state<string | null>(null);
 	let _reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
 	$effect(() => {
@@ -1286,6 +1288,13 @@
 				<span class="header-prefix">🔊</span>
 				<strong class="header-name">{selectedChannel.name}</strong>
 				<div class="header-actions">
+					{#if voiceChannelId === selectedChannel.id}
+						<div class="layout-btns">
+							<button class="layout-btn" class:active={voiceLayout === 'grid'} title="Cuadrícula" onclick={() => voiceLayout = 'grid'}>⊞</button>
+							<button class="layout-btn" class:active={voiceLayout === 'spotlight'} title="Destacado" onclick={() => voiceLayout = 'spotlight'}>◉</button>
+							<button class="layout-btn" class:active={voiceLayout === 'sidebar'} title="Barra lateral" onclick={() => voiceLayout = 'sidebar'}>⊡</button>
+						</div>
+					{/if}
 					<button class="icon-btn" class:active={showMembers} title="Miembros" onclick={toggleMembers}>👥</button>
 				</div>
 			</div>
@@ -1296,99 +1305,201 @@
 						<div class="voice-icon-big">🔊</div>
 						<h3>{selectedChannel.name}</h3>
 						<p>{(voiceMembers.get(selectedChannel.id) ?? []).length} participante(s)</p>
-						<button
-							class="btn-primary"
-							disabled={joiningVoice}
-							onclick={() => selectedChannel && joinVoiceChannel(selectedChannel)}
-						>
+						<button class="btn-primary" disabled={joiningVoice} onclick={() => selectedChannel && joinVoiceChannel(selectedChannel)}>
 							{joiningVoice ? 'Conectando...' : 'Unirse al canal de voz'}
 						</button>
 					</div>
 				{:else}
-					<div class="voice-participants-grid">
-						{#each currentVoiceMembers as m (m.userId)}
-							{@const isSpeaking = $activeSpeakersStore.includes(m.userId)}
-							{@const isMuted = m.userId !== user.id && $mutedStore.has(m.userId)}
-							<div class="voice-card" class:is-you={m.userId === user.id} class:speaking={isSpeaking}>
-								<div class="voice-avatar-wrap">
-									{#if m.avatarUrl}
-										<img src={m.avatarUrl} class="voice-avatar" alt="" />
-									{:else}
-										<div class="voice-avatar avatar-init">{avatarInitial(m.username)}</div>
-									{/if}
-									{#if isSpeaking}
-										<span class="speaking-ring"></span>
-									{/if}
-									{#if isMuted}
-										<span class="muted-badge">🔇</span>
-									{/if}
-								</div>
-								<span class="voice-card-name">{m.username}{m.userId === user.id ? ' (tú)' : ''}</span>
+					<!-- ── Stage ───────────────────────────────────────────────────── -->
+					{@const spotlightSpeaker = currentVoiceMembers.find(m => $activeSpeakersStore[0] === m.userId) ?? currentVoiceMembers[0]}
+					{@const screenEntries = [...$screenSharesStore.entries()]}
+
+					{#if voiceLayout === 'sidebar' && screenEntries.length > 0}
+						<div class="voice-stage mode-sidebar">
+							<div class="stage-main">
+								<!-- svelte-ignore a11y_media_has_caption -->
+								<video use:attachScreenTrack={screenEntries[0][1].track} class="stage-video" autoplay playsinline muted></video>
+								<div class="stage-label">{screenEntries[0][1].username}</div>
+								<button class="expand-btn" onclick={() => fullscreenShare = screenEntries[0][0]} title="Pantalla completa">⤢</button>
 							</div>
-						{/each}
-					</div>
-					{#if $screenSharesStore.size > 0}
-						<div class="screen-shares-section">
-							<div class="screen-shares-label">Pantallas compartidas</div>
-							<div class="screen-shares-grid">
-								{#each [...$screenSharesStore.entries()] as [identity, share] (identity)}
-									<div class="screen-card">
+							<div class="participants-strip vertical">
+								{#each currentVoiceMembers as m (m.userId)}
+									{@const isSpeaking = $activeSpeakersStore.includes(m.userId)}
+									{@const isMuted = m.userId !== user.id && $mutedStore.has(m.userId)}
+									<div class="vp-mini" class:speaking={isSpeaking}>
+										<div class="vp-avatar-wrap-sm">
+											{#if m.avatarUrl}
+												<img src={m.avatarUrl} class="vp-avatar-sm" alt="" />
+											{:else}
+												<div class="vp-avatar-sm avatar-init">{avatarInitial(m.username)}</div>
+											{/if}
+											{#if isSpeaking}<span class="speaking-ring-sm"></span>{/if}
+										</div>
+										<span class="vp-name">{m.username}</span>
+										{#if isMuted}<span class="vp-muted">🔇</span>{/if}
+									</div>
+								{/each}
+								{#each screenEntries.slice(1) as [id, share] (id)}
+									<button class="vp-mini screen-mini" onclick={() => fullscreenShare = id}>
 										<!-- svelte-ignore a11y_media_has_caption -->
-										<video use:attachScreenTrack={share.track} class="screen-video" autoplay playsinline muted></video>
-										<div class="screen-card-name">{share.username}</div>
+										<video use:attachScreenTrack={share.track} class="vp-screen-thumb" autoplay playsinline muted></video>
+										<span class="vp-name">{share.username}</span>
+									</button>
+								{/each}
+							</div>
+						</div>
+
+					{:else if voiceLayout === 'spotlight'}
+						<div class="voice-stage mode-spotlight">
+							<div class="stage-main">
+								{#if screenEntries.length > 0}
+									<!-- svelte-ignore a11y_media_has_caption -->
+									<video use:attachScreenTrack={screenEntries[0][1].track} class="stage-video" autoplay playsinline muted></video>
+									<div class="stage-label">{screenEntries[0][1].username}</div>
+									<button class="expand-btn" onclick={() => fullscreenShare = screenEntries[0][0]} title="Pantalla completa">⤢</button>
+								{:else if spotlightSpeaker}
+									<div class="spotlight-avatar-wrap">
+										{#if spotlightSpeaker.avatarUrl}
+											<img src={spotlightSpeaker.avatarUrl} class="spotlight-avatar" alt="" />
+										{:else}
+											<div class="spotlight-avatar avatar-init">{avatarInitial(spotlightSpeaker.username)}</div>
+										{/if}
+										{#if $activeSpeakersStore.includes(spotlightSpeaker.userId)}
+											<span class="speaking-ring-lg"></span>
+										{/if}
+									</div>
+									<div class="stage-label">{spotlightSpeaker.username}{spotlightSpeaker.userId === user.id ? ' (tú)' : ''}</div>
+								{/if}
+							</div>
+							<div class="participants-strip horizontal">
+								{#each currentVoiceMembers as m (m.userId)}
+									{@const isSpeaking = $activeSpeakersStore.includes(m.userId)}
+									{@const isMuted = m.userId !== user.id && $mutedStore.has(m.userId)}
+									<div class="vp-mini" class:speaking={isSpeaking}>
+										<div class="vp-avatar-wrap-sm">
+											{#if m.avatarUrl}
+												<img src={m.avatarUrl} class="vp-avatar-sm" alt="" />
+											{:else}
+												<div class="vp-avatar-sm avatar-init">{avatarInitial(m.username)}</div>
+											{/if}
+											{#if isSpeaking}<span class="speaking-ring-sm"></span>{/if}
+										</div>
+										<span class="vp-name-h">{m.username}</span>
+										{#if isMuted}<span class="vp-muted">🔇</span>{/if}
 									</div>
 								{/each}
 							</div>
 						</div>
+
+					{:else}
+						<!-- Grid mode -->
+						<div class="voice-stage mode-grid">
+							<div class="participants-grid">
+								{#each currentVoiceMembers as m (m.userId)}
+									{@const isSpeaking = $activeSpeakersStore.includes(m.userId)}
+									{@const isMuted = m.userId !== user.id && $mutedStore.has(m.userId)}
+									<div class="vp-tile" class:is-you={m.userId === user.id} class:speaking={isSpeaking}>
+										<div class="vp-avatar-wrap">
+											{#if m.avatarUrl}
+												<img src={m.avatarUrl} class="vp-avatar" alt="" />
+											{:else}
+												<div class="vp-avatar avatar-init">{avatarInitial(m.username)}</div>
+											{/if}
+											{#if isSpeaking}<span class="speaking-ring"></span>{/if}
+											{#if isMuted}<span class="muted-badge">🔇</span>{/if}
+										</div>
+										<span class="vp-name">{m.username}{m.userId === user.id ? ' (tú)' : ''}</span>
+									</div>
+								{/each}
+							</div>
+							{#if screenEntries.length > 0}
+								<div class="screen-row">
+									{#each screenEntries as [id, share] (id)}
+										<div class="screen-card">
+											<!-- svelte-ignore a11y_media_has_caption -->
+											<video use:attachScreenTrack={share.track} class="screen-video" autoplay playsinline muted></video>
+											<div class="screen-card-footer">
+												<span class="screen-card-name">{share.username}</span>
+												<button class="expand-btn-sm" onclick={() => fullscreenShare = id} title="Expandir">⤢</button>
+											</div>
+										</div>
+									{/each}
+								</div>
+							{/if}
+						</div>
 					{/if}
+
 					{#if !$canPlayAudioStore}
 						<button class="audio-unlock-banner" onclick={() => livekitStore.startAudio()}>
 							🔇 Audio bloqueado por el navegador — haz clic aquí para activarlo
 						</button>
 					{/if}
+
+					<!-- ── Controls bar (Discord-style) ───────────────────────── -->
 					<div class="voice-controls-bar">
-						<div class="mic-control">
-							<button class="ctrl-btn-lg" class:active={$micEnabledStore} onclick={() => livekitStore.toggleMic()}>
-								{$micEnabledStore ? '🎙️ Micro activo' : '🔇 Micro silenciado'}
-							</button>
-							{#if $micEnabledStore}
-								<div class="mic-level-bar" title="Nivel de micrófono">
-									<div class="mic-level-fill" style="width: {Math.round($audioLevelStore * 100)}%"></div>
-								</div>
-							{/if}
-							{#if $micDevicesStore.length > 1}
-								<select
-									class="device-select"
-									value={$selectedDeviceIdStore}
-									onchange={(e) => livekitStore.selectDevice(e.currentTarget.value)}
+						<div class="vc-status">
+							<div class="vc-status-dot"></div>
+							<span class="vc-status-text">Conectado · {selectedChannel.name}</span>
+						</div>
+						<div class="vc-center">
+							<div class="vc-btn-wrap">
+								<button
+									class="vc-btn"
+									class:vc-btn-off={!$micEnabledStore}
+									title={$micEnabledStore ? 'Silenciar micrófono' : 'Activar micrófono'}
+									onclick={() => livekitStore.toggleMic()}
 								>
+									{$micEnabledStore ? '🎙️' : '🔇'}
+								</button>
+								{#if $micEnabledStore}
+									<div class="vc-mic-level">
+										<div class="vc-mic-fill" style="width: {Math.round($audioLevelStore * 100)}%"></div>
+									</div>
+								{/if}
+							</div>
+							{#if $micDevicesStore.length > 1}
+								<select class="vc-device-select" value={$selectedDeviceIdStore} onchange={(e) => livekitStore.selectDevice(e.currentTarget.value)}>
 									{#each $micDevicesStore as d (d.deviceId)}
 										<option value={d.deviceId}>{d.label}</option>
 									{/each}
 								</select>
 							{/if}
+							<div class="vc-btn-wrap">
+								{#if !$screenEnabledStore}
+									<select class="vc-quality-select" value={$screenQualityStore} onchange={(e) => screenQualityStore.set(e.currentTarget.value as any)}>
+										<option value="low">720p·15</option>
+										<option value="medium">1080p·30</option>
+										<option value="high">1080p·60</option>
+									</select>
+								{/if}
+								<button
+									class="vc-btn"
+									class:vc-btn-active={$screenEnabledStore}
+									title={$screenEnabledStore ? 'Detener pantalla compartida' : 'Compartir pantalla'}
+									onclick={() => livekitStore.toggleScreen()}
+								>🖥️</button>
+							</div>
 						</div>
-						<div class="screen-control">
-							<select
-								class="device-select"
-								value={$screenQualityStore}
-								onchange={(e) => screenQualityStore.set(e.currentTarget.value as any)}
-								disabled={$screenEnabledStore}
-							>
-								<option value="low">720p · 15fps</option>
-								<option value="medium">1080p · 30fps</option>
-								<option value="high">1080p · 60fps</option>
-							</select>
-							<button class="ctrl-btn-lg" class:active={$screenEnabledStore} onclick={() => livekitStore.toggleScreen()}>
-								{$screenEnabledStore ? '🖥️ Detener' : '🖥️ Compartir pantalla'}
-							</button>
+						<div class="vc-right">
+							<button class="vc-btn vc-btn-danger" onclick={leaveVoice} title="Desconectar">📵</button>
 						</div>
-						<button class="ctrl-btn-lg danger" onclick={leaveVoice}>📵 Desconectar</button>
 					</div>
 				{/if}
 			</div>
 		{/if}
 	</main>
+
+	<!-- Fullscreen screen share overlay -->
+	{#if fullscreenShare && $screenSharesStore.has(fullscreenShare)}
+		<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+		<div class="fullscreen-overlay" role="dialog" tabindex="-1" onclick={() => fullscreenShare = null} onkeydown={(e) => { if (e.key === 'Escape') fullscreenShare = null; }}>
+			<!-- svelte-ignore a11y_media_has_caption -->
+			<video use:attachScreenTrack={$screenSharesStore.get(fullscreenShare)!.track} class="fullscreen-video" autoplay playsinline muted></video>
+			<div class="fullscreen-info">{$screenSharesStore.get(fullscreenShare)!.username}</div>
+			<!-- svelte-ignore a11y_no_static_element_interactions -->
+			<button class="fullscreen-close" onclick={(e) => { e.stopPropagation(); fullscreenShare = null; }} title="Cerrar">✕</button>
+		</div>
+	{/if}
 
 	<!-- Settings full-screen -->
 	{#if showSettings}
@@ -2552,11 +2663,8 @@
 		flex: 1;
 		display: flex;
 		flex-direction: column;
-		align-items: center;
-		justify-content: flex-start;
-		overflow-y: auto;
-		gap: 1.5rem;
-		padding: 2rem;
+		overflow: hidden;
+		background: var(--bg-primary);
 	}
 
 	.voice-join-prompt {
@@ -2567,43 +2675,81 @@
 		justify-content: center;
 		gap: 0.75rem;
 		text-align: center;
+		padding: 2rem;
 	}
 
 	.voice-icon-big { font-size: 3rem; }
-
 	.voice-join-prompt h3 { font-size: 1.25rem; color: var(--text-primary); }
 	.voice-join-prompt p { font-size: 0.85rem; color: var(--text-muted); }
 
-	.voice-participants-grid {
+	/* Stage */
+	.voice-stage {
+		flex: 1;
+		overflow: hidden;
 		display: flex;
-		flex-wrap: wrap;
-		gap: 1rem;
-		justify-content: center;
-		max-width: 640px;
 	}
 
-	.voice-card {
+	/* Grid mode */
+	.voice-stage.mode-grid {
+		flex-direction: column;
+		overflow-y: auto;
+		align-items: center;
+		padding: 1.5rem;
+		gap: 1.25rem;
+	}
+
+	/* Spotlight mode */
+	.voice-stage.mode-spotlight {
+		flex-direction: column;
+	}
+
+	/* Sidebar mode */
+	.voice-stage.mode-sidebar {
+		flex-direction: row;
+	}
+
+	/* Participant grid tiles (grid mode) */
+	.participants-grid {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.75rem;
+		justify-content: center;
+		align-content: flex-start;
+	}
+
+	.vp-tile {
 		display: flex;
 		flex-direction: column;
 		align-items: center;
 		gap: 0.5rem;
 		padding: 1.25rem;
 		background: var(--bg-surface);
-		border: 1px solid var(--border);
+		border: 2px solid transparent;
 		border-radius: var(--radius-lg);
 		min-width: 120px;
+		transition: border-color 0.15s, box-shadow 0.15s;
 	}
+	.vp-tile.is-you { border-color: var(--accent); }
+	.vp-tile.speaking { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-dim); }
 
-	.voice-card.is-you { border-color: var(--accent); }
-
-	.voice-card.speaking { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-dim); }
-
-	.voice-avatar-wrap {
+	.vp-avatar-wrap {
 		position: relative;
 		width: 64px; height: 64px;
-		display: flex; align-items: center; justify-content: center;
 		flex-shrink: 0;
 	}
+
+	.vp-avatar {
+		width: 64px; height: 64px;
+		border-radius: 50%;
+		object-fit: cover;
+	}
+	.vp-avatar.avatar-init {
+		display: flex; align-items: center; justify-content: center;
+		background: var(--bg-elevated);
+		font-size: 1.5rem; font-weight: 700; color: var(--text-secondary);
+	}
+
+	.vp-name { font-size: 0.82rem; color: var(--text-secondary); }
 
 	.speaking-ring {
 		position: absolute; inset: -4px;
@@ -2628,53 +2774,180 @@
 		padding: 1px;
 	}
 
-	.device-select {
-		font-size: 0.72rem;
-		background: var(--bg-tertiary);
-		color: var(--text-secondary);
-		border: 1px solid var(--border);
-		border-radius: var(--radius);
-		padding: 0.15rem 0.35rem;
-		cursor: pointer;
-		width: 100%;
-	}
-	.device-select:focus { outline: none; border-color: var(--accent); }
-
-	.screen-control { display: flex; flex-direction: column; gap: 0.3rem; align-items: stretch; }
-
-	/* Screen share viewer */
-	.screen-shares-section {
-		width: 100%;
-		max-width: 800px;
+	/* Stage main area (spotlight + sidebar) */
+	.stage-main {
+		position: relative;
+		flex: 1;
+		background: #0d0d0d;
 		display: flex;
-		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		overflow: hidden;
+		min-height: 0;
+	}
+	.mode-sidebar .stage-main {
+		border-radius: var(--radius-lg);
+		margin: 0.75rem 0 0.75rem 0.75rem;
+	}
+	.mode-spotlight .stage-main {
+		flex: 1;
+		min-height: 0;
+	}
+
+	.stage-video {
+		width: 100%;
+		height: 100%;
+		object-fit: contain;
+	}
+
+	.stage-label {
+		position: absolute;
+		bottom: 0.75rem; left: 0.75rem;
+		font-size: 0.82rem;
+		background: rgba(0, 0, 0, 0.65);
+		color: #fff;
+		padding: 0.2rem 0.55rem;
+		border-radius: var(--radius);
+		backdrop-filter: blur(4px);
+		pointer-events: none;
+	}
+
+	.expand-btn {
+		position: absolute;
+		top: 0.6rem; right: 0.6rem;
+		background: rgba(0, 0, 0, 0.6);
+		color: #fff;
+		border: none;
+		border-radius: var(--radius);
+		padding: 0.25rem 0.45rem;
+		cursor: pointer;
+		font-size: 1rem;
+		opacity: 0;
+		transition: opacity 0.15s;
+		line-height: 1;
+	}
+	.stage-main:hover .expand-btn { opacity: 1; }
+
+	/* Spotlight avatar */
+	.spotlight-avatar-wrap {
+		position: relative;
+		width: 128px; height: 128px;
+	}
+	.spotlight-avatar {
+		width: 128px; height: 128px;
+		border-radius: 50%;
+		object-fit: cover;
+	}
+	.spotlight-avatar.avatar-init {
+		display: flex; align-items: center; justify-content: center;
+		background: var(--bg-elevated);
+		font-size: 3rem; font-weight: 700; color: var(--text-secondary);
+	}
+	.speaking-ring-lg {
+		position: absolute; inset: -6px;
+		border-radius: 50%;
+		border: 3px solid var(--accent);
+		animation: speaking-pulse 1s ease-in-out infinite;
+		pointer-events: none;
+	}
+
+	/* Participants strip (spotlight horizontal / sidebar vertical) */
+	.participants-strip {
+		display: flex;
 		gap: 0.5rem;
+		overflow: auto;
+		padding: 0.6rem;
+		background: var(--bg-secondary);
+		flex-shrink: 0;
+	}
+	.participants-strip.horizontal {
+		flex-direction: row;
+		align-items: center;
+		height: 90px;
+		border-top: 1px solid var(--border);
+	}
+	.participants-strip.vertical {
+		flex-direction: column;
+		width: 168px;
+		height: 100%;
+		border-left: 1px solid var(--border);
 	}
 
-	.screen-shares-label {
-		font-size: 0.72rem;
-		text-transform: uppercase;
-		letter-spacing: 0.06em;
-		color: var(--text-muted);
+	/* Mini participant card (spotlight/sidebar) */
+	.vp-mini {
+		position: relative;
+		display: flex;
+		align-items: center;
+		gap: 0.4rem;
+		padding: 0.35rem 0.5rem;
+		background: var(--bg-surface);
+		border: 2px solid transparent;
+		border-radius: var(--radius);
+		cursor: default;
+		flex-shrink: 0;
+		transition: border-color 0.15s;
+	}
+	.vp-mini.speaking { border-color: var(--accent); }
+	.participants-strip.horizontal .vp-mini {
+		flex-direction: column;
+		padding: 0.3rem 0.5rem;
+		height: 100%;
+		justify-content: center;
 	}
 
-	.screen-shares-grid {
+	.vp-avatar-wrap-sm {
+		position: relative;
+		width: 36px; height: 36px;
+		flex-shrink: 0;
+	}
+	.vp-avatar-sm {
+		width: 36px; height: 36px;
+		border-radius: 50%;
+		object-fit: cover;
+	}
+	.vp-avatar-sm.avatar-init {
+		display: flex; align-items: center; justify-content: center;
+		background: var(--bg-elevated);
+		font-size: 0.9rem; font-weight: 700; color: var(--text-secondary);
+	}
+	.speaking-ring-sm {
+		position: absolute; inset: -3px;
+		border-radius: 50%;
+		border: 2px solid var(--accent);
+		animation: speaking-pulse 1s ease-in-out infinite;
+		pointer-events: none;
+	}
+
+	.vp-name-h { font-size: 0.72rem; color: var(--text-muted); white-space: nowrap; }
+	.vp-muted { font-size: 0.65rem; }
+
+	/* Screen thumb inside sidebar strip */
+	.screen-mini { cursor: pointer; font-family: inherit; }
+	.screen-mini:hover { border-color: var(--accent-dim); }
+	.vp-screen-thumb {
+		width: 60px; height: 34px;
+		object-fit: contain;
+		background: #000;
+		border-radius: 2px;
+		flex-shrink: 0;
+	}
+
+	/* Screen row (grid mode) */
+	.screen-row {
 		display: flex;
 		flex-wrap: wrap;
 		gap: 0.75rem;
+		width: 100%;
+		max-width: 900px;
 	}
 
 	.screen-card {
-		display: flex;
-		flex-direction: column;
-		gap: 0.35rem;
+		flex: 1 1 280px;
+		max-width: 560px;
 		background: var(--bg-secondary);
 		border: 1px solid var(--border);
 		border-radius: var(--radius);
 		overflow: hidden;
-		flex: 1;
-		min-width: 280px;
-		max-width: 560px;
 	}
 
 	.screen-video {
@@ -2685,21 +2958,67 @@
 		display: block;
 	}
 
-	.screen-card-name {
-		font-size: 0.78rem;
-		color: var(--text-muted);
+	.screen-card-footer {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
 		padding: 0.25rem 0.5rem 0.35rem;
 	}
 
-	.voice-avatar {
-		width: 64px; height: 64px;
-		border-radius: 50%;
-		object-fit: cover;
-		display: flex; align-items: center; justify-content: center;
+	.screen-card-name { font-size: 0.78rem; color: var(--text-muted); }
+
+	.expand-btn-sm {
+		background: none;
+		border: none;
+		color: var(--text-muted);
+		cursor: pointer;
+		font-size: 1rem;
+		padding: 0.1rem 0.25rem;
+		line-height: 1;
 	}
+	.expand-btn-sm:hover { color: var(--text-primary); }
 
-	.voice-card-name { font-size: 0.82rem; color: var(--text-secondary); }
+	/* Fullscreen overlay */
+	.fullscreen-overlay {
+		position: fixed; inset: 0; z-index: 9999;
+		background: rgba(0, 0, 0, 0.96);
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		cursor: pointer;
+	}
+	.fullscreen-video {
+		width: 100%; height: 100%;
+		object-fit: contain;
+		cursor: default;
+	}
+	.fullscreen-info {
+		position: absolute;
+		bottom: 1.25rem; left: 1.25rem;
+		color: rgba(255, 255, 255, 0.75);
+		font-size: 0.85rem;
+		background: rgba(0, 0, 0, 0.55);
+		padding: 0.25rem 0.65rem;
+		border-radius: var(--radius);
+		pointer-events: none;
+	}
+	.fullscreen-close {
+		position: absolute;
+		top: 1rem; right: 1rem;
+		background: rgba(255, 255, 255, 0.1);
+		border: none;
+		color: #fff;
+		width: 36px; height: 36px;
+		border-radius: 50%;
+		cursor: pointer;
+		font-size: 1.1rem;
+		display: flex; align-items: center; justify-content: center;
+		transition: background 0.15s;
+		line-height: 1;
+	}
+	.fullscreen-close:hover { background: rgba(255, 255, 255, 0.22); }
 
+	/* Audio unlock */
 	.audio-unlock-banner {
 		background: rgba(239, 68, 68, 0.12);
 		border: 1px solid rgba(239, 68, 68, 0.4);
@@ -2708,44 +3027,133 @@
 		padding: 0.5rem 1rem;
 		font-size: 0.82rem;
 		cursor: pointer;
-		width: 100%; max-width: 480px;
+		width: 100%;
 		text-align: center;
+		flex-shrink: 0;
 	}
 	.audio-unlock-banner:hover { background: rgba(239, 68, 68, 0.2); }
 
-	.voice-controls-bar { display: flex; gap: 0.75rem; align-items: center; }
+	/* ── Controls bar (Discord-style) ────────────────────────────────────── */
+	.voice-controls-bar {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		padding: 0.65rem 1.25rem;
+		background: var(--bg-secondary);
+		border-top: 1px solid var(--border);
+		gap: 1rem;
+		flex-shrink: 0;
+	}
 
-	.mic-control { display: flex; flex-direction: column; align-items: stretch; gap: 0.3rem; }
+	.vc-status {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		flex: 1;
+		min-width: 0;
+	}
+	.vc-status-dot {
+		width: 8px; height: 8px;
+		border-radius: 50%;
+		background: var(--success);
+		flex-shrink: 0;
+	}
+	.vc-status-text {
+		font-size: 0.75rem;
+		color: var(--text-muted);
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
 
-	.mic-level-bar {
-		height: 3px;
-		background: rgba(255,255,255,0.1);
+	.vc-center {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+	}
+
+	.vc-right {
+		display: flex;
+		align-items: center;
+		justify-content: flex-end;
+		flex: 1;
+	}
+
+	.vc-btn {
+		width: 44px; height: 44px;
+		border-radius: 50%;
+		border: none;
+		background: var(--bg-elevated);
+		color: var(--text-secondary);
+		cursor: pointer;
+		font-size: 1.15rem;
+		display: flex; align-items: center; justify-content: center;
+		transition: background 0.15s, color 0.15s;
+	}
+	.vc-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+	.vc-btn.vc-btn-off { background: rgba(239, 68, 68, 0.15); color: #f87171; }
+	.vc-btn.vc-btn-off:hover { background: rgba(239, 68, 68, 0.25); }
+	.vc-btn.vc-btn-active { background: var(--accent-dim); color: var(--accent); }
+	.vc-btn.vc-btn-active:hover { background: rgba(59, 130, 246, 0.25); }
+	.vc-btn.vc-btn-danger { background: rgba(239, 68, 68, 0.12); color: #f87171; }
+	.vc-btn.vc-btn-danger:hover { background: rgba(239, 68, 68, 0.25); }
+
+	.vc-btn-wrap {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 0.2rem;
+	}
+
+	.vc-mic-level {
+		width: 44px; height: 3px;
+		background: rgba(255, 255, 255, 0.08);
 		border-radius: 2px;
 		overflow: hidden;
-		width: 100%;
 	}
-	.mic-level-fill {
+	.vc-mic-fill {
 		height: 100%;
 		background: var(--accent);
 		border-radius: 2px;
 		transition: width 0.05s linear;
 	}
 
-	.ctrl-btn-lg {
-		padding: 0.6rem 1.25rem;
-		border-radius: var(--radius-lg);
+	.vc-quality-select, .vc-device-select {
+		font-size: 0.7rem;
+		background: var(--bg-tertiary);
+		color: var(--text-muted);
 		border: 1px solid var(--border);
-		background: var(--bg-elevated);
-		color: var(--text-secondary);
+		border-radius: var(--radius);
+		padding: 0.15rem 0.3rem;
 		cursor: pointer;
-		font-size: 0.85rem;
-		font-family: inherit;
-		transition: background var(--transition), color var(--transition);
 	}
+	.vc-quality-select { max-width: 80px; }
+	.vc-device-select { max-width: 160px; }
 
-	.ctrl-btn-lg.active { background: rgba(99,102,241,0.15); border-color: var(--accent); color: var(--accent); }
-	.ctrl-btn-lg.danger { color: #f87171; border-color: rgba(239,68,68,0.3); }
-	.ctrl-btn-lg.danger:hover { background: rgba(239,68,68,0.1); }
+	/* Layout buttons (header) */
+	.layout-btns {
+		display: flex;
+		gap: 0.1rem;
+		background: var(--bg-secondary);
+		border: 1px solid var(--border);
+		border-radius: var(--radius);
+		padding: 0.1rem;
+	}
+	.layout-btn {
+		width: 28px; height: 28px;
+		border: none;
+		background: transparent;
+		color: var(--text-muted);
+		cursor: pointer;
+		border-radius: calc(var(--radius) - 2px);
+		display: flex; align-items: center; justify-content: center;
+		transition: background 0.12s, color 0.12s;
+		font-size: 0.9rem;
+		line-height: 1;
+	}
+	.layout-btn:hover { background: var(--bg-elevated); color: var(--text-primary); }
+	.layout-btn.active { background: var(--accent-dim); color: var(--accent); }
+
 
 	/* ── Members panel ────────────────────────────────────────────────────── */
 	.members-panel {
@@ -2869,7 +3277,7 @@
 	.avatar-xs.avatar-init { font-size: 0.5rem; }
 	.avatar-sm.avatar-init { font-size: 0.7rem; }
 	.avatar-msg.avatar-init { font-size: 0.9rem; }
-	.voice-avatar.avatar-init { font-size: 1.5rem; }
+
 
 	/* ── Btn primary ──────────────────────────────────────────────────────── */
 	.btn-primary {
