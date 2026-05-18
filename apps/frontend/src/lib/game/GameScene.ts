@@ -76,8 +76,8 @@ export function createGameScene(Phaser: PhaserType, socket: GameSocket, cfg: Sce
 				.setOrigin(0.5);
 			this.localIndicator = this.makeIndicator(canvasW / 2, canvasH / 2 - LABEL_OFFSET_Y);
 			this.proximityCircle = this.add.arc(canvasW / 2, canvasH / 2, proximityRadius, 0, 360, false);
-			this.proximityCircle.setStrokeStyle(1, 0x22c55e, 0.25);
-			this.proximityCircle.setFillStyle(0x22c55e, 0.03);
+			this.proximityCircle.setStrokeStyle(1, 0x3b82f6, 0.25);
+			this.proximityCircle.setFillStyle(0x3b82f6, 0.03);
 			this.proximityCircle.setDepth(-1);
 
 			this.cursors = this.input.keyboard!.createCursorKeys();
@@ -187,8 +187,8 @@ export function createGameScene(Phaser: PhaserType, socket: GameSocket, cfg: Sce
 		}
 
 		private makeIndicator(x: number, y: number): Phaser.GameObjects.Arc {
-			const arc = this.add.arc(x, y, 5, 0, 360, false, 0x22c55e, 0);
-			arc.setStrokeStyle(1.5, 0x22c55e);
+			const arc = this.add.arc(x, y, 5, 0, 360, false, 0x3b82f6, 0);
+			arc.setStrokeStyle(1.5, 0x3b82f6);
 			return arc;
 		}
 
@@ -196,14 +196,14 @@ export function createGameScene(Phaser: PhaserType, socket: GameSocket, cfg: Sce
 			if (!livekitRoom) return;
 			const speakers = livekitRoom.activeSpeakers;
 
-			const localSpeaking = speakers.some((p) => p.identity === username);
-			this.localIndicator.setFillStyle(0x22c55e, localSpeaking ? 1 : 0);
+			const localSpeaking = speakers.some((p) => p.name === username);
+			this.localIndicator.setFillStyle(0x3b82f6, localSpeaking ? 1 : 0);
 
 			for (const r of this.remote.values()) {
-				const speaking = speakers.some((p) => p.identity === r.username);
+				const speaking = speakers.some((p) => p.name === r.username);
 				if (speaking !== r.speaking) {
 					r.speaking = speaking;
-					r.indicator.setFillStyle(0x22c55e, speaking ? 1 : 0);
+					r.indicator.setFillStyle(0x3b82f6, speaking ? 1 : 0);
 				}
 			}
 		}
@@ -216,7 +216,7 @@ export function createGameScene(Phaser: PhaserType, socket: GameSocket, cfg: Sce
 				);
 				const vol = Math.max(0, 1 - dist / proximityRadius);
 				for (const participant of livekitRoom.remoteParticipants.values()) {
-					if (participant.identity === r.username) {
+					if (participant.name === r.username) {
 						for (const pub of participant.audioTrackPublications.values()) {
 							const track = pub.track as any;
 							if (!track) continue;
@@ -260,19 +260,31 @@ export function createGameScene(Phaser: PhaserType, socket: GameSocket, cfg: Sce
 		}
 
 		private bindSocketEvents() {
-			socket.on('room:state', ({ players }: { players: any[] }) => {
+			const onRoomState = ({ players }: { players: any[] }) => {
 				players.forEach((p: any) => {
 					if (p.playerId !== socket.id) this.spawnRemote(p.playerId, p.username, p.x, p.y);
 				});
-			});
-			socket.on('player:joined', (p: any) => {
+			};
+			const onPlayerJoined = (p: any) => {
 				if (p.playerId !== socket.id) this.spawnRemote(p.playerId, p.username, p.x, p.y);
-			});
-			socket.on('player:moved', (p: any) => {
+			};
+			const onPlayerMoved = (p: any) => {
 				const r = this.remote.get(p.playerId);
 				if (r) { r.targetX = p.x; r.targetY = p.y; }
+			};
+			const onPlayerLeft = ({ playerId }: { playerId: string }) => { this.despawnRemote(playerId); };
+
+			socket.on('room:state', onRoomState);
+			socket.on('player:joined', onPlayerJoined);
+			socket.on('player:moved', onPlayerMoved);
+			socket.on('player:left', onPlayerLeft);
+
+			this.events.once('shutdown', () => {
+				socket.off('room:state', onRoomState);
+				socket.off('player:joined', onPlayerJoined);
+				socket.off('player:moved', onPlayerMoved);
+				socket.off('player:left', onPlayerLeft);
 			});
-			socket.on('player:left', ({ playerId }: { playerId: string }) => { this.despawnRemote(playerId); });
 		}
 	};
 }

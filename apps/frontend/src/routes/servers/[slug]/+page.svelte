@@ -254,6 +254,7 @@
 				socket.emit('channel:join', { channelId: selectedChannel.id });
 				if (selectedChannel.type === 'TEXT') loadMessages(selectedChannel.id);
 			}
+			if (voiceChannelId) socket.emit('voice:join', { channelId: voiceChannelId });
 		});
 
 		socket.emit('server:subscribe', {
@@ -2089,7 +2090,7 @@
 
 	.vp-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
 
-	.voice-participant-item.vp-speaking .vp-name { color: #22c55e; }
+	.voice-participant-item.vp-speaking .vp-name { color: var(--accent); }
 
 	.vp-muted { font-size: 0.65rem; opacity: 0.6; flex-shrink: 0; }
 
@@ -2108,12 +2109,12 @@
 		align-items: center;
 		justify-content: space-between;
 		padding: 0.35rem 0.5rem;
-		background: rgba(34,197,94,0.1);
+		background: var(--accent-dim);
 		border-radius: var(--radius);
-		border: 1px solid rgba(34,197,94,0.2);
+		border: 1px solid rgba(59,130,246,0.25);
 	}
 
-	.voice-status-label { font-size: 0.72rem; color: #4ade80; }
+	.voice-status-label { font-size: 0.72rem; color: var(--accent); }
 	.voice-status-actions { display: flex; gap: 0.25rem; }
 
 	.ctrl-btn {
@@ -2544,9 +2545,11 @@
 	}
 
 	.voice-join-prompt {
+		flex: 1;
 		display: flex;
 		flex-direction: column;
 		align-items: center;
+		justify-content: center;
 		gap: 0.75rem;
 		text-align: center;
 	}
@@ -2578,7 +2581,7 @@
 
 	.voice-card.is-you { border-color: var(--accent); }
 
-	.voice-card.speaking { border-color: #22c55e; box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.25); }
+	.voice-card.speaking { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-dim); }
 
 	.voice-avatar-wrap {
 		position: relative;
@@ -2590,7 +2593,7 @@
 	.speaking-ring {
 		position: absolute; inset: -4px;
 		border-radius: 50%;
-		border: 2px solid #22c55e;
+		border: 2px solid var(--accent);
 		animation: speaking-pulse 1s ease-in-out infinite;
 		pointer-events: none;
 	}
@@ -2708,7 +2711,7 @@
 	}
 	.mic-level-fill {
 		height: 100%;
-		background: #22c55e;
+		background: var(--accent);
 		border-radius: 2px;
 		transition: width 0.05s linear;
 	}

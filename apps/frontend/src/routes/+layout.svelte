@@ -1,16 +1,64 @@
 <script lang="ts">
 	import './layout.css';
 	import { page } from '$app/stores';
-	import { onMount } from 'svelte';
+	import { onMount, onDestroy } from 'svelte';
 	import { goto, invalidateAll } from '$app/navigation';
 	import { authStore } from '$lib/auth.js';
 	import ProfileMenu from '$lib/components/ProfileMenu.svelte';
-	import { dmUnread } from '$lib/dmStore.js';
+	import { dmUnread, incrementUnread } from '$lib/dmStore.js';
+	import { socketStore } from '$lib/socket.js';
+	import type { ChatSocket } from '$lib/socket.js';
+	import { playPing } from '$lib/ping.js';
+	import { uploadStore, formatSpeed } from '$lib/uploadStore.svelte.js';
 
 	let { data, children } = $props();
 
+	let _activeSock: ChatSocket | null = null;
+	let _socketUnsub: (() => void) | null = null;
+
+	function handleGlobalDm(msg: any) {
+		if (!user || msg.author?.id === user.id) return;
+		if ($page.url.pathname === `/home/dm/${msg.conversationId}`) return;
+		incrementUnread(msg.conversationId);
+		if (!$page.url.pathname.startsWith('/home')) playPing();
+	}
+
+	async function joinAllDmRooms(s: ChatSocket) {
+		try {
+			const res = await fetch('/api/dm', { credentials: 'include' });
+			if (!res.ok) return;
+			const convs: { id: string }[] = await res.json();
+			for (const c of convs) s.emit('dm:join', { conversationId: c.id });
+		} catch { /* non-critical */ }
+	}
+
+	function onSocketReconnect() {
+		if (_activeSock && user) joinAllDmRooms(_activeSock);
+	}
+
 	onMount(() => {
 		authStore.init();
+		_socketUnsub = socketStore.socket.subscribe(s => {
+			if (s === _activeSock) return;
+			if (_activeSock) {
+				_activeSock.off('dm:message:created', handleGlobalDm);
+				_activeSock.off('connect', onSocketReconnect);
+			}
+			_activeSock = s;
+			if (s) {
+				s.on('dm:message:created', handleGlobalDm);
+				s.on('connect', onSocketReconnect);
+				if (user) joinAllDmRooms(s);
+			}
+		});
+	});
+
+	onDestroy(() => {
+		_socketUnsub?.();
+		if (_activeSock) {
+			_activeSock.off('dm:message:created', handleGlobalDm);
+			_activeSock.off('connect', onSocketReconnect);
+		}
 	});
 
 	const user = $derived(data.user as { id: string; username: string; role: string; avatarUrl?: string | null } | null);
@@ -50,10 +98,13 @@
 
 	function closeModal() {
 		showServerModal = false;
+		modalTab = 'explore';
 		joinPasswordFor = '';
 		joinPassword = '';
 		joinError = '';
 		createError = '';
+		newType = 'DISCORD';
+		newSlug = '';
 	}
 
 	function handleJoin(slug: string, accessType: string) {
@@ -158,6 +209,7 @@
 
 			<button
 				class="rail-btn add-btn"
+				class:add-btn-highlight={myServers.length === 0}
 				title="Añadir o crear servidor"
 				aria-label="Añadir servidor"
 				onclick={() => { showServerModal = true; modalTab = isAdmin ? 'create' : 'explore'; }}
@@ -175,9 +227,38 @@
 		</div>
 	</div>
 
+	<!-- Global upload tray -->
+	{#if uploadStore.list.length > 0}
+		<div class="upload-tray">
+			{#each uploadStore.list as u (u.id)}
+				<div class="upload-item" class:upload-done={u.done && !u.error} class:upload-error={!!u.error}>
+					<div class="upload-header">
+						<span class="upload-filename" title={u.filename}>{u.filename}</span>
+						{#if u.done || u.error}
+							<button class="upload-close" onclick={() => uploadStore.remove(u.id)} aria-label="Cerrar">✕</button>
+						{/if}
+					</div>
+					{#if !u.done && !u.error}
+						<div class="upload-bar">
+							<div class="upload-fill" style="width: {u.progress}%"></div>
+						</div>
+						<div class="upload-meta">
+							<span>{u.resuming ? 'Reanudando...' : 'Subiendo...'} {u.progress}%</span>
+							{#if u.speed > 0}<span class="upload-speed">{formatSpeed(u.speed)}</span>{/if}
+						</div>
+					{:else if u.done && !u.error}
+						<p class="upload-status-ok">✓ Subido</p>
+					{:else}
+						<p class="upload-status-err">{u.error}</p>
+					{/if}
+				</div>
+			{/each}
+		</div>
+	{/if}
+
 	<!-- Server modal -->
 	{#if showServerModal}
-		<div class="modal-overlay" role="dialog" aria-modal="true">
+		<div class="modal-overlay" role="dialog" aria-modal="true" onclick={(e) => { if (e.target === e.currentTarget) closeModal(); }}>
 			<div class="server-modal">
 				<div class="modal-header">
 					<div class="modal-tabs">
@@ -198,6 +279,7 @@
 						{#if joinPasswordFor}
 							<div class="password-prompt">
 								<h4>Contraseña para <strong>{joinPasswordFor}</strong></h4>
+								<!-- svelte-ignore a11y_autofocus -->
 								<input type="password" bind:value={joinPassword} placeholder="Contraseña" autofocus />
 								{#if joinError}<p class="error">{joinError}</p>{/if}
 								<div class="prompt-actions">
@@ -208,7 +290,7 @@
 								</div>
 							</div>
 						{:else if otherServers.length === 0}
-							<p class="empty-modal">Ya eres miembro de todos los servidores disponibles.</p>
+							<p class="empty-modal">{myServers.length === 0 ? 'No hay servidores disponibles. Pide a un administrador que cree uno.' : 'Ya eres miembro de todos los servidores disponibles.'}</p>
 						{:else}
 							{#if joinError}<p class="error">{joinError}</p>{/if}
 							<div class="server-list">
@@ -267,7 +349,7 @@
 								<span>💬</span> Discord
 							</button>
 							<button type="button" class="type-opt" class:selected={newType === 'SPATIAL'} onclick={() => (newType = 'SPATIAL')}>
-								<span>🗺️</span> Espacial <span class="wip">WIP</span>
+								<span>🗺️</span> Espacial
 							</button>
 						</div>
 
@@ -441,6 +523,17 @@
 	.add-btn:hover {
 		background: var(--accent);
 		border-color: var(--accent);
+		color: var(--accent-text);
+	}
+
+	.add-btn-highlight {
+		background: var(--accent-dim);
+		border-color: var(--accent);
+		color: var(--accent);
+	}
+
+	.add-btn-highlight:hover {
+		background: var(--accent);
 		color: var(--accent-text);
 	}
 
@@ -622,16 +715,7 @@
 	.type-opt:hover { border-color: var(--border-strong); color: var(--text-primary); }
 	.type-opt.selected { border-color: var(--accent); background: rgba(99,102,241,0.08); color: var(--text-primary); }
 
-	.wip {
-		font-size: 0.6rem;
-		padding: 0.05rem 0.3rem;
-		background: rgba(251,191,36,0.15);
-		color: #fbbf24;
-		border: 1px solid rgba(251,191,36,0.3);
-		border-radius: 999px;
-	}
-
-	/* ── Password prompt ── */
+/* ── Password prompt ── */
 	.password-prompt { display: flex; flex-direction: column; gap: 0.75rem; }
 	.password-prompt h4 { font-size: 0.9rem; color: var(--text-primary); }
 	.password-prompt h4 strong { color: var(--accent); }
@@ -670,4 +754,100 @@
 	.btn-ghost:hover { border-color: var(--accent); color: var(--accent); }
 
 	.error { font-size: 0.75rem; color: var(--error); }
+
+	/* ── Global upload tray ── */
+	.upload-tray {
+		position: fixed;
+		bottom: 1.25rem;
+		right: 1.25rem;
+		z-index: 600;
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+		width: 300px;
+		pointer-events: none;
+	}
+
+	.upload-item {
+		background: var(--bg-surface);
+		border: 1px solid var(--border-strong);
+		border-radius: var(--radius-lg);
+		padding: 0.65rem 0.75rem;
+		box-shadow: 0 4px 16px rgba(0,0,0,0.35);
+		pointer-events: all;
+		transition: border-color 0.2s;
+	}
+
+	.upload-item.upload-done { border-color: var(--success-border); }
+	.upload-item.upload-error { border-color: var(--error); }
+
+	.upload-header {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		margin-bottom: 0.4rem;
+	}
+
+	.upload-filename {
+		flex: 1;
+		font-size: 0.78rem;
+		font-weight: 600;
+		color: var(--text-primary);
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.upload-close {
+		background: none;
+		border: none;
+		color: var(--text-muted);
+		cursor: pointer;
+		font-size: 0.72rem;
+		padding: 0.1rem 0.25rem;
+		border-radius: var(--radius-sm);
+		line-height: 1;
+		flex-shrink: 0;
+	}
+
+	.upload-close:hover { color: var(--text-primary); background: var(--bg-elevated); }
+
+	.upload-bar {
+		height: 3px;
+		background: var(--bg-elevated);
+		border-radius: 9999px;
+		overflow: hidden;
+		margin-bottom: 0.35rem;
+	}
+
+	.upload-fill {
+		height: 100%;
+		background: var(--accent);
+		border-radius: 9999px;
+		transition: width 0.25s ease;
+	}
+
+	.upload-meta {
+		display: flex;
+		justify-content: space-between;
+		font-size: 0.7rem;
+		color: var(--text-muted);
+	}
+
+	.upload-speed { color: var(--text-secondary); }
+
+	.upload-status-ok {
+		font-size: 0.75rem;
+		color: var(--success);
+		margin: 0;
+	}
+
+	.upload-status-err {
+		font-size: 0.75rem;
+		color: var(--error);
+		margin: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
 </style>
