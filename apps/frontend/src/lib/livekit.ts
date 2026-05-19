@@ -224,11 +224,12 @@ function createLiveKitStore() {
 	}
 
 	async function toggleScreen(): Promise<void> {
-		if (!_room) return;
+		const room = _room;
+		if (!room) return;
 		errorMessage.set('');
 		const { Track } = await import('livekit-client');
 
-		const localIdentity = _room.localParticipant.identity;
+		const localIdentity = room.localParticipant.identity;
 
 		if (get(screenEnabled)) {
 			// Set false BEFORE stopping tracks to prevent the 'ended' listener from re-triggering
@@ -237,10 +238,10 @@ function createLiveKitStore() {
 			const cur = get(screenShares);
 			cur.delete(localIdentity);
 			screenShares.set(new Map(cur));
-			const pub = _room.localParticipant.getTrackPublication(Track.Source.ScreenShare);
-			if (pub?.track) await _room.localParticipant.unpublishTrack((pub.track as any).mediaStreamTrack);
-			const audioPub = _room.localParticipant.getTrackPublication(Track.Source.ScreenShareAudio);
-			if (audioPub?.track) await _room.localParticipant.unpublishTrack((audioPub.track as any).mediaStreamTrack);
+			const pub = room.localParticipant.getTrackPublication(Track.Source.ScreenShare);
+			if (pub?.track) await room.localParticipant.unpublishTrack((pub.track as any).mediaStreamTrack);
+			const audioPub = room.localParticipant.getTrackPublication(Track.Source.ScreenShareAudio);
+			if (audioPub?.track) await room.localParticipant.unpublishTrack((audioPub.track as any).mediaStreamTrack);
 			_screenVideoTrack?.stop(); _screenVideoTrack = null;
 			_screenAudioTrack?.stop(); _screenAudioTrack = null;
 		} else {
@@ -272,13 +273,13 @@ function createLiveKitStore() {
 			}, { once: true });
 
 			try {
-				const pub = await _room.localParticipant.publishTrack(videoTrack, {
+				const pub = await room.localParticipant.publishTrack(videoTrack, {
 					source: Track.Source.ScreenShare,
 					simulcast: false,
 					videoEncoding: { maxBitrate: preset.maxBitrate, maxFramerate: preset.frameRate },
 				});
 				if (audioTrack) {
-					await _room.localParticipant.publishTrack(audioTrack, {
+					await room.localParticipant.publishTrack(audioTrack, {
 						source: Track.Source.ScreenShareAudio,
 					});
 				}
@@ -287,7 +288,7 @@ function createLiveKitStore() {
 					const cur = get(screenShares);
 					cur.set(localIdentity, {
 						identity: localIdentity,
-						username: _room.localParticipant.name ?? localIdentity,
+						username: room.localParticipant.name ?? localIdentity,
 						track: pub.track,
 					});
 					screenShares.set(new Map(cur));
@@ -304,6 +305,8 @@ function createLiveKitStore() {
 	}
 
 	async function _enableMic(): Promise<void> {
+		const room = _room;
+		if (!room) throw new Error('Room disconnected');
 		const { Track } = await import('livekit-client');
 		const deviceId = get(selectedDeviceId);
 
@@ -335,7 +338,7 @@ function createLiveKitStore() {
 		};
 		_rafId = requestAnimationFrame(tick);
 
-		await _room!.localParticipant.publishTrack(dest.stream.getAudioTracks()[0], {
+		await room.localParticipant.publishTrack(dest.stream.getAudioTracks()[0], {
 			source: Track.Source.Microphone,
 		});
 
@@ -346,10 +349,13 @@ function createLiveKitStore() {
 		if (_rafId) { cancelAnimationFrame(_rafId); _rafId = null; }
 		audioLevel.set(0);
 
-		const { Track } = await import('livekit-client');
-		const pub = _room!.localParticipant.getTrackPublication(Track.Source.Microphone);
-		const mst = (pub?.track as any)?.mediaStreamTrack as MediaStreamTrack | undefined;
-		if (mst) await _room!.localParticipant.unpublishTrack(mst);
+		const room = _room;
+		if (room) {
+			const { Track } = await import('livekit-client');
+			const pub = room.localParticipant.getTrackPublication(Track.Source.Microphone);
+			const mst = (pub?.track as any)?.mediaStreamTrack as MediaStreamTrack | undefined;
+			if (mst) await room.localParticipant.unpublishTrack(mst);
+		}
 
 		_rawStream?.getTracks().forEach((t) => t.stop());
 		_rawStream = null;
