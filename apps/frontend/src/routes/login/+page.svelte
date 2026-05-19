@@ -67,7 +67,7 @@
 		</form>
 
 		<div class="links">
-			<a href="/forgot-password">¿Olvidaste tu contraseña?</a>
+			<a href="/forgot-password{email ? `?email=${encodeURIComponent(email)}` : ''}">¿Olvidaste tu contraseña?</a>
 			<a href="/register">Crear cuenta</a>
 		</div>
 	</div>

@@ -5,6 +5,7 @@ import * as bcrypt from 'bcrypt';
 import * as jwt from 'jsonwebtoken';
 import { PrismaService } from '../prisma/prisma.service';
 import { EmailService } from '../email/email.service';
+import { DriveService } from '../storage/drive.service';
 import type { RegisterDto } from './dto/register.dto';
 import type { LoginDto } from './dto/login.dto';
 
@@ -32,20 +33,21 @@ export class AuthService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly emailService: EmailService,
+    private readonly driveService: DriveService,
   ) {}
 
   async register(dto: RegisterDto): Promise<{ message: string }> {
     if (!dto.username || !dto.email || !dto.password) {
-      throw new BadRequestException('Username, email and password are required');
+      throw new BadRequestException('Se requiere nombre de usuario, email y contraseña');
     }
     if (!USERNAME_RE.test(dto.username)) {
-      throw new BadRequestException('Username must contain only letters and numbers');
+      throw new BadRequestException('El nombre de usuario solo puede contener letras y números');
     }
     if (dto.username.length < 3 || dto.username.length > 32) {
-      throw new BadRequestException('Username must be 3–32 characters');
+      throw new BadRequestException('El nombre de usuario debe tener entre 3 y 32 caracteres');
     }
     if (!dto.password || dto.password.length < 8) {
-      throw new BadRequestException('Password must be at least 8 characters');
+      throw new BadRequestException('La contraseña debe tener al menos 8 caracteres');
     }
 
     const normalizedEmail = normalizeEmail(dto.email);
@@ -54,8 +56,8 @@ export class AuthService {
       this.prisma.user.findUnique({ where: { username: dto.username } }),
       this.prisma.user.findUnique({ where: { email: normalizedEmail } }),
     ]);
-    if (byUsername) throw new ConflictException('Username already taken');
-    if (byEmail) throw new ConflictException('Email already registered');
+    if (byUsername) throw new ConflictException('El nombre de usuario ya está en uso');
+    if (byEmail) throw new ConflictException('El email ya está registrado');
 
     const count = await this.prisma.user.count();
     const role = count === 0 ? 'SUPERADMIN' : 'USER';
@@ -82,23 +84,23 @@ export class AuthService {
       await this.emailService.sendVerificationEmail(user.email, user.username, verifyToken);
     } catch {
       await this.prisma.user.delete({ where: { id: user.id } });
-      throw new BadRequestException('Could not send verification email — check the address and try again');
+      throw new BadRequestException('No se pudo enviar el email de verificación. Comprueba la dirección e inténtalo de nuevo');
     }
 
     return { message: 'Account created. Check your email to verify your account.' };
   }
 
   async login(dto: LoginDto): Promise<{ token: string; user: PublicUser }> {
-    if (!dto.email || !dto.password) throw new UnauthorizedException('Invalid credentials');
+    if (!dto.email || !dto.password) throw new UnauthorizedException('Credenciales incorrectas');
     const normalizedEmail = normalizeEmail(dto.email);
     const user = await this.prisma.user.findUnique({ where: { email: normalizedEmail } });
-    if (!user) throw new UnauthorizedException('Invalid credentials');
+    if (!user) throw new UnauthorizedException('Credenciales incorrectas');
 
     const valid = await bcrypt.compare(dto.password, user.passwordHash);
-    if (!valid) throw new UnauthorizedException('Invalid credentials');
+    if (!valid) throw new UnauthorizedException('Credenciales incorrectas');
 
     if (!user.emailVerified) {
-      throw new UnauthorizedException('Please verify your email before logging in');
+      throw new UnauthorizedException('Verifica tu email antes de iniciar sesión');
     }
 
     return this.buildResult({
@@ -111,11 +113,11 @@ export class AuthService {
     try {
       payload = jwt.verify(token, secret());
     } catch {
-      throw new BadRequestException('Invalid or expired verification link');
+      throw new BadRequestException('El enlace de verificación no es válido o ha expirado');
     }
 
     if (payload.type !== 'verify') {
-      throw new BadRequestException('Invalid token type');
+      throw new BadRequestException('Tipo de token no válido');
     }
 
     await this.prisma.user.update({
@@ -141,7 +143,7 @@ export class AuthService {
     try {
       await this.emailService.sendPasswordResetEmail(user.email, user.username, resetToken);
     } catch {
-      throw new BadRequestException('Could not send reset email — try again later');
+      throw new BadRequestException('No se pudo enviar el email de recuperación. Inténtalo más tarde');
     }
 
     return { message: 'If that email exists, a reset link has been sent.' };
@@ -152,12 +154,12 @@ export class AuthService {
     try {
       payload = jwt.verify(token, secret());
     } catch {
-      throw new BadRequestException('Invalid or expired reset link');
+      throw new BadRequestException('El enlace de recuperación no es válido o ha expirado');
     }
 
-    if (payload.type !== 'reset') throw new BadRequestException('Invalid token type');
+    if (payload.type !== 'reset') throw new BadRequestException('Tipo de token no válido');
     if (!newPassword || newPassword.length < 8) {
-      throw new BadRequestException('Password must be at least 8 characters');
+      throw new BadRequestException('La contraseña debe tener al menos 8 caracteres');
     }
 
     const passwordHash = await bcrypt.hash(newPassword, 12);
@@ -171,31 +173,12 @@ export class AuthService {
       throw new BadRequestException('Tipo de archivo no permitido. Usa JPEG, PNG, GIF o WebP.');
     }
 
-    const supabaseUrl = process.env.SUPABASE_URL;
-    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-    if (!supabaseUrl || !supabaseKey) {
-      throw new BadRequestException('Almacenamiento no configurado.');
-    }
-
-    const ext = file.mimetype.split('/')[1];
-    const path = `${userId}/avatar.${ext}`;
-
-    const uploadRes = await fetch(`${supabaseUrl}/storage/v1/object/avatars/${path}`, {
-      method: 'PUT',
-      headers: {
-        Authorization: `Bearer ${supabaseKey}`,
-        'Content-Type': file.mimetype,
-        'x-upsert': 'true',
-      },
-      body: file.buffer as any,
-    });
-
-    if (!uploadRes.ok) {
-      throw new BadRequestException('Error al subir la imagen. Inténtalo de nuevo.');
-    }
-
-    const avatarUrl = `${supabaseUrl}/storage/v1/object/public/avatars/${path}`;
+    const ext = file.originalname.split('.').pop() ?? file.mimetype.split('/')[1];
+    const avatarUrl = await this.driveService.uploadBuffer(
+      file.buffer,
+      file.mimetype,
+      `avatar-${userId}.${ext}`,
+    );
 
     await this.prisma.user.update({ where: { id: userId }, data: { avatarUrl } });
 

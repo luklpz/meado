@@ -1,7 +1,8 @@
 <script lang="ts">
+	import { page } from '$app/stores';
 	import { authStore } from '$lib/auth.js';
 
-	let email = $state('');
+	let email = $state($page.url.searchParams.get('email') ?? '');
 	let error = $state('');
 	let success = $state('');
 	let loading = $state(false);
@@ -60,26 +61,40 @@
 		justify-content: center;
 		min-height: 100vh;
 		padding: 1rem;
+		background: var(--bg-base);
+		position: relative;
+	}
+
+	.page::before {
+		content: '';
+		position: fixed;
+		inset: 0;
+		background: var(--auth-bg-glow, none);
+		pointer-events: none;
 	}
 
 	.card {
 		display: flex;
 		flex-direction: column;
-		gap: 1.25rem;
-		padding: 2rem;
+		gap: 1.5rem;
+		padding: 2.25rem 2rem;
 		border: 1px solid var(--border);
 		border-radius: var(--radius-lg);
 		background: var(--bg-surface);
+		box-shadow: var(--shadow-card);
 		width: 100%;
-		max-width: 340px;
+		max-width: 360px;
+		position: relative;
+		z-index: 1;
 	}
 
 	.logo {
-		font-size: 1.5rem;
+		font-size: 1.75rem;
 		font-weight: 700;
-		letter-spacing: 0.2em;
+		letter-spacing: 0.18em;
 		color: var(--accent);
 		text-align: center;
+		text-transform: lowercase;
 	}
 
 	.subtitle {
@@ -90,7 +105,7 @@
 
 	.notice {
 		font-size: 0.78rem;
-		padding: 0.6rem 0.75rem;
+		padding: 0.55rem 0.75rem;
 		border-radius: var(--radius);
 		line-height: 1.5;
 	}

@@ -12,13 +12,13 @@ export class JwtAuthGuard implements CanActivate {
   canActivate(context: ExecutionContext): boolean {
     const req = context.switchToHttp().getRequest();
     const token: string | undefined = req.cookies?.token;
-    if (!token) throw new UnauthorizedException('Not authenticated');
+    if (!token) throw new UnauthorizedException('No autenticado');
     try {
       const payload = jwt.verify(token, process.env.JWT_SECRET ?? 'dev-secret') as any;
       req.user = { id: payload.sub, username: payload.username, role: payload.role } satisfies JwtUser;
       return true;
     } catch {
-      throw new UnauthorizedException('Invalid or expired token');
+      throw new UnauthorizedException('Sesión inválida o expirada');
     }
   }
 }
