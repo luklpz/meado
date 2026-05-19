@@ -16,10 +16,10 @@ interface AuthSocket extends Socket {
 
 // channelId → Map<userId, member>
 const voiceRooms = new Map<string, Map<string, { userId: string; username: string; avatarUrl?: string | null }>>();
-// `${channelId}:${userId}` → active socket count (multi-tab: only emit voice:left when last socket leaves)
-const voiceRefCounts = new Map<string, number>();
-// socketId → voice entries joined by this socket
-const voiceSocketChannels = new Map<string, { channelId: string; userId: string }[]>();
+// userId → socketId that owns this user's voice presence (one slot per user)
+const voiceActiveSocket = new Map<string, string>();
+// socketId → { channelId, userId } for disconnect cleanup
+const voiceSocketChannel = new Map<string, { channelId: string; userId: string }>();
 // channelId → Map<userId, username>
 const typingUsers = new Map<string, Map<string, string>>();
 // conversationId → Map<userId, username>
@@ -116,22 +116,16 @@ export class MessagesGateway implements OnGatewayConnection, OnGatewayDisconnect
       }
     }
 
-    const voiceEntries = voiceSocketChannels.get(client.id) ?? [];
-    voiceSocketChannels.delete(client.id);
-    for (const { channelId, userId: vUserId } of voiceEntries) {
-      const refKey = `${channelId}:${vUserId}`;
-      const count = (voiceRefCounts.get(refKey) ?? 1) - 1;
-      if (count <= 0) {
-        voiceRefCounts.delete(refKey);
-        const room = voiceRooms.get(channelId);
-        if (room) {
-          room.delete(vUserId);
-          this.server.to(`voice:${channelId}`).emit('voice:left', { channelId, userId: vUserId });
-          client.leave(`voice:${channelId}`);
-          if (room.size === 0) voiceRooms.delete(channelId);
-        }
-      } else {
-        voiceRefCounts.set(refKey, count);
+    const voiceEntry = voiceSocketChannel.get(client.id);
+    voiceSocketChannel.delete(client.id);
+    if (voiceEntry && voiceActiveSocket.get(voiceEntry.userId) === client.id) {
+      voiceActiveSocket.delete(voiceEntry.userId);
+      const room = voiceRooms.get(voiceEntry.channelId);
+      if (room) {
+        room.delete(voiceEntry.userId);
+        this.server.to(`voice:${voiceEntry.channelId}`).emit('voice:left', { channelId: voiceEntry.channelId, userId: voiceEntry.userId });
+        client.leave(`voice:${voiceEntry.channelId}`);
+        if (room.size === 0) voiceRooms.delete(voiceEntry.channelId);
       }
     }
     for (const [channelId, typers] of typingUsers.entries()) {
@@ -236,21 +230,36 @@ export class MessagesGateway implements OnGatewayConnection, OnGatewayDisconnect
     const channel = await this.messagesService.getChannel(payload.channelId);
     if (!channel || channel.type !== 'VOICE') return;
 
-    if (!voiceRooms.has(payload.channelId)) voiceRooms.set(payload.channelId, new Map());
-    const room = voiceRooms.get(payload.channelId)!;
+    const userId = client.user.id;
+    const { channelId } = payload;
 
-    const member = { userId: client.user.id, username: client.user.username, avatarUrl: client.user.avatarUrl };
-    const isNew = !room.has(client.user.id);
-    room.set(client.user.id, member);
+    // Auto-evict from any current voice channel (one slot per user)
+    const oldSocketId = voiceActiveSocket.get(userId);
+    if (oldSocketId) {
+      const old = voiceSocketChannel.get(oldSocketId);
+      if (old && old.channelId !== channelId) {
+        const oldRoom = voiceRooms.get(old.channelId);
+        if (oldRoom) {
+          oldRoom.delete(userId);
+          if (oldRoom.size === 0) voiceRooms.delete(old.channelId);
+        }
+        this.server.to(`voice:${old.channelId}`).emit('voice:left', { channelId: old.channelId, userId });
+      }
+      voiceSocketChannel.delete(oldSocketId);
+    }
 
-    const refKey = `${payload.channelId}:${client.user.id}`;
-    voiceRefCounts.set(refKey, (voiceRefCounts.get(refKey) ?? 0) + 1);
-    if (!voiceSocketChannels.has(client.id)) voiceSocketChannels.set(client.id, []);
-    voiceSocketChannels.get(client.id)!.push({ channelId: payload.channelId, userId: client.user.id });
+    voiceActiveSocket.set(userId, client.id);
+    voiceSocketChannel.set(client.id, { channelId, userId });
 
-    client.join(`voice:${payload.channelId}`);
-    client.emit('voice:state', { channelId: payload.channelId, members: Array.from(room.values()) });
-    if (isNew) client.to(`voice:${payload.channelId}`).emit('voice:joined', { channelId: payload.channelId, member });
+    if (!voiceRooms.has(channelId)) voiceRooms.set(channelId, new Map());
+    const room = voiceRooms.get(channelId)!;
+    const isNew = !room.has(userId);
+    const member = { userId, username: client.user.username, avatarUrl: client.user.avatarUrl };
+    room.set(userId, member);
+
+    client.join(`voice:${channelId}`);
+    client.emit('voice:state', { channelId, members: Array.from(room.values()) });
+    if (isNew) client.to(`voice:${channelId}`).emit('voice:joined', { channelId, member });
   }
 
   @SubscribeMessage('server:subscribe')
@@ -272,25 +281,16 @@ export class MessagesGateway implements OnGatewayConnection, OnGatewayDisconnect
     if (!client.user) return;
     const { channelId } = payload;
     const userId = client.user.id;
-    const refKey = `${channelId}:${userId}`;
 
-    const socketEntries = voiceSocketChannels.get(client.id);
-    if (socketEntries) {
-      const idx = socketEntries.findIndex(e => e.channelId === channelId && e.userId === userId);
-      if (idx !== -1) socketEntries.splice(idx, 1);
-    }
-
-    const count = (voiceRefCounts.get(refKey) ?? 1) - 1;
-    if (count <= 0) {
-      voiceRefCounts.delete(refKey);
+    voiceSocketChannel.delete(client.id);
+    if (voiceActiveSocket.get(userId) === client.id) {
+      voiceActiveSocket.delete(userId);
       const room = voiceRooms.get(channelId);
       if (room) {
         room.delete(userId);
         if (room.size === 0) voiceRooms.delete(channelId);
       }
       this.server.to(`voice:${channelId}`).emit('voice:left', { channelId, userId });
-    } else {
-      voiceRefCounts.set(refKey, count);
     }
     client.leave(`voice:${channelId}`);
   }
