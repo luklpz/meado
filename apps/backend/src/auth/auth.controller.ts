@@ -31,6 +31,7 @@ export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
   @Post('register')
+  @Throttle({ default: { limit: 5, ttl: 3600000 } })
   async register(@Body() dto: RegisterDto) {
     return this.authService.register(dto);
   }
@@ -56,12 +57,14 @@ export class AuthController {
 
   @Post('forgot-password')
   @HttpCode(200)
+  @Throttle({ default: { limit: 3, ttl: 3600000 } })
   async forgotPassword(@Body() body: { email: string }) {
     return this.authService.forgotPassword(body.email);
   }
 
   @Post('reset-password')
   @HttpCode(200)
+  @Throttle({ default: { limit: 5, ttl: 3600000 } })
   async resetPassword(@Body() body: { token: string; password: string }) {
     return this.authService.resetPassword(body.token, body.password);
   }

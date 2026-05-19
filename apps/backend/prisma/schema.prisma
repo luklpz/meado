@@ -81,6 +81,8 @@ model Server {
   roles        ServerRole[]
   whitelist    ServerWhitelist[]
   bans         ServerBan[]
+
+  @@index([ownerId])
 }
 
 // ── Server roles ──────────────────────────────────────────────────────────────
@@ -157,6 +159,8 @@ model Channel {
   server    Server        @relation(fields: [serverId], references: [id], onDelete: Cascade)
   messages  Message[]
   reads     ChannelRead[]
+
+  @@index([serverId])
 }
 
 model ChannelRead {
@@ -198,6 +202,8 @@ model Attachment {
   messageId String
 
   message   Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@index([messageId])
 }
 
 model MessageReaction {
