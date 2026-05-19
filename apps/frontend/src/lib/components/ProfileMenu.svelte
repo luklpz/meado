@@ -15,7 +15,6 @@
 	let panelTop = $state(0);
 	let panelLeft = $state(0);
 	let btnEl: HTMLButtonElement;
-
 	let fileInput: HTMLInputElement;
 
 	function handleWindowClick(e: MouseEvent) {
@@ -29,9 +28,7 @@
 		goto('/login');
 	}
 
-	function setTheme(t: Theme) {
-		themeStore.set(t);
-	}
+	function setTheme(t: Theme) { themeStore.set(t); }
 
 	async function saveName() {
 		nameError = '';
@@ -72,10 +69,8 @@
 <div class="profile-menu">
 	<button bind:this={btnEl} class="avatar-btn" onclick={() => {
 		const r = btnEl.getBoundingClientRect();
-		const panelH = 320;
-		panelTop = r.bottom + panelH > window.innerHeight
-			? r.top - panelH
-			: r.bottom + 8;
+		const panelH = 380;
+		panelTop = r.bottom + panelH > window.innerHeight ? r.top - panelH : r.bottom + 8;
 		panelLeft = r.right + 8;
 		open = !open;
 	}} aria-label="Perfil y ajustes">
@@ -84,58 +79,65 @@
 		{:else if $user}
 			<span class="avatar-initial">{$user.username[0].toUpperCase()}</span>
 		{:else}
-			<span class="avatar-icon"><UserRound size={28} /></span>
+			<span class="avatar-icon"><UserRound size={18} /></span>
 		{/if}
 	</button>
 
 	{#if open}
 		<div class="panel" style="top:{panelTop}px; left:{panelLeft}px;">
 			{#if $user}
-				<div class="user-card">
-					<div class="user-avatar-lg">
-						{#if $user.avatarUrl}
-							<img src={$user.avatarUrl} alt={$user.username} class="avatar-img-lg" />
-						{:else}
-							<span class="initial-lg">{$user.username[0].toUpperCase()}</span>
-						{/if}
-					</div>
-					<div class="user-meta">
-						{#if editingName}
-							<div class="name-edit-row">
-								<input
-									class="name-input"
-									bind:value={nameInput}
-									placeholder="Nombre visible"
-									maxlength="64"
-									onkeydown={e => { if (e.key === 'Enter') saveName(); if (e.key === 'Escape') editingName = false; }}
-								/>
-								<button class="name-save-btn" onclick={saveName}><Check size={14} /></button>
-								<button class="name-cancel-btn" onclick={() => editingName = false}><X size={14} /></button>
+				<!-- Banner + avatar header -->
+				<div class="card-header">
+					<div class="banner"></div>
+					<div class="header-bottom">
+						<button
+							class="avatar-wrap"
+							onclick={() => fileInput.click()}
+							disabled={uploading}
+							title="Cambiar foto de perfil"
+						>
+							{#if $user.avatarUrl}
+								<img src={$user.avatarUrl} alt={$user.username} class="avatar-lg" />
+							{:else}
+								<span class="avatar-initial-lg">{$user.username[0].toUpperCase()}</span>
+							{/if}
+							<div class="avatar-overlay">
+								{#if uploading}
+									<Loader2 size={18} class="spin-icon" />
+								{:else}
+									<Upload size={16} />
+								{/if}
 							</div>
-							{#if nameError}<span class="name-error">{nameError}</span>{/if}
-						{:else}
-							<button class="name-btn" onclick={() => { nameInput = $user?.name ?? ''; editingName = true; }}>
-								<span class="user-display-name">{$user.name || $user.username}</span>
-								<span class="edit-hint"><Pen size={11} /></span>
-							</button>
-							<span class="user-tag">@{$user.username}</span>
-						{/if}
+						</button>
 						{#if $user.role === 'ADMIN' || $user.role === 'SUPERADMIN'}
-							<span class="role-badge">Admin</span>
+							<span class="role-chip">Admin</span>
 						{/if}
 					</div>
 				</div>
 
-				<div class="sep"></div>
-
-				<button
-					class="action-item"
-					onclick={() => fileInput.click()}
-					disabled={uploading}
-				>
-					{#if uploading}<Loader2 size={14} class="action-icon spinning" />{:else}<Upload size={14} class="action-icon" />{/if}
-					{uploading ? 'Subiendo…' : 'Cambiar foto de perfil'}
-				</button>
+				<!-- Identity -->
+				<div class="identity">
+					{#if editingName}
+						<div class="name-edit-row">
+							<input
+								class="name-input"
+								bind:value={nameInput}
+								placeholder="Nombre visible"
+								maxlength="64"
+								onkeydown={e => { if (e.key === 'Enter') saveName(); if (e.key === 'Escape') editingName = false; }}
+							/>
+							<button class="icon-btn-sm ok" onclick={saveName}><Check size={13} /></button>
+							<button class="icon-btn-sm" onclick={() => editingName = false}><X size={13} /></button>
+						</div>
+						{#if nameError}<span class="name-error">{nameError}</span>{/if}
+					{:else}
+						<button class="name-btn" onclick={() => { nameInput = $user?.name ?? ''; editingName = true; }}>
+							<span class="display-name">{$user.name || $user.username}</span>
+							<span class="edit-hint"><Pen size={11} /></span>
+						</button>
+					{/if}
+					<span class="username">@{$user.username}</span>
+				</div>
 
 				{#if uploadError}
 					<p class="upload-error">{uploadError}</p>
@@ -144,7 +146,8 @@
 				<div class="sep"></div>
 			{/if}
 
-			<div class="theme-section">
+			<!-- Theme -->
+			<div class="section">
 				<span class="section-label">Tema</span>
 				<div class="theme-grid">
 					{#each THEME_OPTIONS as opt}
@@ -156,6 +159,7 @@
 						>
 							<span class="theme-icon">{opt.icon}</span>
 							<span>{opt.label}</span>
+							{#if $themeStore === opt.value}<Check size={12} class="theme-check" />{/if}
 						</button>
 					{/each}
 				</div>
@@ -163,8 +167,8 @@
 
 			{#if $user}
 				<div class="sep"></div>
-				<button class="danger-item" onclick={handleLogout}>
-					<span class="action-icon"><LogOut size={14} /></span>
+				<button class="action-item danger" onclick={handleLogout}>
+					<LogOut size={14} />
 					Cerrar sesión
 				</button>
 			{/if}
@@ -179,15 +183,14 @@
 		font-family: var(--font-mono);
 	}
 
-	/* ── Avatar button ── */
+	/* ── Trigger button ── */
 	.avatar-btn {
-		width: 38px;
-		height: 38px;
+		width: 36px; height: 36px;
 		border-radius: 50%;
 		background: var(--bg-elevated);
 		border: 2px solid var(--border);
 		color: var(--accent);
-		font-size: 0.85rem;
+		font-size: 0.82rem;
 		font-weight: 700;
 		cursor: pointer;
 		display: flex;
@@ -198,65 +201,130 @@
 		padding: 0;
 	}
 
-	.avatar-btn:hover { border-color: var(--accent); transform: scale(1.05); }
-
-	.avatar-img {
-		width: 100%;
-		height: 100%;
-		object-fit: cover;
-		border-radius: 50%;
-	}
-
+	.avatar-btn:hover { border-color: var(--accent); transform: scale(1.06); }
+	.avatar-img { width: 100%; height: 100%; object-fit: cover; border-radius: 50%; }
 	.avatar-initial, .avatar-icon { line-height: 1; }
 
 	/* ── Panel ── */
 	.panel {
 		position: fixed;
 		z-index: 9999;
-		min-width: 220px;
+		width: 260px;
 		background: var(--bg-surface);
 		border: 1px solid var(--border);
 		border-radius: var(--radius-lg);
-		padding: 0.4rem;
+		overflow: hidden;
 		display: flex;
 		flex-direction: column;
-		gap: 0.15rem;
-		box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+		box-shadow: 0 16px 48px rgba(0,0,0,0.55), 0 2px 8px rgba(0,0,0,0.3);
 	}
 
-	/* ── User card ── */
-	.user-card {
-		display: flex;
-		align-items: center;
-		gap: 0.7rem;
-		padding: 0.55rem 0.6rem;
+	/* ── Card header (banner + avatar) ── */
+	.card-header {
+		position: relative;
+		margin-bottom: 0;
 	}
 
-	.user-avatar-lg {
-		width: 44px;
-		height: 44px;
-		border-radius: 50%;
-		background: var(--bg-elevated);
-		border: 2px solid var(--border-strong);
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		font-size: 1.1rem;
-		font-weight: 700;
-		color: var(--accent);
-		flex-shrink: 0;
+	.banner {
+		height: 64px;
+		background: linear-gradient(135deg, var(--accent-dim) 0%, var(--bg-elevated) 100%);
+		border-bottom: 1px solid var(--border);
+		position: relative;
 		overflow: hidden;
 	}
 
-	.avatar-img-lg {
-		width: 100%;
-		height: 100%;
-		object-fit: cover;
+	.banner::after {
+		content: '';
+		position: absolute;
+		inset: 0;
+		background: repeating-linear-gradient(
+			45deg,
+			transparent,
+			transparent 12px,
+			rgba(255,255,255,0.015) 12px,
+			rgba(255,255,255,0.015) 13px
+		);
 	}
 
-	.initial-lg { line-height: 1; }
+	.header-bottom {
+		display: flex;
+		align-items: flex-end;
+		justify-content: space-between;
+		padding: 0 0.9rem 0.6rem;
+		margin-top: -28px;
+	}
 
-	.user-meta { display: flex; flex-direction: column; gap: 0.15rem; }
+	/* ── Large avatar ── */
+	.avatar-wrap {
+		position: relative;
+		width: 56px; height: 56px;
+		border-radius: 50%;
+		border: 3px solid var(--bg-surface);
+		background: var(--bg-elevated);
+		overflow: hidden;
+		cursor: pointer;
+		flex-shrink: 0;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		padding: 0;
+		transition: border-color var(--transition);
+	}
+
+	.avatar-wrap:hover { border-color: var(--accent); }
+	.avatar-wrap:disabled { cursor: not-allowed; opacity: 0.6; }
+
+	.avatar-lg {
+		width: 100%; height: 100%;
+		object-fit: cover;
+		border-radius: 50%;
+	}
+
+	.avatar-initial-lg {
+		font-size: 1.4rem;
+		font-weight: 700;
+		color: var(--accent);
+		line-height: 1;
+	}
+
+	.avatar-overlay {
+		position: absolute;
+		inset: 0;
+		border-radius: 50%;
+		background: rgba(0,0,0,0.55);
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		color: #fff;
+		opacity: 0;
+		transition: opacity var(--transition);
+	}
+
+	.avatar-wrap:hover .avatar-overlay { opacity: 1; }
+
+	:global(.spin-icon) { animation: spin 0.9s linear infinite; }
+	@keyframes spin { to { transform: rotate(360deg); } }
+
+	.role-chip {
+		font-size: 0.58rem;
+		font-weight: 700;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+		padding: 0.15rem 0.45rem;
+		border-radius: 999px;
+		border: 1px solid var(--accent);
+		color: var(--accent);
+		background: var(--accent-dim);
+		margin-bottom: 0.2rem;
+	}
+
+	/* ── Identity ── */
+	.identity {
+		display: flex;
+		flex-direction: column;
+		gap: 0.1rem;
+		padding: 0 0.9rem 0.75rem;
+	}
 
 	.name-btn {
 		display: flex;
@@ -269,7 +337,12 @@
 		text-align: left;
 	}
 
-	.user-display-name { font-size: 0.82rem; font-weight: 600; color: var(--text-primary); }
+	.display-name {
+		font-size: 0.92rem;
+		font-weight: 700;
+		color: var(--text-primary);
+		line-height: 1.2;
+	}
 
 	.edit-hint {
 		color: var(--text-muted);
@@ -281,7 +354,10 @@
 
 	.name-btn:hover .edit-hint { opacity: 1; }
 
-	.user-tag { font-size: 0.65rem; color: var(--text-muted); }
+	.username {
+		font-size: 0.72rem;
+		color: var(--text-muted);
+	}
 
 	.name-edit-row {
 		display: flex;
@@ -290,119 +366,107 @@
 	}
 
 	.name-input {
-		font-size: 0.78rem;
-		padding: 0.2rem 0.35rem;
+		font-size: 0.8rem;
+		padding: 0.25rem 0.4rem;
 		background: var(--bg-elevated);
 		border: 1px solid var(--border-focus);
 		border-radius: var(--radius-sm);
 		color: var(--text-primary);
 		outline: none;
-		width: 120px;
+		flex: 1;
+		min-width: 0;
+		font-family: inherit;
 	}
 
-	.name-save-btn, .name-cancel-btn {
+	.icon-btn-sm {
 		background: transparent;
 		border: none;
 		cursor: pointer;
-		font-size: 0.75rem;
-		padding: 0.1rem 0.25rem;
+		padding: 0.15rem 0.2rem;
 		border-radius: var(--radius-sm);
-	}
-
-	.name-save-btn { color: var(--success); }
-	.name-save-btn:hover { background: var(--success-surface); }
-	.name-cancel-btn { color: var(--text-muted); }
-	.name-cancel-btn:hover { background: var(--bg-elevated); }
-
-	.name-error { font-size: 0.65rem; color: var(--error); }
-
-	.role-badge {
-		font-size: 0.58rem;
-		padding: 0.08rem 0.32rem;
-		border: 1px solid var(--accent);
-		border-radius: 2px;
-		color: var(--accent);
-		letter-spacing: 0.06em;
-		text-transform: uppercase;
-		width: fit-content;
-	}
-
-	/* ── Separator ── */
-	.sep { height: 1px; background: var(--border); margin: 0.2rem 0; }
-
-	/* ── Action items ── */
-	.action-item, .danger-item {
+		color: var(--text-muted);
 		display: flex;
 		align-items: center;
-		gap: 0.5rem;
-		width: 100%;
-		padding: 0.38rem 0.6rem;
-		border: none;
-		border-radius: var(--radius-sm);
-		background: transparent;
-		cursor: pointer;
-		font-size: 0.78rem;
-		text-align: left;
 		transition: background var(--transition), color var(--transition);
+		flex-shrink: 0;
 	}
 
-	.action-item { color: var(--text-secondary); }
-	.action-item:hover:not(:disabled) { background: var(--bg-elevated); color: var(--text-primary); }
-	.action-item:disabled { opacity: 0.5; cursor: not-allowed; }
+	.icon-btn-sm.ok { color: var(--success); }
+	.icon-btn-sm.ok:hover { background: var(--success-surface); }
+	.icon-btn-sm:hover { background: var(--bg-elevated); color: var(--text-primary); }
 
-	.danger-item { color: var(--text-secondary); }
-	.danger-item:hover { background: var(--error-surface); color: var(--error); }
-
-	.action-icon { flex-shrink: 0; }
-
-	@keyframes spin { to { transform: rotate(360deg); } }
-	:global(.spinning) { animation: spin 0.9s linear infinite; }
+	.name-error { font-size: 0.65rem; color: var(--error); }
 
 	.upload-error {
 		font-size: 0.7rem;
 		color: var(--error);
-		padding: 0 0.6rem;
+		padding: 0 0.9rem 0.5rem;
 	}
 
-	/* ── Theme section ── */
-	.theme-section {
+	/* ── Separator ── */
+	.sep { height: 1px; background: var(--border); margin: 0.15rem 0; }
+
+	/* ── Section ── */
+	.section {
 		display: flex;
 		flex-direction: column;
-		gap: 0.3rem;
-		padding: 0.3rem 0.6rem;
+		gap: 0.2rem;
+		padding: 0.5rem 0.5rem;
 	}
 
 	.section-label {
-		font-size: 0.62rem;
+		font-size: 0.6rem;
+		font-weight: 700;
 		color: var(--text-muted);
 		letter-spacing: 0.1em;
 		text-transform: uppercase;
+		padding: 0 0.3rem 0.1rem;
 	}
 
+	/* ── Theme grid ── */
 	.theme-grid { display: flex; flex-direction: column; gap: 0.05rem; }
 
 	.theme-btn {
 		display: flex;
 		align-items: center;
 		gap: 0.5rem;
-		padding: 0.28rem 0.4rem;
+		padding: 0.3rem 0.4rem;
 		background: transparent;
-		border: 1px solid transparent;
+		border: none;
 		border-radius: var(--radius-sm);
 		color: var(--text-secondary);
 		cursor: pointer;
-		font-size: 0.76rem;
+		font-size: 0.78rem;
 		width: 100%;
-		transition: background var(--transition), border-color var(--transition), color var(--transition);
+		transition: background var(--transition), color var(--transition);
+		font-family: inherit;
 	}
 
 	.theme-btn:hover { background: var(--bg-elevated); color: var(--text-primary); }
 
-	.theme-btn.active {
-		border-color: var(--border-focus);
-		color: var(--accent);
-		background: var(--accent-dim);
+	.theme-btn.active { color: var(--accent); }
+
+	.theme-icon { font-size: 0.75rem; flex-shrink: 0; }
+
+	:global(.theme-check) { margin-left: auto; color: var(--accent); }
+
+	/* ── Action items ── */
+	.action-item {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		width: 100%;
+		padding: 0.4rem 0.75rem;
+		border: none;
+		background: transparent;
+		cursor: pointer;
+		font-size: 0.8rem;
+		text-align: left;
+		transition: background var(--transition), color var(--transition);
+		font-family: inherit;
+		margin: 0.15rem 0;
 	}
 
-	.theme-icon { font-size: 0.75rem; }
+	.action-item.danger { color: var(--text-secondary); }
+	.action-item.danger:hover { background: var(--error-surface); color: var(--error); }
 </style>
