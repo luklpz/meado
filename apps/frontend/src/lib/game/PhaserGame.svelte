@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
+	import { get } from 'svelte/store';
 	import { socketStore } from '$lib/socket.js';
 	import { livekitStore } from '$lib/livekit.js';
 	import { authStore } from '$lib/auth.js';
@@ -63,6 +64,7 @@
 			playerSpeed: 200,
 			livekitRoom,
 			proximityRadius: 500,
+			getOutputVolume: () => get(livekitStore.outputVolume),
 		});
 
 		game = new Phaser.Game({

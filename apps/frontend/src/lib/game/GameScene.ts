@@ -12,6 +12,7 @@ export interface SceneConfig {
 	playerSpeed: number;
 	livekitRoom?: Room;
 	proximityRadius?: number;
+	getOutputVolume?: () => number;
 }
 
 type PhaserType = typeof import('phaser');
@@ -28,7 +29,7 @@ export function createGameScene(Phaser: PhaserType, socket: GameSocket, cfg: Sce
 	const {
 		canvasW, canvasH, roomId, username,
 		emitIntervalMs, lerpStiffness, playerSpeed,
-		livekitRoom, proximityRadius = 200,
+		livekitRoom, proximityRadius = 200, getOutputVolume,
 	} = cfg;
 
 	return class GameScene extends Phaser.Scene {
@@ -194,13 +195,13 @@ export function createGameScene(Phaser: PhaserType, socket: GameSocket, cfg: Sce
 
 		private updateSpeakingIndicators() {
 			if (!livekitRoom) return;
-			const speakers = livekitRoom.activeSpeakers;
+			const speakerNames = new Set(livekitRoom.activeSpeakers.map((p) => p.name));
 
-			const localSpeaking = speakers.some((p) => p.name === username);
+			const localSpeaking = speakerNames.has(username);
 			this.localIndicator.setFillStyle(0x3b82f6, localSpeaking ? 1 : 0);
 
 			for (const r of this.remote.values()) {
-				const speaking = speakers.some((p) => p.name === r.username);
+				const speaking = speakerNames.has(r.username);
 				if (speaking !== r.speaking) {
 					r.speaking = speaking;
 					r.indicator.setFillStyle(0x3b82f6, speaking ? 1 : 0);
@@ -210,21 +211,23 @@ export function createGameScene(Phaser: PhaserType, socket: GameSocket, cfg: Sce
 
 		private updateProximityVolumes() {
 			if (!livekitRoom) return;
+			const masterVol = getOutputVolume?.() ?? 1;
+
+			const participantByName = new Map<string, any>();
+			for (const p of livekitRoom.remoteParticipants.values()) {
+				if (p.name) participantByName.set(p.name, p);
+			}
+
 			for (const r of this.remote.values()) {
+				const participant = participantByName.get(r.username);
+				if (!participant) continue;
 				const dist = Phaser.Math.Distance.Between(
 					this.local.x, this.local.y, r.sprite.x, r.sprite.y,
 				);
-				const vol = Math.max(0, 1 - dist / proximityRadius);
-				for (const participant of livekitRoom.remoteParticipants.values()) {
-					if (participant.name === r.username) {
-						for (const pub of participant.audioTrackPublications.values()) {
-							const track = pub.track as any;
-							if (!track) continue;
-							track.setVolume?.(vol);
-							(track.attachedElements as HTMLMediaElement[] | undefined)
-								?.forEach((el) => { el.muted = false; el.volume = vol; });
-						}
-					}
+				const vol = Math.max(0, 1 - dist / proximityRadius) * masterVol;
+				for (const pub of participant.audioTrackPublications.values()) {
+					const track = pub.track as any;
+					if (track) track.setVolume?.(vol);
 				}
 			}
 		}
