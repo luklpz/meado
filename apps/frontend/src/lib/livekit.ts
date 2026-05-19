@@ -31,6 +31,9 @@ function createLiveKitStore() {
 	const canPlayAudio = writable(false);
 	const diagnostics = writable('');
 	const micGain = writable(1);
+	const outputDevices = writable<AudioDevice[]>([]);
+	const selectedOutputId = writable('');
+	const outputVolume = writable(1);
 	const activeSpeakers = writable<string[]>([]);
 	const mutedParticipants = writable<Set<string>>(new Set());
 	const screenEnabled = writable(false);
@@ -107,9 +110,11 @@ function createLiveKitStore() {
 		room.on(RoomEvent.TrackSubscribed, (track, _pub, participant) => {
 			if (track.kind === Track.Kind.Audio) {
 				const el = track.attach() as HTMLAudioElement;
-				el.volume = 1;
+				el.volume = get(outputVolume);
 				el.style.display = 'none';
 				document.body.appendChild(el);
+				const outId = get(selectedOutputId);
+				if (outId && 'setSinkId' in el) (el as any).setSinkId(outId).catch(() => {});
 				_audioEls.push(el);
 			} else if (track.source === Track.Source.ScreenShare) {
 				const cur = get(screenShares);
@@ -187,8 +192,13 @@ function createLiveKitStore() {
 			const inputs = all
 				.filter((d) => d.kind === 'audioinput')
 				.map((d, i) => ({ deviceId: d.deviceId, label: d.label || `Micrófono ${i + 1}` }));
+			const outputs = all
+				.filter((d) => d.kind === 'audiooutput')
+				.map((d, i) => ({ deviceId: d.deviceId, label: d.label || `Altavoz ${i + 1}` }));
 			micDevices.set(inputs);
+			outputDevices.set(outputs);
 			if (inputs.length > 0 && !get(selectedDeviceId)) selectedDeviceId.set(inputs[0].deviceId);
+			if (outputs.length > 0 && !get(selectedOutputId)) selectedOutputId.set(outputs[0].deviceId);
 		} catch { /* ignore */ }
 	}
 
@@ -366,6 +376,18 @@ function createLiveKitStore() {
 		}
 	}
 
+	function selectOutputDevice(deviceId: string): void {
+		selectedOutputId.set(deviceId);
+		_audioEls.forEach((el) => {
+			if ('setSinkId' in el) (el as any).setSinkId(deviceId).catch(() => {});
+		});
+	}
+
+	function setOutputVolume(value: number): void {
+		outputVolume.set(value);
+		_audioEls.forEach((el) => { el.volume = value; });
+	}
+
 	function setError(msg: string): void {
 		status.set('error');
 		errorMessage.set(msg);
@@ -398,10 +420,10 @@ function createLiveKitStore() {
 
 	return {
 		micEnabled, status, errorMessage, audioLevel, micDevices, selectedDeviceId,
-		canPlayAudio, diagnostics, micGain, activeSpeakers, mutedParticipants,
-		screenEnabled, screenQuality, screenShares,
+		canPlayAudio, diagnostics, micGain, outputDevices, selectedOutputId, outputVolume,
+		activeSpeakers, mutedParticipants, screenEnabled, screenQuality, screenShares,
 		connect, enumerateDevices, startAudio, toggleMic, toggleScreen,
-		setGain, selectDevice, setError, disconnect,
+		setGain, selectDevice, selectOutputDevice, setOutputVolume, setError, disconnect,
 	};
 }
 
