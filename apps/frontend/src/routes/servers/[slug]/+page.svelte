@@ -9,6 +9,7 @@
 	import { PERMISSION_LABELS, PERMISSION_CATEGORIES } from '$lib/permissions.js';
 	import PhaserGame from '$lib/game/PhaserGame.svelte';
 	import ServerProfileCard from '$lib/components/ServerProfileCard.svelte';
+	import { uploadFile, goesToCloudinary } from '$lib/upload.js';
 	import { uploadToDrive } from '$lib/driveUpload.js';
 	import {
 		Mic, MicOff, Monitor, MonitorOff, PhoneOff,
@@ -459,15 +460,19 @@
 		msgInput = '';
 		const channelId = selectedChannel.id;
 		try {
-			const driveFile = await uploadToDrive(file);
-			const fd = new FormData();
-			if (content) fd.append('content', content);
-			fd.append('attachmentUrl', driveFile.url);
-			fd.append('attachmentName', file.name);
-			fd.append('attachmentSize', String(file.size));
-			fd.append('attachmentMimeType', file.type || 'application/octet-stream');
+			let url: string, name: string, size: number, mimeType: string;
+			if (goesToCloudinary(file)) {
+				const r = await uploadFile(file);
+				({ url, name, size, mimeType } = r);
+			} else {
+				const r = await uploadToDrive(file);
+				url = r.url; name = file.name; size = file.size; mimeType = file.type || 'application/octet-stream';
+			}
 			const msgRes = await fetch(`/api/channels/${channelId}/messages`, {
-				method: 'POST', credentials: 'include', body: fd,
+				method: 'POST',
+				credentials: 'include',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ content: content || undefined, attachmentUrl: url, attachmentName: name, attachmentSize: size, attachmentMimeType: mimeType }),
 			});
 			if (!msgRes.ok) showToast('Error al enviar el archivo');
 		} catch {

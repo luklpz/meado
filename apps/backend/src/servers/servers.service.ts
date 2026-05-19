@@ -3,7 +3,7 @@ import {
 } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../prisma/prisma.service';
-import { DriveService } from '../storage/drive.service';
+import { CloudinaryService } from '../storage/cloudinary.service';
 import type { CreateServerDto } from './dto/create-server.dto';
 import type { CreateRoleDto } from './dto/create-role.dto';
 import type { CreateChannelDto } from './dto/create-channel.dto';
@@ -13,7 +13,7 @@ import { DEFAULT_PERMISSIONS, OWNER_PERMISSIONS, type ServerPermissions } from '
 export class ServersService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly driveService: DriveService,
+    private readonly cloudinaryService: CloudinaryService,
   ) {}
 
   // ── List ─────────────────────────────────────────────────────────────
@@ -143,11 +143,10 @@ export class ServersService {
 
     const server = await this.assertPermission(slug, userId, userRole, 'manageServer');
 
-    const ext = file.originalname.split('.').pop() ?? file.mimetype.split('/')[1];
-    const iconUrl = await this.driveService.uploadBuffer(
+    const iconUrl = await this.cloudinaryService.uploadBuffer(
       file.buffer,
-      file.mimetype,
-      `icon-${server.id}.${ext}`,
+      'meado/icons',
+      `icon-${server.id}`,
     );
 
     await this.prisma.server.update({ where: { id: server.id }, data: { iconUrl } });

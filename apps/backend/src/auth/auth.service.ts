@@ -5,7 +5,7 @@ import * as bcrypt from 'bcrypt';
 import * as jwt from 'jsonwebtoken';
 import { PrismaService } from '../prisma/prisma.service';
 import { EmailService } from '../email/email.service';
-import { DriveService } from '../storage/drive.service';
+import { CloudinaryService } from '../storage/cloudinary.service';
 import type { RegisterDto } from './dto/register.dto';
 import type { LoginDto } from './dto/login.dto';
 
@@ -33,7 +33,7 @@ export class AuthService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly emailService: EmailService,
-    private readonly driveService: DriveService,
+    private readonly cloudinaryService: CloudinaryService,
   ) {}
 
   async register(dto: RegisterDto): Promise<{ message: string }> {
@@ -173,11 +173,10 @@ export class AuthService {
       throw new BadRequestException('Tipo de archivo no permitido. Usa JPEG, PNG, GIF o WebP.');
     }
 
-    const ext = file.originalname.split('.').pop() ?? file.mimetype.split('/')[1];
-    const avatarUrl = await this.driveService.uploadBuffer(
+    const avatarUrl = await this.cloudinaryService.uploadBuffer(
       file.buffer,
-      file.mimetype,
-      `avatar-${userId}.${ext}`,
+      'meado/avatars',
+      `avatar-${userId}`,
     );
 
     await this.prisma.user.update({ where: { id: userId }, data: { avatarUrl } });

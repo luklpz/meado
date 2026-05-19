@@ -1,32 +1,16 @@
 import {
-  Controller, Get, Post, Patch, Delete, Param, Body, Req, UseGuards, Query,
-  UseInterceptors, UploadedFile, BadRequestException,
+  Controller, Get, Post, Patch, Delete, Param, Body, Req, UseGuards, Query, BadRequestException,
 } from '@nestjs/common';
 import { Inject, forwardRef } from '@nestjs/common';
-import { FileInterceptor } from '@nestjs/platform-express';
-import { memoryStorage } from 'multer';
 import { DmService } from './dm.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { MessagesGateway } from '../messages/messages.gateway';
 
-const MIME_TO_EXT: Record<string, string> = {
-  'image/jpeg': 'jpg', 'image/png': 'png', 'image/gif': 'gif', 'image/webp': 'webp',
-  'application/pdf': 'pdf', 'text/plain': 'txt', 'video/mp4': 'mp4', 'audio/mpeg': 'mp3',
-};
+const CLOUDINARY_PREFIX = 'https://res.cloudinary.com/';
+const DRIVE_PREFIX = 'https://drive.google.com/';
 
-async function uploadToSupabase(file: Express.Multer.File, path: string): Promise<string> {
-  const url = `${process.env.SUPABASE_URL}/storage/v1/object/attachments/${path}`;
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
-      'Content-Type': file.mimetype,
-      'x-upsert': 'true',
-    },
-    body: new Uint8Array(file.buffer),
-  });
-  if (!res.ok) throw new Error(`Supabase upload failed: ${await res.text()}`);
-  return `${process.env.SUPABASE_URL}/storage/v1/object/public/attachments/${path}`;
+function isAllowedAttachmentUrl(url: string) {
+  return url.startsWith(CLOUDINARY_PREFIX) || url.startsWith(DRIVE_PREFIX);
 }
 
 @UseGuards(JwtAuthGuard)
@@ -62,33 +46,19 @@ export class DmController {
   }
 
   @Post(':id/messages')
-  @UseInterceptors(FileInterceptor('file', { storage: memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } }))
   async sendMessage(
     @Req() req: any,
     @Param('id') id: string,
-    @Body('content') content: string | undefined,
-    @Body('attachmentUrl') attachmentUrl: string | undefined,
-    @Body('attachmentName') attachmentName: string | undefined,
-    @Body('attachmentSize') attachmentSize: string | undefined,
-    @Body('attachmentMimeType') attachmentMimeType: string | undefined,
-    @UploadedFile() file: Express.Multer.File | undefined,
+    @Body() body: { content?: string; attachmentUrl?: string; attachmentName?: string; attachmentSize?: number; attachmentMimeType?: string },
   ) {
+    const { content, attachmentUrl, attachmentName, attachmentSize, attachmentMimeType } = body;
     let attachments: { url: string; name: string; size: number; mimeType: string }[] | undefined;
-    if (file) {
-      const ext = MIME_TO_EXT[file.mimetype] ?? 'bin';
-      const path = `dm/${id}/${Date.now()}-${req.user.id}-${Math.random().toString(36).slice(2)}.${ext}`;
-      const fileUrl = await uploadToSupabase(file, path);
-      attachments = [{ url: fileUrl, name: file.originalname, size: file.size, mimeType: file.mimetype }];
-    } else if (attachmentUrl && attachmentName) {
-      const supabase = process.env.SUPABASE_URL ?? '';
-      const allowed =
-        (supabase && attachmentUrl.startsWith(`${supabase}/storage/v1/object/public/`)) ||
-        attachmentUrl.startsWith('https://drive.google.com/');
-      if (!allowed) throw new BadRequestException('Invalid attachment URL');
+    if (attachmentUrl && attachmentName) {
+      if (!isAllowedAttachmentUrl(attachmentUrl)) throw new BadRequestException('Invalid attachment URL');
       attachments = [{
         url: attachmentUrl,
         name: attachmentName,
-        size: parseInt(attachmentSize ?? '0', 10),
+        size: attachmentSize ?? 0,
         mimeType: attachmentMimeType ?? 'application/octet-stream',
       }];
     }
