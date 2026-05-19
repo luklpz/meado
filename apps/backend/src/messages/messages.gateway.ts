@@ -247,6 +247,8 @@ export class MessagesGateway implements OnGatewayConnection, OnGatewayDisconnect
           if (oldRoom.size === 0) voiceRooms.delete(old.channelId);
         }
         this.server.to(`voice:${old.channelId}`).emit('voice:left', { channelId: old.channelId, userId });
+        // Remove old socket from the socket.io room so it stops receiving voice events
+        this.server.in(oldSocketId).socketsLeave(`voice:${old.channelId}`);
       }
       voiceSocketChannel.delete(oldSocketId);
     }
@@ -297,7 +299,7 @@ export class MessagesGateway implements OnGatewayConnection, OnGatewayDisconnect
       }
       this.server.to(`voice:${entry.channelId}`).emit('voice:left', { channelId: entry.channelId, userId });
     }
-    client.leave(`voice:${payload.channelId}`);
+    client.leave(`voice:${entry?.channelId ?? payload.channelId}`);
   }
 
   // ── Reactions ─────────────────────────────────────────────────────────
