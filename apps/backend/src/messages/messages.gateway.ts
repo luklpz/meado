@@ -222,7 +222,10 @@ export class MessagesGateway implements OnGatewayConnection, OnGatewayDisconnect
   async handleVoiceJoin(client: AuthSocket, payload: { channelId: string }) {
     if (!client.user) return;
     const now = Date.now();
-    if (now - (voiceJoinLastTime.get(client.user.id) ?? 0) < VOICE_JOIN_RATE_LIMIT_MS) return;
+    // Rate limit applies only to re-joining the same channel (not channel switches)
+    const currentEntry = voiceSocketChannel.get(voiceActiveSocket.get(client.user.id) ?? '');
+    const isSameChannel = currentEntry?.channelId === payload.channelId;
+    if (isSameChannel && now - (voiceJoinLastTime.get(client.user.id) ?? 0) < VOICE_JOIN_RATE_LIMIT_MS) return;
     voiceJoinLastTime.set(client.user.id, now);
 
     const ok = await this.messagesService.verifyChannelMember(payload.channelId, client.user.id);
@@ -279,20 +282,22 @@ export class MessagesGateway implements OnGatewayConnection, OnGatewayDisconnect
   @SubscribeMessage('voice:leave')
   handleVoiceLeave(client: AuthSocket, payload: { channelId: string }) {
     if (!client.user) return;
-    const { channelId } = payload;
     const userId = client.user.id;
 
+    // Use server-tracked channelId — never trust client payload for state mutations
+    const entry = voiceSocketChannel.get(client.id);
     voiceSocketChannel.delete(client.id);
-    if (voiceActiveSocket.get(userId) === client.id) {
+
+    if (entry && voiceActiveSocket.get(userId) === client.id) {
       voiceActiveSocket.delete(userId);
-      const room = voiceRooms.get(channelId);
+      const room = voiceRooms.get(entry.channelId);
       if (room) {
         room.delete(userId);
-        if (room.size === 0) voiceRooms.delete(channelId);
+        if (room.size === 0) voiceRooms.delete(entry.channelId);
       }
-      this.server.to(`voice:${channelId}`).emit('voice:left', { channelId, userId });
+      this.server.to(`voice:${entry.channelId}`).emit('voice:left', { channelId: entry.channelId, userId });
     }
-    client.leave(`voice:${channelId}`);
+    client.leave(`voice:${payload.channelId}`);
   }
 
   // ── Reactions ─────────────────────────────────────────────────────────
