@@ -75,6 +75,11 @@ export class ServersService {
   // ── Create ───────────────────────────────────────────────────────────
 
   async createServer(dto: CreateServerDto, ownerId: string) {
+    if (!dto.name?.trim()) throw new BadRequestException('Server name is required');
+    if (dto.name.length > 100) throw new BadRequestException('Server name max 100 characters');
+    if (!dto.slug?.trim()) throw new BadRequestException('Slug is required');
+    if (!/^[a-z0-9-]{2,32}$/.test(dto.slug)) throw new BadRequestException('Slug must be 2-32 lowercase alphanumeric characters or hyphens');
+    if (dto.description && dto.description.length > 500) throw new BadRequestException('Description max 500 characters');
     const existing = await this.prisma.server.findUnique({ where: { slug: dto.slug } });
     if (existing) throw new ConflictException('Slug already in use');
 
@@ -251,6 +256,7 @@ export class ServersService {
   }
 
   async setNickname(slug: string, userId: string, nickname: string | null) {
+    if (nickname && nickname.trim().length > 32) throw new BadRequestException('Nickname max 32 characters');
     const server = await this.prisma.server.findUnique({ where: { slug } });
     if (!server) throw new NotFoundException('Server not found');
     const member = await this.prisma.serverMember.findUnique({
@@ -265,6 +271,7 @@ export class ServersService {
   }
 
   async setMemberNickname(slug: string, targetUserId: string, nickname: string | null, requesterId: string) {
+    if (nickname && nickname.trim().length > 32) throw new BadRequestException('Nickname max 32 characters');
     const server = await this.prisma.server.findUnique({ where: { slug } });
     if (!server) throw new NotFoundException('Server not found');
     const isOwner = server.ownerId === requesterId;
@@ -416,6 +423,8 @@ export class ServersService {
   }
 
   async createRole(slug: string, dto: CreateRoleDto, requesterId: string, requesterRole: string) {
+    if (!dto.name?.trim()) throw new BadRequestException('Role name is required');
+    if (dto.name.length > 50) throw new BadRequestException('Role name max 50 characters');
     const server = await this.assertPermission(slug, requesterId, requesterRole, 'manageRoles');
     const isOwner = server.ownerId === requesterId;
 
@@ -495,6 +504,8 @@ export class ServersService {
   // ── Channels ──────────────────────────────────────────────────────────
 
   async createChannel(slug: string, dto: CreateChannelDto, requesterId: string, requesterRole: string) {
+    if (!dto.name?.trim()) throw new BadRequestException('Channel name is required');
+    if (dto.name.length > 64) throw new BadRequestException('Channel name max 64 characters');
     const server = await this.assertPermission(slug, requesterId, requesterRole, 'manageChannels');
     return this.prisma.channel.create({
       data: { name: dto.name, type: dto.type as any, position: dto.position ?? 0, serverId: server.id },
