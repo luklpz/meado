@@ -25,7 +25,7 @@ const ALLOWED_AVATAR_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/web
 
 function normalizeEmail(email: string): string {
   const [local, domain] = email.toLowerCase().split('@');
-  return `${local}@${domain}`;
+  return `${local.replace(/\./g, '')}@${domain}`;
 }
 
 @Injectable()
