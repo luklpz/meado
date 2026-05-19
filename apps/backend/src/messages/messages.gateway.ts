@@ -14,8 +14,12 @@ interface AuthSocket extends Socket {
   user?: { id: string; username: string; role: string; avatarUrl?: string | null };
 }
 
-// channelId → Map<userId, { username, avatarUrl }>
+// channelId → Map<userId, member>
 const voiceRooms = new Map<string, Map<string, { userId: string; username: string; avatarUrl?: string | null }>>();
+// `${channelId}:${userId}` → active socket count (multi-tab: only emit voice:left when last socket leaves)
+const voiceRefCounts = new Map<string, number>();
+// socketId → voice entries joined by this socket
+const voiceSocketChannels = new Map<string, { channelId: string; userId: string }[]>();
 // channelId → Map<userId, username>
 const typingUsers = new Map<string, Map<string, string>>();
 // conversationId → Map<userId, username>
@@ -27,9 +31,11 @@ const TYPING_TTL_MS = 8000;
 const MAX_MSG_LENGTH = 4000;
 const MSG_RATE_LIMIT_MS = 500; // min ms between messages per user
 const REACTION_RATE_LIMIT_MS = 250;
+const VOICE_JOIN_RATE_LIMIT_MS = 2000;
 // userId → last message timestamp (channel + dm shared bucket)
 const msgLastSent = new Map<string, number>();
 const reactionLastToggled = new Map<string, number>();
+const voiceJoinLastTime = new Map<string, number>();
 
 @SkipThrottle()
 @WebSocketGateway({
@@ -95,6 +101,7 @@ export class MessagesGateway implements OnGatewayConnection, OnGatewayDisconnect
         this.onlineUsers.delete(userId);
         msgLastSent.delete(userId);
         reactionLastToggled.delete(userId);
+        voiceJoinLastTime.delete(userId);
         // Notify friends offline (fire-and-forget)
         this.friendsService.getFriendIds(userId).then(friendIds => {
           for (const fid of friendIds) {
@@ -109,12 +116,22 @@ export class MessagesGateway implements OnGatewayConnection, OnGatewayDisconnect
       }
     }
 
-    for (const [channelId, members] of voiceRooms.entries()) {
-      if (members.has(userId)) {
-        members.delete(userId);
-        this.server.to(`voice:${channelId}`).emit('voice:left', { channelId, userId });
-        client.leave(`voice:${channelId}`);
-        if (members.size === 0) voiceRooms.delete(channelId);
+    const voiceEntries = voiceSocketChannels.get(client.id) ?? [];
+    voiceSocketChannels.delete(client.id);
+    for (const { channelId, userId: vUserId } of voiceEntries) {
+      const refKey = `${channelId}:${vUserId}`;
+      const count = (voiceRefCounts.get(refKey) ?? 1) - 1;
+      if (count <= 0) {
+        voiceRefCounts.delete(refKey);
+        const room = voiceRooms.get(channelId);
+        if (room) {
+          room.delete(vUserId);
+          this.server.to(`voice:${channelId}`).emit('voice:left', { channelId, userId: vUserId });
+          client.leave(`voice:${channelId}`);
+          if (room.size === 0) voiceRooms.delete(channelId);
+        }
+      } else {
+        voiceRefCounts.set(refKey, count);
       }
     }
     for (const [channelId, typers] of typingUsers.entries()) {
@@ -210,9 +227,12 @@ export class MessagesGateway implements OnGatewayConnection, OnGatewayDisconnect
   @SubscribeMessage('voice:join')
   async handleVoiceJoin(client: AuthSocket, payload: { channelId: string }) {
     if (!client.user) return;
+    const now = Date.now();
+    if (now - (voiceJoinLastTime.get(client.user.id) ?? 0) < VOICE_JOIN_RATE_LIMIT_MS) return;
+    voiceJoinLastTime.set(client.user.id, now);
+
     const ok = await this.messagesService.verifyChannelMember(payload.channelId, client.user.id);
     if (!ok) return;
-
     const channel = await this.messagesService.getChannel(payload.channelId);
     if (!channel || channel.type !== 'VOICE') return;
 
@@ -220,11 +240,17 @@ export class MessagesGateway implements OnGatewayConnection, OnGatewayDisconnect
     const room = voiceRooms.get(payload.channelId)!;
 
     const member = { userId: client.user.id, username: client.user.username, avatarUrl: client.user.avatarUrl };
+    const isNew = !room.has(client.user.id);
     room.set(client.user.id, member);
-    client.join(`voice:${payload.channelId}`);
 
+    const refKey = `${payload.channelId}:${client.user.id}`;
+    voiceRefCounts.set(refKey, (voiceRefCounts.get(refKey) ?? 0) + 1);
+    if (!voiceSocketChannels.has(client.id)) voiceSocketChannels.set(client.id, []);
+    voiceSocketChannels.get(client.id)!.push({ channelId: payload.channelId, userId: client.user.id });
+
+    client.join(`voice:${payload.channelId}`);
     client.emit('voice:state', { channelId: payload.channelId, members: Array.from(room.values()) });
-    client.to(`voice:${payload.channelId}`).emit('voice:joined', { channelId: payload.channelId, member });
+    if (isNew) client.to(`voice:${payload.channelId}`).emit('voice:joined', { channelId: payload.channelId, member });
   }
 
   @SubscribeMessage('server:subscribe')
@@ -244,13 +270,29 @@ export class MessagesGateway implements OnGatewayConnection, OnGatewayDisconnect
   @SubscribeMessage('voice:leave')
   handleVoiceLeave(client: AuthSocket, payload: { channelId: string }) {
     if (!client.user) return;
-    const room = voiceRooms.get(payload.channelId);
-    if (room) {
-      room.delete(client.user.id);
-      if (room.size === 0) voiceRooms.delete(payload.channelId);
+    const { channelId } = payload;
+    const userId = client.user.id;
+    const refKey = `${channelId}:${userId}`;
+
+    const socketEntries = voiceSocketChannels.get(client.id);
+    if (socketEntries) {
+      const idx = socketEntries.findIndex(e => e.channelId === channelId && e.userId === userId);
+      if (idx !== -1) socketEntries.splice(idx, 1);
     }
-    this.server.to(`voice:${payload.channelId}`).emit('voice:left', { channelId: payload.channelId, userId: client.user.id });
-    client.leave(`voice:${payload.channelId}`);
+
+    const count = (voiceRefCounts.get(refKey) ?? 1) - 1;
+    if (count <= 0) {
+      voiceRefCounts.delete(refKey);
+      const room = voiceRooms.get(channelId);
+      if (room) {
+        room.delete(userId);
+        if (room.size === 0) voiceRooms.delete(channelId);
+      }
+      this.server.to(`voice:${channelId}`).emit('voice:left', { channelId, userId });
+    } else {
+      voiceRefCounts.set(refKey, count);
+    }
+    client.leave(`voice:${channelId}`);
   }
 
   // ── Reactions ─────────────────────────────────────────────────────────
