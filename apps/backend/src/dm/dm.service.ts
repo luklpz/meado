@@ -67,36 +67,47 @@ export class DmService {
     const allIds = [...new Set([requesterId, ...targetUserIds])].sort();
     if (allIds.length < 2) throw new BadRequestException('Need at least one other user');
 
-    // For 1-on-1: find existing conversation with exactly these two members
+    const MEMBER_INCLUDE = {
+      members: {
+        include: { user: { select: { id: true, username: true, name: true, avatarUrl: true } } },
+      },
+    };
+
+    // 1-on-1: use canonicalKey unique constraint to prevent duplicates under concurrent requests
     if (allIds.length === 2) {
-      const existing = await this.prisma.directConversation.findFirst({
-        where: {
-          name: null,
-          members: { every: { userId: { in: allIds } } },
-        },
-        include: {
-          members: {
-            include: { user: { select: { id: true, username: true, name: true, avatarUrl: true } } },
-          },
-        },
+      const canonicalKey = allIds.join(':');
+      const existing = await this.prisma.directConversation.findUnique({
+        where: { canonicalKey },
+        include: MEMBER_INCLUDE,
       });
-      if (existing) {
-        const memberCount = await this.prisma.directConversationMember.count({
-          where: { conversationId: existing.id },
+      if (existing) return existing;
+
+      try {
+        return await this.prisma.directConversation.create({
+          data: {
+            canonicalKey,
+            members: { createMany: { data: allIds.map(uid => ({ userId: uid })) } },
+          },
+          include: MEMBER_INCLUDE,
         });
-        if (memberCount === 2) return existing;
+      } catch (e) {
+        // Concurrent request won the race — fetch the winner
+        if ((e as any)?.code === 'P2002') {
+          return this.prisma.directConversation.findUniqueOrThrow({
+            where: { canonicalKey },
+            include: MEMBER_INCLUDE,
+          });
+        }
+        throw e;
       }
     }
 
+    // Group DM: no dedup (each explicit group creation is distinct)
     return this.prisma.directConversation.create({
       data: {
         members: { createMany: { data: allIds.map(uid => ({ userId: uid })) } },
       },
-      include: {
-        members: {
-          include: { user: { select: { id: true, username: true, name: true, avatarUrl: true } } },
-        },
-      },
+      include: MEMBER_INCLUDE,
     });
   }
 
