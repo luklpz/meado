@@ -186,7 +186,17 @@ export class ServersService {
     const server = await this.prisma.server.findUnique({ where: { slug } });
     if (!server) throw new NotFoundException('Server not found');
     if (server.ownerId !== userId) throw new ForbiddenException('Only the server owner can delete the server');
+
+    // Collect all attachment URLs across all channels before cascade delete
+    const attachments = await this.prisma.attachment.findMany({
+      where: { message: { channel: { serverId: server.id } } },
+      select: { url: true },
+    });
+    const urls = attachments.map(a => a.url);
+    if (server.iconUrl) urls.push(server.iconUrl);
+
     await this.prisma.server.delete({ where: { id: server.id } });
+    if (urls.length) await this.cloudinaryService.deleteManyByUrls(urls);
     return { ok: true };
   }
 
@@ -528,7 +538,14 @@ export class ServersService {
     const server = await this.assertPermission(slug, requesterId, requesterRole, 'manageChannels');
     const channel = await this.prisma.channel.findFirst({ where: { id: channelId, serverId: server.id } });
     if (!channel) throw new NotFoundException('Channel not found');
+
+    const attachments = await this.prisma.attachment.findMany({
+      where: { message: { channelId } },
+      select: { url: true },
+    });
+
     await this.prisma.channel.delete({ where: { id: channelId } });
+    if (attachments.length) await this.cloudinaryService.deleteManyByUrls(attachments.map(a => a.url));
     return { ok: true };
   }
 

@@ -2,6 +2,7 @@ import {
   Injectable, NotFoundException, ForbiddenException, BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { CloudinaryService } from '../storage/cloudinary.service';
 
 const MSG_SELECT = {
   id: true,
@@ -40,7 +41,10 @@ export interface AttachmentInput {
 
 @Injectable()
 export class MessagesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly cloudinary: CloudinaryService,
+  ) {}
 
   async getMessages(channelId: string, userId: string, before?: string, limit = 50) {
     const isMember = await this.verifyChannelMember(channelId, userId);
@@ -121,7 +125,10 @@ export class MessagesService {
   async deleteMessage(messageId: string, userId: string, userRole: string) {
     const msg = await this.prisma.message.findUnique({
       where: { id: messageId },
-      include: { channel: { include: { server: true } } },
+      include: {
+        channel: { include: { server: true } },
+        attachments: { select: { url: true } },
+      },
     });
     if (!msg) throw new NotFoundException('Message not found');
 
@@ -138,7 +145,9 @@ export class MessagesService {
       if (!perms?.manageMessages) throw new ForbiddenException('Cannot delete this message');
     }
 
+    const attachmentUrls = msg.attachments.map(a => a.url);
     await this.prisma.message.delete({ where: { id: messageId } });
+    if (attachmentUrls.length) await this.cloudinary.deleteManyByUrls(attachmentUrls);
     return { ok: true, messageId, channelId: msg.channelId };
   }
 

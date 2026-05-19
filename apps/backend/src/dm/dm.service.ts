@@ -2,6 +2,7 @@ import {
   Injectable, NotFoundException, ForbiddenException, BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { CloudinaryService } from '../storage/cloudinary.service';
 
 const DM_MSG_SELECT = {
   id: true,
@@ -33,7 +34,10 @@ function parseCursor(cursor: string): Date {
 
 @Injectable()
 export class DmService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly cloudinary: CloudinaryService,
+  ) {}
 
   async isMember(conversationId: string, userId: string): Promise<boolean> {
     const m = await this.prisma.directConversationMember.findUnique({
@@ -218,10 +222,15 @@ export class DmService {
   }
 
   async deleteMessage(messageId: string, userId: string) {
-    const msg = await this.prisma.directMessage.findUnique({ where: { id: messageId } });
+    const msg = await this.prisma.directMessage.findUnique({
+      where: { id: messageId },
+      include: { attachments: { select: { url: true } } },
+    });
     if (!msg) throw new NotFoundException('Message not found');
     if (msg.authorId !== userId) throw new ForbiddenException('Not your message');
+    const attachmentUrls = msg.attachments.map(a => a.url);
     await this.prisma.directMessage.delete({ where: { id: messageId } });
+    if (attachmentUrls.length) await this.cloudinary.deleteManyByUrls(attachmentUrls);
     return { ok: true, messageId, conversationId: msg.conversationId };
   }
 
