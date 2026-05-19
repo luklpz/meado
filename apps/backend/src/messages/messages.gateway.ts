@@ -57,9 +57,9 @@ export class MessagesGateway implements OnGatewayConnection, OnGatewayDisconnect
     if (!token) { client.disconnect(); return; }
     try {
       const secret = process.env.JWT_SECRET;
-      if (!secret) { client.disconnect(); return; }
+      if (!secret) { this.logger.error('JWT_SECRET not set — rejecting WS connection'); client.disconnect(); return; }
       const payload = jwt.verify(token, secret) as any;
-      if (payload.type !== 'socket') { client.disconnect(); return; }
+      if (payload.type !== 'socket') { this.logger.warn(`WS auth rejected: wrong token type (${payload.type}) from ${client.handshake.address}`); client.disconnect(); return; }
       client.user = { id: payload.id, username: payload.username, role: payload.role, avatarUrl: payload.avatarUrl ?? null };
 
       const userId = client.user.id;
@@ -77,7 +77,8 @@ export class MessagesGateway implements OnGatewayConnection, OnGatewayDisconnect
           }
         }
       }
-    } catch {
+    } catch (e) {
+      this.logger.warn(`WS auth failed from ${client.handshake.address}: ${(e as Error).message}`);
       client.disconnect();
     }
   }
