@@ -3,6 +3,7 @@ import {
 } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../prisma/prisma.service';
+import { DriveService } from '../storage/drive.service';
 import type { CreateServerDto } from './dto/create-server.dto';
 import type { CreateRoleDto } from './dto/create-role.dto';
 import type { CreateChannelDto } from './dto/create-channel.dto';
@@ -10,7 +11,10 @@ import { DEFAULT_PERMISSIONS, OWNER_PERMISSIONS, type ServerPermissions } from '
 
 @Injectable()
 export class ServersService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly driveService: DriveService,
+  ) {}
 
   // ── List ─────────────────────────────────────────────────────────────
 
@@ -139,21 +143,13 @@ export class ServersService {
 
     const server = await this.assertPermission(slug, userId, userRole, 'manageServer');
 
-    const supabaseUrl = process.env.SUPABASE_URL;
-    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-    if (!supabaseUrl || !supabaseKey) throw new BadRequestException('Almacenamiento no configurado.');
+    const ext = file.originalname.split('.').pop() ?? file.mimetype.split('/')[1];
+    const iconUrl = await this.driveService.uploadBuffer(
+      file.buffer,
+      file.mimetype,
+      `icon-${server.id}.${ext}`,
+    );
 
-    const ext = file.mimetype.split('/')[1];
-    const path = `${server.id}/icon.${ext}`;
-
-    const uploadRes = await fetch(`${supabaseUrl}/storage/v1/object/avatars/${path}`, {
-      method: 'PUT',
-      headers: { Authorization: `Bearer ${supabaseKey}`, 'Content-Type': file.mimetype, 'x-upsert': 'true' },
-      body: file.buffer as any,
-    });
-    if (!uploadRes.ok) throw new BadRequestException('Error al subir la imagen.');
-
-    const iconUrl = `${supabaseUrl}/storage/v1/object/public/avatars/${path}`;
     await this.prisma.server.update({ where: { id: server.id }, data: { iconUrl } });
     return { iconUrl };
   }
@@ -563,5 +559,35 @@ export class ServersService {
     if (!perms?.[perm]) throw new ForbiddenException(`Missing permission: ${perm}`);
 
     return server;
+  }
+
+  // ── Unread ────────────────────────────────────────────────────────────
+
+  async getServerUnread(slug: string, userId: string): Promise<{ channelId: string; count: number }[]> {
+    const server = await this.prisma.server.findUnique({ where: { slug }, select: { id: true } });
+    if (!server) throw new NotFoundException('Server not found');
+
+    const channels = await this.prisma.channel.findMany({
+      where: { serverId: server.id, type: 'TEXT' },
+      select: { id: true },
+    });
+    if (channels.length === 0) return [];
+
+    const reads = await this.prisma.channelRead.findMany({
+      where: { userId, channelId: { in: channels.map(c => c.id) } },
+    });
+    const readMap = new Map(reads.map(r => [r.channelId, r.lastReadAt]));
+
+    return Promise.all(channels.map(async (c) => {
+      const lastRead = readMap.get(c.id);
+      const count = await this.prisma.message.count({
+        where: {
+          channelId: c.id,
+          authorId: { not: userId },
+          ...(lastRead ? { createdAt: { gt: lastRead } } : {}),
+        },
+      });
+      return { channelId: c.id, count };
+    }));
   }
 }

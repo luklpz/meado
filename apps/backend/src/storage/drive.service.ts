@@ -56,6 +56,43 @@ export class DriveService {
       fileId,
       requestBody: { role: 'reader', type: 'anyone' },
     });
-    return `https://drive.google.com/uc?export=download&id=${fileId}`;
+    return `https://drive.google.com/uc?export=view&id=${fileId}`;
+  }
+
+  async uploadBuffer(buffer: Buffer, mimeType: string, filename: string): Promise<string> {
+    const { token } = await this.oauthClient.getAccessToken();
+    const folderId = process.env.GOOGLE_DRIVE_FOLDER_ID;
+    const safeFilename = `${Date.now()}-${filename.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+
+    const metadata = JSON.stringify({
+      name: safeFilename,
+      ...(folderId ? { parents: [folderId] } : {}),
+    });
+    const boundary = 'meado_boundary';
+    const body = Buffer.concat([
+      Buffer.from(`--${boundary}\r\nContent-Type: application/json\r\n\r\n${metadata}\r\n--${boundary}\r\nContent-Type: ${mimeType}\r\n\r\n`),
+      buffer,
+      Buffer.from(`\r\n--${boundary}--`),
+    ]);
+
+    const res = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': `multipart/related; boundary=${boundary}`,
+      },
+      body,
+    });
+
+    if (!res.ok) throw new InternalServerErrorException('Drive upload failed');
+    const { id: fileId } = await res.json() as { id: string };
+
+    const drive = google.drive({ version: 'v3', auth: this.oauthClient });
+    await drive.permissions.create({
+      fileId,
+      requestBody: { role: 'reader', type: 'anyone' },
+    });
+
+    return `https://drive.google.com/uc?export=view&id=${fileId}`;
   }
 }

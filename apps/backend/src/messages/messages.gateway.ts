@@ -294,6 +294,19 @@ export class MessagesGateway implements OnGatewayConnection, OnGatewayDisconnect
     } catch { /* ignore */ }
   }
 
+  @SubscribeMessage('dm:reaction:toggle')
+  async handleDmReactionToggle(client: AuthSocket, payload: { messageId: string; emoji: string }) {
+    if (!client.user) return;
+    const now = Date.now();
+    const lastReaction = reactionLastToggled.get(client.user.id) ?? 0;
+    if (now - lastReaction < REACTION_RATE_LIMIT_MS) return;
+    reactionLastToggled.set(client.user.id, now);
+    try {
+      const result = await this.dmService.toggleDmReaction(payload.messageId, client.user.id, payload.emoji);
+      this.server.to(`dm:${result.conversationId}`).emit('dm:reaction:updated', result);
+    } catch { /* ignore */ }
+  }
+
   @SubscribeMessage('dm:typing:start')
   handleDmTypingStart(client: AuthSocket, payload: { conversationId: string }) {
     if (!client.user) return;

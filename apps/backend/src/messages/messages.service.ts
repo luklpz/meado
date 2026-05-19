@@ -136,6 +136,16 @@ export class MessagesService {
     return { ok: true, messageId, channelId: msg.channelId };
   }
 
+  async markChannelRead(channelId: string, userId: string): Promise<void> {
+    const isMember = await this.verifyChannelMember(channelId, userId);
+    if (!isMember) return;
+    await this.prisma.channelRead.upsert({
+      where: { userId_channelId: { userId, channelId } },
+      create: { userId, channelId },
+      update: {},
+    });
+  }
+
   async verifyChannelMember(channelId: string, userId: string): Promise<boolean> {
     const channel = await this.prisma.channel.findUnique({
       where: { id: channelId },

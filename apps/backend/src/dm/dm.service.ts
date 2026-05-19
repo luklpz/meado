@@ -171,6 +171,35 @@ export class DmService {
     return { ...updated, reactions: formatReactions(updated.reactions, userId) };
   }
 
+  async toggleDmReaction(messageId: string, userId: string, emoji: string) {
+    const ALLOWED = ['👍', '❤️', '😂', '😮', '😢'];
+    if (!ALLOWED.includes(emoji)) throw new BadRequestException('Invalid emoji');
+
+    const msg = await this.prisma.directMessage.findUnique({
+      where: { id: messageId },
+      select: { conversationId: true },
+    });
+    if (!msg) throw new NotFoundException('Message not found');
+    if (!(await this.isMember(msg.conversationId, userId))) throw new ForbiddenException('Not a member');
+
+    const existing = await this.prisma.directMessageReaction.findUnique({
+      where: { messageId_userId_emoji: { messageId, userId, emoji } },
+    });
+    if (existing) {
+      await this.prisma.directMessageReaction.delete({
+        where: { messageId_userId_emoji: { messageId, userId, emoji } },
+      });
+    } else {
+      await this.prisma.directMessageReaction.create({ data: { messageId, userId, emoji } });
+    }
+
+    const raw = await this.prisma.directMessageReaction.findMany({
+      where: { messageId },
+      select: { userId: true, emoji: true },
+    });
+    return { messageId, conversationId: msg.conversationId, reactions: formatReactions(raw, userId) };
+  }
+
   async deleteMessage(messageId: string, userId: string) {
     const msg = await this.prisma.directMessage.findUnique({ where: { id: messageId } });
     if (!msg) throw new NotFoundException('Message not found');

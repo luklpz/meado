@@ -37,6 +37,11 @@ export class ServersController {
     return this.serversService.getServer(slug);
   }
 
+  @Get(':slug/unread')
+  getUnread(@Param('slug') slug: string, @Req() req: Request) {
+    return this.serversService.getServerUnread(slug, user(req).id);
+  }
+
   @UseGuards(RolesGuard)
   @Roles('ADMIN')
   @Post()

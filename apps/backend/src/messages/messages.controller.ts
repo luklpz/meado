@@ -48,6 +48,12 @@ export class MessagesController {
 
   // ── Messages ──────────────────────────────────────────────────────────
 
+  @Patch(':channelId/read')
+  async markChannelRead(@Param('channelId') channelId: string, @Req() req: Request) {
+    await this.messagesService.markChannelRead(channelId, authUser(req).id);
+    return { ok: true };
+  }
+
   @Get(':channelId/messages')
   getMessages(
     @Req() req: Request,
