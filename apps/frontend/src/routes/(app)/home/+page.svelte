@@ -6,7 +6,7 @@
 	import type { ChatSocket } from '$lib/socket.js';
 	import { dmUnread } from '$lib/dmStore.js';
 	import { playPing } from '$lib/ping.js';
-	import { Users, MessageSquare, X, Check } from 'lucide-svelte';
+	import { Users, MessageSquare, X, Check, Plus, Paperclip } from 'lucide-svelte';
 
 	let { data } = $props();
 	const user = $derived(data.user as { id: string; username: string; role: string; avatarUrl?: string | null });
@@ -208,7 +208,7 @@
 
 		<div class="sidebar-section-header">
 			<span>Mensajes directos</span>
-			<button class="icon-btn" title="Nueva conversación" onclick={() => (showNewDm = true)}>+</button>
+			<button class="icon-btn" title="Nueva conversación" onclick={() => (showNewDm = true)}><Plus size={14} /></button>
 		</div>
 
 		{#each filteredConversations as conv (conv.id)}
@@ -224,7 +224,7 @@
 				<div class="dm-info">
 					<div class="dm-name">{convName(conv)}</div>
 					{#if conv.lastMessage}
-						<div class="dm-last" class:dm-last-unread={unread > 0}>{conv.lastMessage.author.name || conv.lastMessage.author.username}: {conv.lastMessage.content ?? '📎'}</div>
+						<div class="dm-last" class:dm-last-unread={unread > 0}>{conv.lastMessage.author.name || conv.lastMessage.author.username}: {conv.lastMessage.content ?? 'Archivo adjunto'}</div>
 					{/if}
 				</div>
 				{#if unread > 0}
@@ -262,7 +262,7 @@
 			{#if activeTab === 'online'}
 				<div class="section-label">EN LÍNEA — {onlineFriends.length}</div>
 				{#if onlineFriends.length === 0}
-					<div class="empty-state"><p>Nadie online.</p></div>
+					<div class="empty-state"><Users size={32} /><p>Nadie online.</p></div>
 				{:else}
 					{#each onlineFriends as f (f.id)}
 						<div class="friend-row">
@@ -289,7 +289,7 @@
 			{:else if activeTab === 'all'}
 				<div class="section-label">TODOS LOS AMIGOS — {friends.length}</div>
 				{#if friends.length === 0}
-					<div class="empty-state"><p>Sin amigos todavía. Añade uno arriba.</p></div>
+					<div class="empty-state"><Users size={32} /><p>Sin amigos todavía. Añade uno arriba.</p></div>
 				{:else}
 					{#each friends as f (f.id)}
 						<div class="friend-row">
@@ -315,7 +315,7 @@
 
 			{:else if activeTab === 'pending'}
 				{#if pending.length === 0}
-					<div class="empty-state"><p>Sin solicitudes pendientes.</p></div>
+					<div class="empty-state"><Users size={32} /><p>Sin solicitudes pendientes.</p></div>
 				{:else}
 					{#if incomingPending.length > 0}
 						<div class="section-label">ENTRANTES — {incomingPending.length}</div>
@@ -602,6 +602,9 @@
 	}
 
 	.friends-title {
+		display: flex;
+		align-items: center;
+		gap: 0.4rem;
 		font-size: 0.9rem;
 		font-weight: 700;
 		color: var(--text-primary);
@@ -660,12 +663,17 @@
 
 	.empty-state {
 		display: flex;
+		flex-direction: column;
 		align-items: center;
 		justify-content: center;
-		padding: 3rem 0;
+		gap: 0.5rem;
+		padding: 4rem 0;
 		color: var(--text-muted);
-		font-size: 0.85rem;
+		font-size: 0.82rem;
+		text-align: center;
 	}
+
+	.empty-state :global(svg) { opacity: 0.35; }
 
 	.friend-row {
 		display: flex;

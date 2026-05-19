@@ -107,26 +107,40 @@
 		justify-content: center;
 		min-height: 100vh;
 		padding: 1rem;
+		background: var(--bg-base);
+		position: relative;
+	}
+
+	.page::before {
+		content: '';
+		position: fixed;
+		inset: 0;
+		background: var(--auth-bg-glow, none);
+		pointer-events: none;
 	}
 
 	.card {
 		display: flex;
 		flex-direction: column;
-		gap: 1.25rem;
-		padding: 2rem;
+		gap: 1.5rem;
+		padding: 2.25rem 2rem;
 		border: 1px solid var(--border);
 		border-radius: var(--radius-lg);
 		background: var(--bg-surface);
+		box-shadow: var(--shadow-card);
 		width: 100%;
-		max-width: 380px;
+		max-width: 400px;
+		position: relative;
+		z-index: 1;
 	}
 
 	.logo {
-		font-size: 1.5rem;
+		font-size: 1.75rem;
 		font-weight: 700;
-		letter-spacing: 0.2em;
+		letter-spacing: 0.18em;
 		color: var(--accent);
 		text-align: center;
+		text-transform: lowercase;
 	}
 
 	form { display: flex; flex-direction: column; gap: 0.75rem; }

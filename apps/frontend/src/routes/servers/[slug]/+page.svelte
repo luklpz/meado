@@ -4,9 +4,11 @@
 	import { authStore } from '$lib/auth.js';
 	import { socketStore } from '$lib/socket.js';
 	import { livekitStore } from '$lib/livekit.js';
+	import { clearServerUnread, setServerUnread } from '$lib/serverUnread.js';
 	import type { MessagePayload, VoiceMember, MessageReaction } from '$lib/types/socket-events.types.js';
 	import { PERMISSION_LABELS, PERMISSION_CATEGORIES } from '$lib/permissions.js';
 	import PhaserGame from '$lib/game/PhaserGame.svelte';
+	import ServerProfileCard from '$lib/components/ServerProfileCard.svelte';
 	import { uploadToDrive } from '$lib/driveUpload.js';
 	import {
 		Mic, MicOff, Monitor, MonitorOff, PhoneOff,
@@ -14,6 +16,8 @@
 		Maximize2, X, Volume2, VolumeX, Users,
 		Pencil, Trash2, Settings, MessageSquare,
 		ChevronDown, Menu, Check,
+		Download, Send, Paperclip,
+		Film, Music, FileText, FileSpreadsheet, Archive, File as FileIcon,
 	} from 'lucide-svelte';
 
 	let { data } = $props();
@@ -224,19 +228,44 @@
 	}
 	let prevTextChannel = $state<Channel | null>(null);
 
+	// ── Notifications ──────────────────────────────────────────────────────
+	function showBrowserNotification(msg: MessagePayload) {
+		if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
+		const channelName = channels.find(c => c.id === msg.channelId)?.name ?? 'canal';
+		const displayName = msg.author.name ?? msg.author.username;
+		new Notification(`#${channelName} — ${server.name}`, {
+			body: `${displayName}: ${msg.content ?? '📎 archivo'}`,
+			icon: server.iconUrl ?? '/favicon.png',
+			tag: `channel-${msg.channelId}`,
+		});
+	}
+
 	// ── Socket setup ───────────────────────────────────────────────────────
 	onMount(() => {
 		const token = authStore.getSocketToken();
 		if (!token) { goto('/login'); return; }
 		const socket = socketStore.connect(token);
 
+		// Load persisted unread counts and clear this server's rail badge
+		clearServerUnread(server.id);
+		fetch(`/api/servers/${server.slug}/unread`, { credentials: 'include' })
+			.then(r => r.ok ? r.json() : [])
+			.then((counts: { channelId: string; count: number }[]) => {
+				const m = new Map<string, number>();
+				for (const c of counts) if (c.count > 0) m.set(c.channelId, c.count);
+				unread = m;
+			})
+			.catch(() => {});
+
 		socket.on('message:created', (msg) => {
 			if (msg.channelId === selectedChannel?.id) {
 				messages = [...messages, msg];
 				scrollToBottom();
+				fetch(`/api/channels/${msg.channelId}/read`, { method: 'PATCH', credentials: 'include' }).catch(() => {});
 			} else {
 				unread = new Map(unread).set(msg.channelId, (unread.get(msg.channelId) ?? 0) + 1);
 				playNotificationSound();
+				if (document.hidden) showBrowserNotification(msg);
 			}
 		});
 		socket.on('message:updated', (msg) => {
@@ -313,10 +342,15 @@
 		if (ch.type === 'TEXT') prevTextChannel = ch;
 		selectedChannel = ch;
 		unread = new Map(unread).set(ch.id, 0);
+		const totalUnread = [...unread.values()].reduce((a, b) => a + b, 0);
+		setServerUnread(server.id, totalUnread);
 		typingUsernames = [];
 		sidebarOpen = false;
 		socket.emit('channel:join', { channelId: ch.id });
-		if (ch.type === 'TEXT') await loadMessages(ch.id);
+		if (ch.type === 'TEXT') {
+			await loadMessages(ch.id);
+			fetch(`/api/channels/${ch.id}/read`, { method: 'PATCH', credentials: 'include' }).catch(() => {});
+		}
 	}
 
 	// ── Channel CRUD ──────────────────────────────────────────────────────
@@ -427,29 +461,8 @@
 		socket.emit('reaction:toggle', { messageId: msg.id, emoji });
 	}
 
-	let imageUploading = $state(false);
-
 	async function sendFile(file: File) {
 		if (!selectedChannel) return;
-
-		if (file.type.startsWith('image/')) {
-			imageUploading = true;
-			try {
-				const fd = new FormData();
-				fd.append('file', file);
-				if (msgInput.trim()) fd.append('content', msgInput.trim());
-				msgInput = '';
-				const res = await fetch(`/api/channels/${selectedChannel.id}/messages`, {
-					method: 'POST', credentials: 'include', body: fd,
-				});
-				if (!res.ok) showToast('Error al enviar la imagen');
-			} finally {
-				imageUploading = false;
-			}
-			return;
-		}
-
-		// Non-image → Drive direct upload (global tray tracks progress)
 		const content = msgInput.trim();
 		msgInput = '';
 		const channelId = selectedChannel.id;
@@ -464,7 +477,7 @@
 			const msgRes = await fetch(`/api/channels/${channelId}/messages`, {
 				method: 'POST', credentials: 'include', body: fd,
 			});
-			if (!msgRes.ok) showToast('Error al enviar el mensaje');
+			if (!msgRes.ok) showToast('Error al enviar el archivo');
 		} catch {
 			showToast('Error al subir el archivo');
 		}
@@ -505,6 +518,11 @@
 	function onFileChange(e: Event) {
 		const files = (e.target as HTMLInputElement).files;
 		if (files?.[0]) { sendFile(files[0]); (e.target as HTMLInputElement).value = ''; }
+	}
+
+	function onPaste(e: ClipboardEvent) {
+		const file = Array.from(e.clipboardData?.items ?? []).find(i => i.kind === 'file')?.getAsFile();
+		if (file) { e.preventDefault(); sendFile(file); }
 	}
 
 	function onTyping() {
@@ -888,15 +906,15 @@
 
 	const isImage = (mime: string) => mime.startsWith('image/');
 
-	function fileIcon(mime: string): string {
-		if (mime.startsWith('video/')) return '🎬';
-		if (mime.startsWith('audio/')) return '🎵';
-		if (mime === 'application/pdf') return '📄';
-		if (mime.includes('word') || mime.includes('document')) return '📝';
-		if (mime.includes('excel') || mime.includes('spreadsheet') || mime.includes('csv')) return '📊';
-		if (mime.includes('zip') || mime.includes('rar') || mime.includes('tar') || mime.includes('gzip') || mime.includes('7z')) return '📦';
-		if (mime.startsWith('text/')) return '📋';
-		return '📎';
+	function fileIcon(mime: string): any {
+		if (mime.startsWith('video/')) return Film;
+		if (mime.startsWith('audio/')) return Music;
+		if (mime === 'application/pdf') return FileText;
+		if (mime.includes('word') || mime.includes('document')) return FileText;
+		if (mime.includes('excel') || mime.includes('spreadsheet') || mime.includes('csv')) return FileSpreadsheet;
+		if (mime.includes('zip') || mime.includes('rar') || mime.includes('tar') || mime.includes('gzip') || mime.includes('7z')) return Archive;
+		if (mime.startsWith('text/')) return FileText;
+		return FileIcon;
 	}
 
 	function canEditMsg(msg: MessagePayload) { return msg.author.id === user.id; }
@@ -1183,13 +1201,14 @@
 													<img src={att.url} class="att-img" alt={att.name} loading="lazy" />
 												</a>
 											{:else}
+											{@const AttIcon = fileIcon(att.mimeType)}
 												<div class="att-file">
-													<span class="att-icon">{fileIcon(att.mimeType)}</span>
+													<span class="att-icon"><AttIcon size={18} /></span>
 													<div class="att-info">
 														<a href={att.url} target="_blank" rel="noreferrer" class="att-name">{att.name}</a>
 														<span class="att-size">{fileSize(att.size)}</span>
 													</div>
-													<a href={att.url} download={att.name} rel="noreferrer" class="att-dl" aria-label="Descargar">↓</a>
+													<a href={att.url} download={att.name} rel="noreferrer" class="att-dl" aria-label="Descargar"><Download size={14} /></a>
 												</div>
 											{/if}
 										</div>
@@ -1228,13 +1247,14 @@
 													<img src={att.url} class="att-img" alt={att.name} loading="lazy" />
 												</a>
 											{:else}
+											{@const AttIcon = fileIcon(att.mimeType)}
 												<div class="att-file">
-													<span class="att-icon">{fileIcon(att.mimeType)}</span>
+													<span class="att-icon"><AttIcon size={18} /></span>
 													<div class="att-info">
 														<a href={att.url} target="_blank" rel="noreferrer" class="att-name">{att.name}</a>
 														<span class="att-size">{fileSize(att.size)}</span>
 													</div>
-													<a href={att.url} download={att.name} rel="noreferrer" class="att-dl" aria-label="Descargar">↓</a>
+													<a href={att.url} download={att.name} rel="noreferrer" class="att-dl" aria-label="Descargar"><Download size={14} /></a>
 												</div>
 											{/if}
 										</div>
@@ -1282,10 +1302,10 @@
 			{/if}
 			<div class="input-area">
 				<div class="input-box">
-					<button class="attach-btn" title="Adjuntar archivo" disabled={imageUploading} onclick={() => fileInput?.click()}>+</button>
+					<button class="attach-btn" title="Adjuntar archivo" onclick={() => fileInput?.click()}><Paperclip size={16} /></button>
 					<input class="hidden-file" type="file" accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.zip,.rar" bind:this={fileInput} onchange={onFileChange} />
-					<textarea class="msg-input" placeholder="Escribir en #{selectedChannel.name}" bind:value={msgInput} onkeydown={onKeydown} rows="1" maxlength="4000"></textarea>
-					<button class="send-btn" disabled={!msgInput.trim() || sendingMsg} onclick={() => sendMessage()}>↑</button>
+					<textarea class="msg-input" placeholder="Escribir en #{selectedChannel.name}" bind:value={msgInput} onkeydown={onKeydown} onpaste={onPaste} rows="1" maxlength="4000"></textarea>
+					<button class="send-btn" disabled={!msgInput.trim() || sendingMsg} onclick={() => sendMessage()}><Send size={15} /></button>
 				</div>
 			</div>
 
@@ -1810,42 +1830,19 @@
 
 	<!-- ── Profile card ───────────────────────────────────────────────────── -->
 	{#if profileCard}
-		<!-- svelte-ignore a11y_no_static_element_interactions -->
-		<div class="pc-overlay" onclick={() => (profileCard = null)} onkeydown={() => {}}></div>
-		<div class="profile-card" style="top:{profileCard.y}px; left:{profileCard.x}px;">
-			<div class="pc-avatar-wrap">
-				{#if profileCard.avatarUrl}
-					<img src={profileCard.avatarUrl} class="pc-avatar-img" alt="" />
-				{:else}
-					<div class="pc-avatar-init">{avatarInitial(profileCard.username)}</div>
-				{/if}
-			</div>
-			<div class="pc-body">
-				<div class="pc-displayname">
-					{profileCard.nickname ?? profileCard.name ?? profileCard.username}
-				</div>
-				{#if profileCard.nickname || profileCard.name}
-					<div class="pc-tag">@{profileCard.username}</div>
-				{/if}
-				{#if profileCard.role}
-					<div class="pc-role" style="color:{profileCard.role.color ?? 'var(--text-muted)'}">
-						{profileCard.role.name}
-					</div>
-				{/if}
-			</div>
-			{#if profileCard.userId !== user.id}
-				<div class="pc-actions">
-					<button class="pc-dm-btn" onclick={() => { const uid = profileCard!.userId; profileCard = null; openDm(uid); }}>
-						<MessageSquare size={14} /> Enviar mensaje
-					</button>
-					{#if canManage}
-						<button class="pc-kick-btn" onclick={() => { const u = profileCard!; profileCard = null; kickMember(u.userId, u.username); }}>
-							Expulsar
-						</button>
-					{/if}
-				</div>
-			{/if}
-		</div>
+		<ServerProfileCard
+			card={profileCard}
+			serverSlug={server.slug}
+			userId={user.id}
+			{canManage}
+			onclose={() => (profileCard = null)}
+			onOpenDm={(uid) => { profileCard = null; openDm(uid); }}
+			onKick={(uid, uname) => { profileCard = null; kickMember(uid, uname); }}
+			onNicknameChange={(uid, nick) => {
+				if (profileCard) profileCard = { ...profileCard, nickname: nick };
+				members = members.map(m => m.user.id === uid ? { ...m, nickname: nick } : m);
+			}}
+		/>
 	{/if}
 </div>
 {/if}
@@ -2554,7 +2551,7 @@
 		max-width: 320px;
 	}
 
-	.att-icon { font-size: 1.2rem; flex-shrink: 0; }
+	.att-icon { flex-shrink: 0; color: var(--text-muted); display: flex; align-items: center; }
 
 	.att-info {
 		flex: 1;
@@ -2619,13 +2616,13 @@
 		background: transparent;
 		border: none;
 		color: var(--text-muted);
-		font-size: 1.2rem;
 		cursor: pointer;
 		padding: 0.1rem 0.2rem;
 		border-radius: var(--radius);
 		transition: color var(--transition);
 		flex-shrink: 0;
-		line-height: 1;
+		display: flex;
+		align-items: center;
 	}
 
 	.attach-btn:hover { color: var(--text-primary); }
@@ -2651,10 +2648,9 @@
 		background: var(--accent);
 		border: none;
 		color: var(--accent-text);
-		width: 28px; height: 28px;
+		width: 32px; height: 32px;
 		border-radius: var(--radius);
 		cursor: pointer;
-		font-size: 0.9rem;
 		display: flex;
 		align-items: center;
 		justify-content: center;
@@ -3690,76 +3686,5 @@
 		.hamburger-btn { display: flex; }
 	}
 
-	/* ── Profile card ──────────────────────────────────────────────────────── */
-	.pc-overlay {
-		position: fixed; inset: 0; z-index: 300;
-	}
-	.profile-card {
-		position: fixed;
-		z-index: 301;
-		width: 248px;
-		background: var(--bg-surface);
-		border: 1px solid var(--border-strong);
-		border-radius: var(--radius-lg);
-		box-shadow: 0 12px 40px rgba(0,0,0,0.55);
-		overflow: hidden;
-	}
-	.pc-avatar-wrap {
-		width: 100%;
-		height: 72px;
-		background: var(--bg-elevated);
-		display: flex;
-		align-items: flex-end;
-		padding: 0 1rem;
-	}
-	.pc-avatar-img {
-		width: 64px; height: 64px; border-radius: 50%;
-		object-fit: cover;
-		border: 4px solid var(--bg-surface);
-		transform: translateY(32px);
-		flex-shrink: 0;
-	}
-	.pc-avatar-init {
-		width: 64px; height: 64px; border-radius: 50%;
-		background: var(--accent);
-		color: var(--accent-text);
-		display: flex; align-items: center; justify-content: center;
-		font-size: 1.4rem; font-weight: 700;
-		border: 4px solid var(--bg-surface);
-		transform: translateY(32px);
-		flex-shrink: 0;
-	}
-	.pc-body {
-		padding: 2.6rem 1rem 0.75rem;
-		display: flex; flex-direction: column; gap: 0.1rem;
-	}
-	.pc-displayname { font-size: 1rem; font-weight: 700; color: var(--text-primary); }
-	.pc-tag { font-size: 0.72rem; color: var(--text-muted); }
-	.pc-role { font-size: 0.7rem; font-weight: 600; margin-top: 0.2rem; }
-	.pc-actions {
-		padding: 0.5rem 1rem 0.75rem;
-		display: flex; gap: 0.4rem; flex-wrap: wrap;
-	}
-	.pc-dm-btn {
-		flex: 1;
-		padding: 0.4rem 0.75rem;
-		background: var(--accent);
-		color: var(--accent-text);
-		border: none; border-radius: var(--radius);
-		cursor: pointer; font-size: 0.8rem; font-weight: 600;
-		font-family: inherit;
-		transition: opacity var(--transition);
-	}
-	.pc-dm-btn:hover { opacity: 0.85; }
-	.pc-kick-btn {
-		padding: 0.4rem 0.75rem;
-		background: transparent;
-		border: 1px solid var(--error);
-		color: var(--error);
-		border-radius: var(--radius);
-		cursor: pointer; font-size: 0.78rem;
-		font-family: inherit;
-		transition: background var(--transition);
-	}
-	.pc-kick-btn:hover { background: var(--error-surface); }
+
 </style>

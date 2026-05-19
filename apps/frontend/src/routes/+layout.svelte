@@ -6,11 +6,12 @@
 	import { authStore } from '$lib/auth.js';
 	import ProfileMenu from '$lib/components/ProfileMenu.svelte';
 	import { dmUnread, incrementUnread } from '$lib/dmStore.js';
+	import { serverUnread, setServerUnread } from '$lib/serverUnread.js';
 	import { socketStore } from '$lib/socket.js';
 	import type { ChatSocket } from '$lib/socket.js';
 	import { playPing } from '$lib/ping.js';
 	import { uploadStore, formatSpeed } from '$lib/uploadStore.svelte.js';
-	import { X, Check, MessageSquare, Map } from 'lucide-svelte';
+	import { X, Check, MessageSquare, Map, Globe, Lock, ClipboardList } from 'lucide-svelte';
 
 	let { data, children } = $props();
 
@@ -22,6 +23,14 @@
 		if ($page.url.pathname === `/home/dm/${msg.conversationId}`) return;
 		incrementUnread(msg.conversationId);
 		if (!$page.url.pathname.startsWith('/home')) playPing();
+		if (document.hidden && Notification.permission === 'granted') {
+			const displayName = msg.author?.name ?? msg.author?.username ?? 'Alguien';
+			new Notification(`Mensaje de ${displayName}`, {
+				body: msg.content ?? 'Archivo adjunto',
+				icon: msg.author?.avatarUrl ?? '/favicon.png',
+				tag: `dm-${msg.conversationId}`,
+			});
+		}
 	}
 
 	async function joinAllDmRooms(s: ChatSocket) {
@@ -39,6 +48,14 @@
 
 	onMount(() => {
 		authStore.init();
+		if (user && typeof Notification !== 'undefined' && Notification.permission === 'default') {
+			Notification.requestPermission().catch(() => {});
+		}
+		// Seed server unread badges from server-loaded data
+		const initialUnread = (data as any).serverUnread as Record<string, number> | undefined;
+		if (initialUnread) {
+			for (const [id, count] of Object.entries(initialUnread)) setServerUnread(id, count);
+		}
 		_socketUnsub = socketStore.socket.subscribe(s => {
 			if (s === _activeSock) return;
 			if (_activeSock) {
@@ -49,6 +66,8 @@
 			if (s) {
 				s.on('dm:message:created', handleGlobalDm);
 				s.on('connect', onSocketReconnect);
+				// Join DM rooms regardless of connection state — socket.io buffers pre-connect emits.
+				// If already connected (socket was created by another page's onMount first), call now.
 				if (user) joinAllDmRooms(s);
 			}
 		});
@@ -95,7 +114,7 @@
 	let createLoading = $state(false);
 	let createError = $state('');
 
-	const ACCESS_ICON: Record<string, string> = { PUBLIC: '🌐', PASSWORD: '🔒', WHITELIST: '📋' };
+	const ACCESS_ICON: Record<string, any> = { PUBLIC: Globe, PASSWORD: Lock, WHITELIST: ClipboardList };
 
 	function closeModal() {
 		showServerModal = false;
@@ -192,6 +211,7 @@
 			<div class="rail-separator"></div>
 
 			{#each myServers as srv (srv.id)}
+				{@const srvUnread = $serverUnread.get(srv.id) ?? 0}
 				<a
 					href="/servers/{srv.slug}"
 					class="rail-btn server-btn"
@@ -199,12 +219,17 @@
 					title={srv.name}
 					aria-label={srv.name}
 				>
-					{#if srv.iconUrl}
-						<img src={srv.iconUrl} alt={srv.name} class="server-icon-img" />
-					{:else}
-						<span class="server-initial">{srv.name[0].toUpperCase()}</span>
-					{/if}
+					<div class="server-icon-clip">
+						{#if srv.iconUrl}
+							<img src={srv.iconUrl} alt={srv.name} class="server-icon-img" />
+						{:else}
+							<span class="server-initial">{srv.name[0].toUpperCase()}</span>
+						{/if}
+					</div>
 					<div class="active-indicator"></div>
+					{#if srvUnread > 0 && !isActiveServer(srv.slug)}
+						<span class="rail-badge">{srvUnread > 9 ? '9+' : srvUnread}</span>
+					{/if}
 				</a>
 			{/each}
 
@@ -296,6 +321,7 @@
 							{#if joinError}<p class="error">{joinError}</p>{/if}
 							<div class="server-list">
 								{#each otherServers as srv (srv.id)}
+									{@const AccessIcon = ACCESS_ICON[srv.accessType]}
 									<div class="server-row">
 										<div class="srv-icon">
 											{#if srv.iconUrl}
@@ -307,7 +333,7 @@
 										<div class="srv-info">
 											<div class="srv-name">{srv.name}</div>
 											{#if srv.description}<div class="srv-desc">{srv.description}</div>{/if}
-											<div class="srv-meta">{ACCESS_ICON[srv.accessType]} · {srv._count?.members ?? 0} miembros</div>
+											<div class="srv-meta"><AccessIcon size={11} /> · {srv._count?.members ?? 0} miembros</div>
 										</div>
 										<button
 											class="btn-primary btn-sm"
@@ -452,7 +478,18 @@
 	}
 
 	/* clip overflow for icons inside */
-	.server-btn { overflow: hidden; }
+	.server-btn { overflow: visible; }
+
+	.server-icon-clip {
+		width: 100%;
+		height: 100%;
+		border-radius: inherit;
+		overflow: hidden;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		flex-shrink: 0;
+	}
 
 	.active-indicator {
 		position: absolute;
@@ -660,7 +697,7 @@
 	.srv-info { flex: 1; display: flex; flex-direction: column; gap: 0.15rem; }
 	.srv-name { font-size: 0.88rem; font-weight: 600; color: var(--text-primary); }
 	.srv-desc { font-size: 0.72rem; color: var(--text-secondary); }
-	.srv-meta { font-size: 0.68rem; color: var(--text-muted); }
+	.srv-meta { display: flex; align-items: center; gap: 0.3rem; font-size: 0.68rem; color: var(--text-muted); }
 
 	/* ── Create form ── */
 	.create-form { display: flex; flex-direction: column; gap: 0.75rem; }

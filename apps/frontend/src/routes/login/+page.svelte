@@ -2,6 +2,7 @@
 	import { goto, invalidateAll } from '$app/navigation';
 	import { page } from '$app/stores';
 	import { authStore } from '$lib/auth.js';
+	import { CheckCircle2 } from 'lucide-svelte';
 
 	let email = $state('');
 	let password = $state('');
@@ -35,10 +36,10 @@
 		<h1 class="logo">meado</h1>
 
 		{#if verified}
-			<div class="notice notice--ok">✓ Email verificado. Ya puedes iniciar sesión.</div>
+			<div class="notice notice--ok"><CheckCircle2 size={13} /> Email verificado. Ya puedes iniciar sesión.</div>
 		{/if}
 		{#if resetOk}
-			<div class="notice notice--ok">✓ Contraseña actualizada. Ya puedes iniciar sesión.</div>
+			<div class="notice notice--ok"><CheckCircle2 size={13} /> Contraseña actualizada. Ya puedes iniciar sesión.</div>
 		{/if}
 		{#if tokenError}
 			<div class="notice notice--err">
@@ -79,31 +80,48 @@
 		justify-content: center;
 		min-height: 100vh;
 		padding: 1rem;
+		background: var(--bg-base);
+		position: relative;
+	}
+
+	.page::before {
+		content: '';
+		position: fixed;
+		inset: 0;
+		background: var(--auth-bg-glow, none);
+		pointer-events: none;
 	}
 
 	.card {
 		display: flex;
 		flex-direction: column;
-		gap: 1.25rem;
-		padding: 2rem;
+		gap: 1.5rem;
+		padding: 2.25rem 2rem;
 		border: 1px solid var(--border);
 		border-radius: var(--radius-lg);
 		background: var(--bg-surface);
+		box-shadow: var(--shadow-card);
 		width: 100%;
-		max-width: 340px;
+		max-width: 360px;
+		position: relative;
+		z-index: 1;
 	}
 
 	.logo {
-		font-size: 1.5rem;
+		font-size: 1.75rem;
 		font-weight: 700;
-		letter-spacing: 0.2em;
+		letter-spacing: 0.18em;
 		color: var(--accent);
 		text-align: center;
+		text-transform: lowercase;
 	}
 
 	.notice {
+		display: flex;
+		align-items: center;
+		gap: 0.4rem;
 		font-size: 0.78rem;
-		padding: 0.6rem 0.75rem;
+		padding: 0.55rem 0.75rem;
 		border-radius: var(--radius);
 		line-height: 1.5;
 	}

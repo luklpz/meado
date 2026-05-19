@@ -6,7 +6,7 @@
 	import type { ChatSocket } from '$lib/socket.js';
 	import { clearUnread } from '$lib/dmStore.js';
 	import { playPing } from '$lib/ping.js';
-	import { Users, UserPlus, Pencil, Trash2 } from 'lucide-svelte';
+	import { Users, UserPlus, Pencil, Trash2, Download, Send, Paperclip, Film, Music, FileText, FileSpreadsheet, Archive, File as FileIcon } from 'lucide-svelte';
 	import { uploadToDrive } from '$lib/driveUpload.js';
 
 	let { data } = $props();
@@ -38,7 +38,6 @@
 	let messages = $state<DmMessage[]>([...data.messages]);
 	let msgInput = $state('');
 	let sending = $state(false);
-	let imageUploading = $state(false);
 	let fileInput = $state<HTMLInputElement | undefined>(undefined);
 	let messagesEl = $state<HTMLDivElement | null>(null);
 	let typingUsernames = $state<string[]>([]);
@@ -142,6 +141,16 @@
 		messages = messages.filter(m => m.id !== d.messageId);
 	}
 
+	function handleDmReactionUpdated(d: { messageId: string; conversationId: string; reactions: { emoji: string; count: number; me: boolean }[] }) {
+		if (d.conversationId !== conversation.id) return;
+		messages = messages.map(m => m.id === d.messageId ? { ...m, reactions: d.reactions } : m);
+	}
+
+	function toggleDmReaction(msg: DmMessage, emoji: string) {
+		if (!sock) return;
+		sock.emit('dm:reaction:toggle', { messageId: msg.id, emoji });
+	}
+
 	onMount(() => {
 		clearUnread(conversation.id);
 		const token = authStore.getSocketToken();
@@ -152,6 +161,7 @@
 			sock.on('dm:typing:update', handleTypingUpdate);
 			sock.on('dm:message:updated', handleDmUpdated);
 			sock.on('dm:message:deleted', handleDmDeleted);
+			sock.on('dm:reaction:updated', handleDmReactionUpdated);
 		}
 		scrollToBottom(true);
 	});
@@ -161,6 +171,7 @@
 		sock?.off('dm:typing:update', handleTypingUpdate);
 		sock?.off('dm:message:updated', handleDmUpdated);
 		sock?.off('dm:message:deleted', handleDmDeleted);
+		sock?.off('dm:reaction:updated', handleDmReactionUpdated);
 	});
 
 	async function sendMessage() {
@@ -184,23 +195,6 @@
 	}
 
 	async function sendFile(file: File) {
-		if (file.type.startsWith('image/')) {
-			imageUploading = true;
-			try {
-				const fd = new FormData();
-				fd.append('file', file);
-				if (msgInput.trim()) fd.append('content', msgInput.trim());
-				msgInput = '';
-				const res = await fetch(`/api/dm/${conversation.id}/messages`, {
-					method: 'POST', credentials: 'include', body: fd,
-				});
-				if (!res.ok) console.error('Error al enviar imagen en DM');
-			} finally {
-				imageUploading = false;
-			}
-			return;
-		}
-
 		const content = msgInput.trim();
 		msgInput = '';
 		const convId = conversation.id;
@@ -223,6 +217,11 @@
 		if (f) { sendFile(f); (e.target as HTMLInputElement).value = ''; }
 	}
 
+	function onPaste(e: ClipboardEvent) {
+		const file = Array.from(e.clipboardData?.items ?? []).find(i => i.kind === 'file')?.getAsFile();
+		if (file) { e.preventDefault(); sendFile(file); }
+	}
+
 	function fileSize(bytes: number) {
 		if (bytes < 1024) return `${bytes} B`;
 		if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
@@ -230,15 +229,15 @@
 		return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
 	}
 
-	function fileIcon(mime: string): string {
-		if (mime.startsWith('video/')) return '🎬';
-		if (mime.startsWith('audio/')) return '🎵';
-		if (mime === 'application/pdf') return '📄';
-		if (mime.includes('word') || mime.includes('document')) return '📝';
-		if (mime.includes('excel') || mime.includes('spreadsheet') || mime.includes('csv')) return '📊';
-		if (mime.includes('zip') || mime.includes('rar') || mime.includes('tar') || mime.includes('gzip') || mime.includes('7z')) return '📦';
-		if (mime.startsWith('text/')) return '📋';
-		return '📎';
+	function fileIcon(mime: string): any {
+		if (mime.startsWith('video/')) return Film;
+		if (mime.startsWith('audio/')) return Music;
+		if (mime === 'application/pdf') return FileText;
+		if (mime.includes('word') || mime.includes('document')) return FileText;
+		if (mime.includes('excel') || mime.includes('spreadsheet') || mime.includes('csv')) return FileSpreadsheet;
+		if (mime.includes('zip') || mime.includes('rar') || mime.includes('tar') || mime.includes('gzip') || mime.includes('7z')) return Archive;
+		if (mime.startsWith('text/')) return FileText;
+		return FileIcon;
 	}
 
 	function startTyping() {
@@ -456,13 +455,14 @@
 														<img src={att.url} alt={att.name} class="att-image" loading="lazy" />
 													</a>
 												{:else}
+													{@const AttIcon = fileIcon(att.mimeType)}
 													<div class="att-file">
-														<span class="att-file-icon">{fileIcon(att.mimeType)}</span>
+														<span class="att-file-icon"><AttIcon size={18} /></span>
 														<div class="att-info">
 															<a href={att.url} target="_blank" rel="noreferrer" class="att-file-name">{att.name}</a>
 															<span class="att-size">{fileSize(att.size)}</span>
 														</div>
-														<a href={att.url} download={att.name} rel="noreferrer" class="att-dl" aria-label="Descargar">↓</a>
+														<a href={att.url} download={att.name} rel="noreferrer" class="att-dl" aria-label="Descargar"><Download size={14} /></a>
 													</div>
 												{/if}
 											{/each}
@@ -470,8 +470,8 @@
 									{/if}
 									{#if msg.reactions?.length}
 										<div class="reactions">
-											{#each msg.reactions as r}
-												<span class="reaction" class:reaction-me={r.me}>{r.emoji} {r.count}</span>
+											{#each msg.reactions as r (r.emoji)}
+												<button class="reaction-pill" class:reacted={r.me} onclick={() => toggleDmReaction(msg, r.emoji)}>{r.emoji} {r.count}</button>
 											{/each}
 										</div>
 									{/if}
@@ -502,13 +502,14 @@
 														<img src={att.url} alt={att.name} class="att-image" loading="lazy" />
 													</a>
 												{:else}
+													{@const AttIcon = fileIcon(att.mimeType)}
 													<div class="att-file">
-														<span class="att-file-icon">{fileIcon(att.mimeType)}</span>
+														<span class="att-file-icon"><AttIcon size={18} /></span>
 														<div class="att-info">
 															<a href={att.url} target="_blank" rel="noreferrer" class="att-file-name">{att.name}</a>
 															<span class="att-size">{fileSize(att.size)}</span>
 														</div>
-														<a href={att.url} download={att.name} rel="noreferrer" class="att-dl" aria-label="Descargar">↓</a>
+														<a href={att.url} download={att.name} rel="noreferrer" class="att-dl" aria-label="Descargar"><Download size={14} /></a>
 													</div>
 												{/if}
 											{/each}
@@ -516,18 +517,25 @@
 									{/if}
 									{#if msg.reactions?.length}
 										<div class="reactions">
-											{#each msg.reactions as r}
-												<span class="reaction" class:reaction-me={r.me}>{r.emoji} {r.count}</span>
+											{#each msg.reactions as r (r.emoji)}
+												<button class="reaction-pill" class:reacted={r.me} onclick={() => toggleDmReaction(msg, r.emoji)}>{r.emoji} {r.count}</button>
 											{/each}
 										</div>
 									{/if}
 								{/if}
 							</div>
 						{/if}
-						{#if hoveredId === msg.id && msg.author.id === user.id && editingId !== msg.id}
+						{#if hoveredId === msg.id && editingId !== msg.id}
 							<div class="msg-actions">
-								<button class="msg-action-btn" onclick={() => startEdit(msg)} title="Editar"><Pencil size={14} /></button>
-								<button class="msg-action-btn danger" onclick={() => deleteMsg(msg)} title="Borrar"><Trash2 size={14} /></button>
+								<div class="emoji-picker">
+									{#each ['👍','❤️','😂','😮','😢'] as emoji}
+										<button class="emoji-pick-btn" onclick={() => toggleDmReaction(msg, emoji)}>{emoji}</button>
+									{/each}
+								</div>
+								{#if msg.author.id === user.id}
+									<button class="msg-action-btn" onclick={() => startEdit(msg)} title="Editar"><Pencil size={14} /></button>
+									<button class="msg-action-btn danger" onclick={() => deleteMsg(msg)} title="Borrar"><Trash2 size={14} /></button>
+								{/if}
 							</div>
 						{/if}
 					</div>
@@ -544,17 +552,18 @@
 
 		<div class="input-area">
 			<div class="input-box">
-				<button class="attach-btn" title="Adjuntar archivo" disabled={imageUploading} onclick={() => fileInput?.click()}>+</button>
+				<button class="attach-btn" title="Adjuntar archivo" onclick={() => fileInput?.click()}><Paperclip size={16} /></button>
 				<input class="hidden-file" type="file" accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.zip,.rar" bind:this={fileInput} onchange={onFileChange} />
 				<textarea
 					placeholder="Escribe un mensaje a {convName(conversation)}…"
 					bind:value={msgInput}
 					onkeydown={onKeydown}
 					oninput={startTyping}
+					onpaste={onPaste}
 					rows="1"
 					maxlength="4000"
 				></textarea>
-				<button class="send-btn" disabled={!msgInput.trim() || sending} onclick={sendMessage}>↑</button>
+				<button class="send-btn" disabled={!msgInput.trim() || sending} onclick={sendMessage}><Send size={15} /></button>
 			</div>
 		</div>
 	</div>
@@ -900,7 +909,7 @@
 		max-width: 300px;
 	}
 
-	.att-file-icon { font-size: 1.2rem; flex-shrink: 0; }
+	.att-file-icon { flex-shrink: 0; color: var(--text-muted); display: flex; align-items: center; }
 
 	.att-info {
 		flex: 1;
@@ -943,11 +952,11 @@
 		background: none;
 		border: none;
 		color: var(--text-muted);
-		font-size: 1.25rem;
-		line-height: 1;
 		cursor: pointer;
 		padding: 0 0.25rem;
 		flex-shrink: 0;
+		display: flex;
+		align-items: center;
 		transition: color var(--transition);
 	}
 
@@ -960,10 +969,9 @@
 		background: var(--accent);
 		border: none;
 		color: var(--accent-text);
-		width: 28px; height: 28px;
+		width: 32px; height: 32px;
 		border-radius: var(--radius);
 		cursor: pointer;
-		font-size: 0.9rem;
 		display: flex; align-items: center; justify-content: center;
 		flex-shrink: 0;
 		transition: opacity var(--transition);
@@ -990,7 +998,7 @@
 
 	.reactions { display: flex; flex-wrap: wrap; gap: 0.25rem; margin-top: 0.2rem; }
 
-	.reaction {
+	.reaction-pill {
 		display: inline-flex;
 		align-items: center;
 		gap: 0.2rem;
@@ -1000,13 +1008,29 @@
 		border-radius: 999px;
 		font-size: 0.75rem;
 		color: var(--text-secondary);
+		cursor: pointer;
+		font-family: inherit;
+		transition: border-color var(--transition);
 	}
-
-	.reaction-me {
+	.reaction-pill:hover { border-color: var(--border-strong); }
+	.reaction-pill.reacted {
 		background: color-mix(in srgb, var(--accent) 15%, transparent);
 		border-color: var(--accent);
 		color: var(--accent);
 	}
+
+	.emoji-picker { display: flex; gap: 0.1rem; align-items: center; }
+	.emoji-pick-btn {
+		background: none;
+		border: none;
+		cursor: pointer;
+		font-size: 0.85rem;
+		padding: 0.15rem 0.2rem;
+		border-radius: var(--radius-sm);
+		transition: background var(--transition);
+		line-height: 1;
+	}
+	.emoji-pick-btn:hover { background: var(--bg-surface); }
 
 	.loading-more {
 		text-align: center;

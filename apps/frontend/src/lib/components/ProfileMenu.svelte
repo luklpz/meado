@@ -2,7 +2,7 @@
 	import { goto, invalidateAll } from '$app/navigation';
 	import { authStore } from '$lib/auth.js';
 	import { themeStore, THEME_OPTIONS, type Theme } from '$lib/theme.js';
-	import { Check, X, LogOut, UserRound } from 'lucide-svelte';
+	import { Check, X, LogOut, UserRound, Pen, Upload, Loader2 } from 'lucide-svelte';
 
 	const { user } = authStore;
 
@@ -116,7 +116,7 @@
 						{:else}
 							<button class="name-btn" onclick={() => { nameInput = $user?.name ?? ''; editingName = true; }}>
 								<span class="user-display-name">{$user.name || $user.username}</span>
-								<span class="edit-hint">✎</span>
+								<span class="edit-hint"><Pen size={11} /></span>
 							</button>
 							<span class="user-tag">@{$user.username}</span>
 						{/if}
@@ -133,7 +133,7 @@
 					onclick={() => fileInput.click()}
 					disabled={uploading}
 				>
-					<span class="action-icon">{uploading ? '⟳' : '◎'}</span>
+					{#if uploading}<Loader2 size={14} class="action-icon spinning" />{:else}<Upload size={14} class="action-icon" />{/if}
 					{uploading ? 'Subiendo…' : 'Cambiar foto de perfil'}
 				</button>
 
@@ -272,10 +272,11 @@
 	.user-display-name { font-size: 0.82rem; font-weight: 600; color: var(--text-primary); }
 
 	.edit-hint {
-		font-size: 0.62rem;
 		color: var(--text-muted);
 		opacity: 0;
 		transition: opacity var(--transition);
+		display: flex;
+		align-items: center;
 	}
 
 	.name-btn:hover .edit-hint { opacity: 1; }
@@ -352,7 +353,10 @@
 	.danger-item { color: var(--text-secondary); }
 	.danger-item:hover { background: var(--error-surface); color: var(--error); }
 
-	.action-icon { font-size: 0.8rem; }
+	.action-icon { flex-shrink: 0; }
+
+	@keyframes spin { to { transform: rotate(360deg); } }
+	:global(.spinning) { animation: spin 0.9s linear infinite; }
 
 	.upload-error {
 		font-size: 0.7rem;
