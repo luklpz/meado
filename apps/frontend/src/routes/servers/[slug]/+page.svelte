@@ -9,7 +9,6 @@
 	import { PERMISSION_LABELS, PERMISSION_CATEGORIES } from '$lib/permissions.js';
 	import PhaserGame from '$lib/game/PhaserGame.svelte';
 	import ServerProfileCard from '$lib/components/ServerProfileCard.svelte';
-	import UserStatusBar from '$lib/components/UserStatusBar.svelte';
 	import { uploadToDrive } from '$lib/driveUpload.js';
 	import {
 		Mic, MicOff, Monitor, MonitorOff, PhoneOff,
@@ -1022,7 +1021,6 @@
 			{/each}
 		</nav>
 
-		<UserStatusBar />
 	</aside>
 
 	<!-- Server name dropdown (fixed-positioned to escape sidebar overflow) -->
@@ -2008,7 +2006,7 @@
 	.channel-nav {
 		flex: 1;
 		overflow-y: auto;
-		padding: 0.5rem 0.4rem;
+		padding: 0.5rem 0.4rem 56px;
 		min-height: 0;
 	}
 

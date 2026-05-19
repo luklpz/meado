@@ -6,14 +6,13 @@
 	import { livekitStore } from '$lib/livekit.js';
 	import {
 		Mic, MicOff, Headphones, VolumeX,
-		Check, X, LogOut, Pen, Upload, Loader2,
+		Check, X, LogOut, Pen, Upload, Loader2, ChevronRight,
 	} from 'lucide-svelte';
 
 	const { user } = authStore;
 	const lkStatus = livekitStore.status;
 	const inVoice = $derived($lkStatus === 'connected');
 
-	// Panel state
 	let open = $state(false);
 	let uploading = $state(false);
 	let uploadError = $state('');
@@ -21,6 +20,30 @@
 	let nameInput = $state('');
 	let nameError = $state('');
 	let fileInput: HTMLInputElement;
+
+	// Theme flyout (fixed-positioned to escape panel overflow)
+	let showTheme = $state(false);
+	let themeBtnEl: HTMLButtonElement;
+	let flyoutTop = $state(0);
+	let flyoutLeft = $state(0);
+
+	function openThemeFlyout() {
+		const r = themeBtnEl.getBoundingClientRect();
+		flyoutTop = r.top;
+		flyoutLeft = r.right + 4;
+		showTheme = !showTheme;
+	}
+
+	function handleWindowClick(e: MouseEvent) {
+		const t = e.target as Element;
+		if (showTheme && !t.closest('.theme-flyout') && !t.closest('.theme-row')) {
+			showTheme = false;
+		}
+		if (open && !t.closest('.usb-wrap') && !t.closest('.theme-flyout')) {
+			open = false;
+			showTheme = false;
+		}
+	}
 
 	async function toggleMic() {
 		micMuted.update(v => !v);
@@ -37,10 +60,6 @@
 		});
 	}
 
-	function handleWindowClick(e: MouseEvent) {
-		if (open && !(e.target as Element).closest('.usb-wrap')) open = false;
-	}
-
 	async function handleLogout() {
 		open = false;
 		await authStore.logout();
@@ -48,7 +67,10 @@
 		goto('/login');
 	}
 
-	function setTheme(t: Theme) { themeStore.set(t); }
+	function setTheme(t: Theme) {
+		themeStore.set(t);
+		showTheme = false;
+	}
 
 	async function saveName() {
 		nameError = '';
@@ -85,6 +107,23 @@
 	style="display:none"
 	onchange={handleFileChange}
 />
+
+<!-- Theme flyout (outside usb-wrap to avoid clipping) -->
+{#if showTheme}
+	<div class="theme-flyout" style="top:{flyoutTop}px; left:{flyoutLeft}px;">
+		{#each THEME_OPTIONS as opt}
+			<button
+				class="flyout-item"
+				class:active={$themeStore === opt.value}
+				onclick={() => setTheme(opt.value)}
+			>
+				<span class="flyout-icon">{opt.icon}</span>
+				<span>{opt.label}</span>
+				{#if $themeStore === opt.value}<Check size={12} class="flyout-check" />{/if}
+			</button>
+		{/each}
+	</div>
+{/if}
 
 <div class="usb-wrap">
 	{#if open}
@@ -134,12 +173,9 @@
 					</div>
 					{#if nameError}<span class="name-error">{nameError}</span>{/if}
 				{:else}
-					<button class="name-btn" onclick={() => { nameInput = $user?.name ?? ''; editingName = true; }}>
-						<span class="display-name">{$user?.name || $user?.username}</span>
-						<span class="edit-hint"><Pen size={11} /></span>
-					</button>
+					<span class="display-name">{$user?.name || $user?.username}</span>
 				{/if}
-				<span class="username">@{$user?.username}</span>
+				<span class="username-tag">@{$user?.username}</span>
 			</div>
 
 			{#if uploadError}
@@ -148,28 +184,23 @@
 
 			<div class="sep"></div>
 
-			<!-- Theme -->
-			<div class="section">
-				<span class="section-label">Tema</span>
-				<div class="theme-grid">
-					{#each THEME_OPTIONS as opt}
-						<button
-							class="theme-btn"
-							class:active={$themeStore === opt.value}
-							onclick={() => setTheme(opt.value)}
-							title={opt.label}
-						>
-							<span class="theme-icon">{opt.icon}</span>
-							<span>{opt.label}</span>
-							{#if $themeStore === opt.value}<Check size={12} class="theme-check" />{/if}
-						</button>
-					{/each}
-				</div>
-			</div>
+			<!-- Edit profile -->
+			<button class="menu-item" onclick={() => { nameInput = $user?.name ?? ''; editingName = true; }}>
+				<span class="menu-item-icon"><Pen size={14} /></span>
+				Editar perfil
+			</button>
+
+			<!-- Theme (flyout) -->
+			<button bind:this={themeBtnEl} class="menu-item theme-row" onclick={openThemeFlyout}>
+				<span class="menu-item-icon">{THEME_OPTIONS.find(o => o.value === $themeStore)?.icon ?? '◐'}</span>
+				Tema
+				<ChevronRight size={13} class="menu-arrow" />
+			</button>
 
 			<div class="sep"></div>
-			<button class="action-item danger" onclick={handleLogout}>
-				<LogOut size={14} />
+
+			<button class="menu-item danger" onclick={handleLogout}>
+				<span class="menu-item-icon"><LogOut size={14} /></span>
 				Cerrar sesión
 			</button>
 		</div>
@@ -177,7 +208,7 @@
 
 	<!-- Status bar -->
 	<div class="status-bar">
-		<button class="user-identity" onclick={() => open = !open} title="Perfil y ajustes">
+		<button class="user-identity" onclick={() => { open = !open; if (!open) showTheme = false; }} title="Perfil y ajustes">
 			<div class="sb-avatar">
 				{#if $user?.avatarUrl}
 					<img src={$user.avatarUrl} alt={$user?.username} />
@@ -221,17 +252,23 @@
 </div>
 
 <style>
+	/* ── Fixed wrapper spanning rail (56px) + sidebar (240px) ── */
 	.usb-wrap {
-		position: relative;
-		flex-shrink: 0;
+		position: fixed;
+		bottom: 0;
+		left: 0;
+		width: calc(56px + 240px);
+		z-index: 9999;
+		font-family: var(--font-mono);
 	}
 
 	/* ── Profile panel ── */
 	.profile-panel {
 		position: absolute;
-		bottom: calc(100% + 8px);
-		left: 0;
+		bottom: 100%;
+		left: 56px;
 		width: 260px;
+		margin-bottom: 4px;
 		background: var(--bg-surface);
 		border: 1px solid var(--border);
 		border-radius: var(--radius-lg);
@@ -239,8 +276,6 @@
 		display: flex;
 		flex-direction: column;
 		box-shadow: 0 16px 48px rgba(0,0,0,0.55), 0 2px 8px rgba(0,0,0,0.3);
-		z-index: 9999;
-		font-family: var(--font-mono);
 	}
 
 	.card-header { position: relative; }
@@ -248,7 +283,6 @@
 	.banner {
 		height: 64px;
 		background: linear-gradient(135deg, var(--accent-dim) 0%, var(--bg-elevated) 100%);
-		border-bottom: 1px solid var(--border);
 		position: relative;
 		overflow: hidden;
 	}
@@ -289,7 +323,6 @@
 
 	.avatar-wrap:hover { border-color: var(--accent); }
 	.avatar-wrap:disabled { cursor: not-allowed; opacity: 0.6; }
-
 	.avatar-lg { width: 100%; height: 100%; object-fit: cover; border-radius: 50%; }
 
 	.avatar-initial-lg {
@@ -337,17 +370,6 @@
 		padding: 0 0.9rem 0.75rem;
 	}
 
-	.name-btn {
-		display: flex;
-		align-items: center;
-		gap: 0.3rem;
-		background: transparent;
-		border: none;
-		padding: 0;
-		cursor: pointer;
-		text-align: left;
-	}
-
 	.display-name {
 		font-size: 0.92rem;
 		font-weight: 700;
@@ -355,17 +377,7 @@
 		line-height: 1.2;
 	}
 
-	.edit-hint {
-		color: var(--text-muted);
-		opacity: 0;
-		transition: opacity var(--transition);
-		display: flex;
-		align-items: center;
-	}
-
-	.name-btn:hover .edit-hint { opacity: 1; }
-
-	.username { font-size: 0.72rem; color: var(--text-muted); }
+	.username-tag { font-size: 0.72rem; color: var(--text-muted); }
 
 	.name-edit-row { display: flex; align-items: center; gap: 0.25rem; }
 
@@ -402,99 +414,112 @@
 	.name-error { font-size: 0.65rem; color: var(--error); }
 	.upload-error { font-size: 0.7rem; color: var(--error); padding: 0 0.9rem 0.5rem; }
 
-	.sep { height: 1px; background: var(--border); margin: 0.15rem 0; }
+	.sep { height: 1px; background: var(--border); margin: 0.1rem 0; }
 
-	.section {
-		display: flex;
-		flex-direction: column;
-		gap: 0.2rem;
-		padding: 0.5rem 0.5rem;
-	}
-
-	.section-label {
-		font-size: 0.6rem;
-		font-weight: 700;
-		color: var(--text-muted);
-		letter-spacing: 0.1em;
-		text-transform: uppercase;
-		padding: 0 0.3rem 0.1rem;
-	}
-
-	.theme-grid { display: flex; flex-direction: column; gap: 0.05rem; }
-
-	.theme-btn {
+	/* ── Menu items ── */
+	.menu-item {
 		display: flex;
 		align-items: center;
 		gap: 0.5rem;
-		padding: 0.3rem 0.4rem;
-		background: transparent;
-		border: none;
-		border-radius: var(--radius-sm);
-		color: var(--text-secondary);
-		cursor: pointer;
-		font-size: 0.78rem;
 		width: 100%;
+		padding: 0.45rem 0.75rem;
+		border: none;
+		background: transparent;
+		cursor: pointer;
+		font-size: 0.82rem;
+		color: var(--text-secondary);
+		text-align: left;
 		transition: background var(--transition), color var(--transition);
 		font-family: inherit;
+		border-radius: 0;
 	}
 
-	.theme-btn:hover { background: var(--bg-elevated); color: var(--text-primary); }
-	.theme-btn.active { color: var(--accent); }
-	.theme-icon { font-size: 0.75rem; flex-shrink: 0; }
-	:global(.theme-check) { margin-left: auto; color: var(--accent); }
+	.menu-item:hover { background: var(--bg-elevated); color: var(--text-primary); }
+	.menu-item.danger { color: var(--text-secondary); }
+	.menu-item.danger:hover { background: var(--error-surface); color: var(--error); }
 
-	.action-item {
+	.menu-item-icon {
+		width: 18px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		flex-shrink: 0;
+		font-size: 0.82rem;
+	}
+
+	:global(.menu-arrow) {
+		margin-left: auto;
+		color: var(--text-muted);
+		flex-shrink: 0;
+	}
+
+	/* ── Theme flyout ── */
+	.theme-flyout {
+		position: fixed;
+		z-index: 10000;
+		width: 180px;
+		background: var(--bg-surface);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-lg);
+		overflow: hidden;
+		box-shadow: 0 8px 32px rgba(0,0,0,0.45);
+		padding: 0.2rem 0;
+	}
+
+	.flyout-item {
 		display: flex;
 		align-items: center;
 		gap: 0.5rem;
 		width: 100%;
-		padding: 0.4rem 0.75rem;
+		padding: 0.35rem 0.6rem;
 		border: none;
 		background: transparent;
 		cursor: pointer;
 		font-size: 0.8rem;
-		text-align: left;
-		transition: background var(--transition), color var(--transition);
+		color: var(--text-secondary);
 		font-family: inherit;
-		margin: 0.15rem 0;
+		transition: background var(--transition), color var(--transition);
 	}
 
-	.action-item.danger { color: var(--text-secondary); }
-	.action-item.danger:hover { background: var(--error-surface); color: var(--error); }
+	.flyout-item:hover { background: var(--bg-elevated); color: var(--text-primary); }
+	.flyout-item.active { color: var(--accent); }
+	.flyout-icon { font-size: 0.8rem; width: 16px; flex-shrink: 0; }
+	:global(.flyout-check) { margin-left: auto; color: var(--accent); }
 
 	/* ── Status bar ── */
 	.status-bar {
 		display: flex;
 		align-items: center;
-		justify-content: space-between;
-		padding: 0.5rem 0.6rem;
+		padding: 0 0.4rem;
+		height: 52px;
 		background: var(--bg-elevated);
 		border-top: 1px solid var(--border);
-		gap: 0.4rem;
+		gap: 0.2rem;
 	}
 
 	.user-identity {
 		display: flex;
 		align-items: center;
-		gap: 0.5rem;
+		gap: 0.45rem;
 		min-width: 0;
 		flex: 1;
 		background: transparent;
 		border: none;
 		cursor: pointer;
-		padding: 0.2rem 0.3rem;
+		padding: 0.3rem 0.35rem;
 		border-radius: var(--radius-sm);
 		text-align: left;
 		transition: background var(--transition);
 		color: inherit;
+		overflow: hidden;
 	}
 
 	.user-identity:hover { background: var(--bg-hover); }
 
 	.sb-avatar {
 		position: relative;
-		width: 30px;
-		height: 30px;
+		width: 32px;
+		height: 32px;
 		border-radius: 50%;
 		background: var(--bg-surface);
 		border: 1px solid var(--border);
@@ -513,7 +538,7 @@
 	}
 
 	.sb-initial {
-		font-size: 0.8rem;
+		font-size: 0.82rem;
 		font-weight: 700;
 		color: var(--accent);
 		width: 100%;
@@ -522,7 +547,6 @@
 		align-items: center;
 		justify-content: center;
 		border-radius: 50%;
-		background: var(--bg-surface);
 	}
 
 	.voice-dot {
@@ -541,6 +565,7 @@
 		flex-direction: column;
 		gap: 0.05rem;
 		min-width: 0;
+		overflow: hidden;
 	}
 
 	.sb-name {
@@ -563,13 +588,13 @@
 	.sb-controls {
 		display: flex;
 		align-items: center;
-		gap: 0.2rem;
+		gap: 0.15rem;
 		flex-shrink: 0;
 	}
 
 	.sb-btn {
-		width: 28px;
-		height: 28px;
+		width: 30px;
+		height: 30px;
 		border-radius: var(--radius-sm);
 		border: none;
 		background: transparent;
@@ -579,7 +604,6 @@
 		justify-content: center;
 		color: var(--text-secondary);
 		transition: background var(--transition), color var(--transition);
-		flex-shrink: 0;
 	}
 
 	.sb-btn:hover { background: var(--bg-hover); color: var(--text-primary); }

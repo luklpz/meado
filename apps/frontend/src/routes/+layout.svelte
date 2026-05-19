@@ -5,6 +5,7 @@
 	import { goto, invalidateAll } from '$app/navigation';
 	import { authStore } from '$lib/auth.js';
 	import { dmUnread, incrementUnread } from '$lib/dmStore.js';
+	import UserStatusBar from '$lib/components/UserStatusBar.svelte';
 	import { serverUnread, setServerUnread } from '$lib/serverUnread.js';
 	import { socketStore } from '$lib/socket.js';
 	import type { ChatSocket } from '$lib/socket.js';
@@ -249,6 +250,8 @@
 		</div>
 	</div>
 
+	<UserStatusBar />
+
 	<!-- Global upload tray -->
 	{#if uploadStore.list.length > 0}
 		<div class="upload-tray">
@@ -423,7 +426,7 @@
 		display: flex;
 		flex-direction: column;
 		align-items: center;
-		padding: 0.75rem 0 0.5rem;
+		padding: 0.75rem 0 56px;
 		gap: 0.25rem;
 		overflow-y: auto;
 		overflow-x: hidden;

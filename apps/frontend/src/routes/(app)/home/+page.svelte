@@ -7,7 +7,6 @@
 	import { dmUnread } from '$lib/dmStore.js';
 	import { playPing } from '$lib/ping.js';
 	import { Users, MessageSquare, X, Check, Plus, Paperclip } from 'lucide-svelte';
-	import UserStatusBar from '$lib/components/UserStatusBar.svelte';
 
 	let { data } = $props();
 	const user = $derived(data.user as { id: string; username: string; role: string; avatarUrl?: string | null });
@@ -238,7 +237,6 @@
 			{/each}
 		</div>
 
-		<UserStatusBar />
 	</aside>
 
 	<!-- Main content -->
@@ -471,6 +469,7 @@
 		flex: 1;
 		overflow-y: auto;
 		min-height: 0;
+		padding-bottom: 56px;
 	}
 
 	.search-bar {
