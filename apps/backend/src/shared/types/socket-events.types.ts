@@ -71,6 +71,7 @@ export interface ClientToServerEvents {
   'dm:send': (payload: { conversationId: string; content: string }) => void;
   'dm:typing:start': (payload: { conversationId: string }) => void;
   'dm:typing:stop': (payload: { conversationId: string }) => void;
+  'dm:reaction:toggle': (payload: { messageId: string; emoji: string }) => void;
 }
 
 // ── Server → Client ───────────────────────────────────────────────────────────
@@ -88,6 +89,7 @@ export interface ServerToClientEvents {
   'dm:message:updated': (payload: DmMessagePayload) => void;
   'dm:message:deleted': (payload: { messageId: string; conversationId: string }) => void;
   'dm:typing:update': (payload: { conversationId: string; usernames: string[] }) => void;
+  'dm:reaction:updated': (payload: { messageId: string; conversationId: string; reactions: MessageReaction[] }) => void;
   'presence:update': (payload: { userId: string; online: boolean }) => void;
   'friend:request': (payload: { id: string; user: { id: string; username: string; avatarUrl?: string | null }; createdAt: string }) => void;
 }

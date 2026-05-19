@@ -1,4 +1,5 @@
 import * as jwt from 'jsonwebtoken';
+import { Logger } from '@nestjs/common';
 import {
   WebSocketGateway, WebSocketServer,
   SubscribeMessage, OnGatewayConnection, OnGatewayDisconnect,
@@ -40,6 +41,8 @@ export class MessagesGateway implements OnGatewayConnection, OnGatewayDisconnect
   // userId → Set<socketId> — used for online presence
   readonly onlineUsers = new Set<string>();
   private readonly userSockets = new Map<string, Set<string>>();
+
+  private readonly logger = new Logger(MessagesGateway.name);
 
   constructor(
     private readonly messagesService: MessagesService,
@@ -164,7 +167,7 @@ export class MessagesGateway implements OnGatewayConnection, OnGatewayDisconnect
     try {
       const message = await this.messagesService.createMessage(payload.channelId, client.user.id, payload.content);
       this.server.to(`channel:${payload.channelId}`).emit('message:created', message);
-    } catch { /* invalid message — ignore */ }
+    } catch (e) { this.logger.error('handleMessageSend', e); }
   }
 
   // ── Typing ────────────────────────────────────────────────────────────
@@ -261,7 +264,7 @@ export class MessagesGateway implements OnGatewayConnection, OnGatewayDisconnect
     try {
       const result = await this.messagesService.toggleReaction(payload.messageId, client.user.id, payload.emoji);
       this.server.to(`channel:${result.channelId}`).emit('reaction:updated', result);
-    } catch { /* ignore */ }
+    } catch (e) { this.logger.error('handleReactionToggle', e); }
   }
 
   // ── Direct Messages ───────────────────────────────────────────────────
@@ -291,7 +294,7 @@ export class MessagesGateway implements OnGatewayConnection, OnGatewayDisconnect
     try {
       const message = await this.dmService.sendMessage(payload.conversationId, client.user.id, payload.content);
       this.server.to(`dm:${payload.conversationId}`).emit('dm:message:created', message);
-    } catch { /* ignore */ }
+    } catch (e) { this.logger.error('handleDmSend', e); }
   }
 
   @SubscribeMessage('dm:reaction:toggle')
@@ -304,7 +307,7 @@ export class MessagesGateway implements OnGatewayConnection, OnGatewayDisconnect
     try {
       const result = await this.dmService.toggleDmReaction(payload.messageId, client.user.id, payload.emoji);
       this.server.to(`dm:${result.conversationId}`).emit('dm:reaction:updated', result);
-    } catch { /* ignore */ }
+    } catch (e) { this.logger.error('handleDmReactionToggle', e); }
   }
 
   @SubscribeMessage('dm:typing:start')

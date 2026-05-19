@@ -39,8 +39,8 @@
 	let outFlyoutLeft = $state(0);
 
 	// ── Element refs ──────────────────────────────────────────────────────
-	let themeBtnEl: HTMLButtonElement;
-	let statusBtnEl: HTMLButtonElement;
+	let themeBtnEl = $state<HTMLButtonElement>();
+	let statusBtnEl = $state<HTMLButtonElement>();
 	let micChevronEl: HTMLButtonElement;
 	let outChevronEl: HTMLButtonElement;
 	let fileInput: HTMLInputElement;
@@ -97,7 +97,7 @@
 	// ── Theme flyout ──────────────────────────────────────────────────────
 	function openTheme() {
 		const fh = THEME_OPTIONS.length * 36 + 16;
-		const pos = flyoutPos(themeBtnEl, 180, fh);
+		const pos = flyoutPos(themeBtnEl!, 180, fh);
 		themeFlyoutTop = pos.top;
 		themeFlyoutLeft = pos.left;
 		showTheme = !showTheme;
@@ -109,7 +109,7 @@
 	// ── Status flyout ─────────────────────────────────────────────────────
 	function openStatus() {
 		const fh = Object.keys(STATUS_CONFIG).length * 52 + 16;
-		const pos = flyoutPos(statusBtnEl, 230, fh);
+		const pos = flyoutPos(statusBtnEl!, 230, fh);
 		statusFlyoutTop = pos.top;
 		statusFlyoutLeft = pos.left;
 		showStatus = !showStatus;

@@ -120,10 +120,9 @@ export class AuthService {
       throw new BadRequestException('Tipo de token no válido');
     }
 
-    await this.prisma.user.update({
-      where: { id: payload.sub },
-      data: { emailVerified: true },
-    });
+    const user = await this.prisma.user.findUnique({ where: { id: payload.sub }, select: { id: true } });
+    if (!user) throw new BadRequestException('El enlace de verificación no es válido o ha expirado');
+    await this.prisma.user.update({ where: { id: user.id }, data: { emailVerified: true } });
   }
 
   async forgotPassword(email: string): Promise<{ message: string }> {
@@ -162,8 +161,10 @@ export class AuthService {
       throw new BadRequestException('La contraseña debe tener al menos 8 caracteres');
     }
 
+    const user = await this.prisma.user.findUnique({ where: { id: payload.sub }, select: { id: true } });
+    if (!user) throw new BadRequestException('El enlace de recuperación no es válido o ha expirado');
     const passwordHash = await bcrypt.hash(newPassword, 12);
-    await this.prisma.user.update({ where: { id: payload.sub }, data: { passwordHash } });
+    await this.prisma.user.update({ where: { id: user.id }, data: { passwordHash } });
 
     return { message: 'Password updated successfully' };
   }

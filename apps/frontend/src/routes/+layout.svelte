@@ -443,8 +443,6 @@
 		flex-shrink: 0;
 	}
 
-	.rail-spacer { flex: 1; }
-
 	.rail-btn {
 		position: relative;
 		width: 36px;

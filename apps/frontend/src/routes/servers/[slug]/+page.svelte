@@ -2168,52 +2168,6 @@
 
 	.vp-muted { font-size: 0.65rem; opacity: 0.6; flex-shrink: 0; }
 
-	/* User area */
-	.user-area {
-		flex-shrink: 0;
-		padding: 0.6rem 0.75rem;
-		border-top: 1px solid var(--border);
-		display: flex;
-		flex-direction: column;
-		gap: 0.4rem;
-	}
-
-	.voice-status {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		padding: 0.35rem 0.5rem;
-		background: var(--accent-dim);
-		border-radius: var(--radius);
-		border: 1px solid rgba(59,130,246,0.25);
-	}
-
-	.voice-status-label { font-size: 0.72rem; color: var(--accent); }
-	.voice-status-actions { display: flex; gap: 0.25rem; }
-
-	.ctrl-btn {
-		background: transparent;
-		border: none;
-		cursor: pointer;
-		font-size: 1rem;
-		padding: 0.2rem 0.3rem;
-		border-radius: var(--radius);
-		opacity: 0.6;
-		transition: opacity var(--transition), background var(--transition);
-	}
-
-	.ctrl-btn:hover { opacity: 1; background: rgba(255,255,255,0.08); }
-	.ctrl-btn.active { opacity: 1; }
-	.ctrl-btn.danger:hover { background: rgba(239,68,68,0.15); }
-
-	.user-info {
-		display: flex;
-		align-items: center;
-		gap: 0.5rem;
-	}
-
-	.username-text { font-size: 0.82rem; color: var(--text-secondary); font-weight: 600; }
-
 	/* ── Main content ─────────────────────────────────────────────────────── */
 	.main-content {
 		display: flex;
@@ -3243,57 +3197,6 @@
 	.btn-primary:hover { opacity: 0.85; }
 	.btn-primary:disabled { opacity: 0.45; cursor: not-allowed; }
 
-	/* ── Profile ─────────────────────────────────────────────────────────── */
-	.user-info-row { position: relative; }
-
-	.user-info {
-		display: flex;
-		align-items: center;
-		gap: 0.5rem;
-		width: 100%;
-		background: transparent;
-		border: none;
-		cursor: pointer;
-		border-radius: var(--radius);
-		padding: 0.3rem 0.4rem;
-		transition: background var(--transition);
-		font-family: inherit;
-	}
-
-	.user-info:hover { background: rgba(255,255,255,0.06); }
-
-	.profile-menu {
-		position: absolute;
-		bottom: calc(100% + 4px);
-		left: 0;
-		right: 0;
-		background: var(--bg-elevated);
-		border: 1px solid var(--border-strong);
-		border-radius: var(--radius-lg);
-		padding: 0.3rem;
-		z-index: 50;
-		display: flex;
-		flex-direction: column;
-		gap: 0.1rem;
-	}
-
-	.profile-menu-item {
-		background: transparent;
-		border: none;
-		padding: 0.45rem 0.75rem;
-		font-size: 0.82rem;
-		text-align: left;
-		border-radius: var(--radius);
-		cursor: pointer;
-		font-family: inherit;
-		color: var(--text-secondary);
-		transition: background var(--transition), color var(--transition);
-	}
-
-	.profile-menu-item:hover { background: rgba(255,255,255,0.06); color: var(--text-primary); }
-	.profile-menu-item.danger { color: #f87171; }
-	.profile-menu-item.danger:hover { background: rgba(239,68,68,0.12); }
-
 	.optional { font-weight: 400; text-transform: none; letter-spacing: 0; color: var(--text-muted); }
 
 	.error { font-size: 0.75rem; color: var(--error); }
@@ -3500,9 +3403,6 @@
 		padding: 1rem 0 0.5rem;
 		flex-shrink: 0;
 	}
-
-	/* profile menu label as button */
-	label.profile-menu-item { cursor: pointer; }
 
 	/* ── Toast ───────────────────────────────────────────────────────────── */
 	.toast {

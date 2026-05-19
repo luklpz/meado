@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { untrack } from 'svelte';
 	import { Pencil, MessageSquare } from 'lucide-svelte';
 
 	interface CardData {
@@ -35,7 +36,8 @@
 	let editingNickname = $state(false);
 	let nicknameInput = $state('');
 	let nicknameSaving = $state(false);
-	let localNickname = $state(card.nickname ?? null);
+	let localNickname = $state<string | null>(untrack(() => card.nickname ?? null));
+	$effect(() => { localNickname = card.nickname ?? null; });
 
 	function avatarInitial(u: string) { return u[0].toUpperCase(); }
 

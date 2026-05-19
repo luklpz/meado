@@ -566,27 +566,16 @@ export class ServersService {
     const server = await this.prisma.server.findUnique({ where: { slug }, select: { id: true } });
     if (!server) throw new NotFoundException('Server not found');
 
-    const channels = await this.prisma.channel.findMany({
-      where: { serverId: server.id, type: 'TEXT' },
-      select: { id: true },
-    });
-    if (channels.length === 0) return [];
-
-    const reads = await this.prisma.channelRead.findMany({
-      where: { userId, channelId: { in: channels.map(c => c.id) } },
-    });
-    const readMap = new Map(reads.map(r => [r.channelId, r.lastReadAt]));
-
-    return Promise.all(channels.map(async (c) => {
-      const lastRead = readMap.get(c.id);
-      const count = await this.prisma.message.count({
-        where: {
-          channelId: c.id,
-          authorId: { not: userId },
-          ...(lastRead ? { createdAt: { gt: lastRead } } : {}),
-        },
-      });
-      return { channelId: c.id, count };
-    }));
+    const rows = await this.prisma.$queryRaw<{ channelId: string; count: bigint }[]>`
+      SELECT c.id as "channelId", COUNT(m.id) as count
+      FROM "Channel" c
+      LEFT JOIN "ChannelRead" cr ON cr."channelId" = c.id AND cr."userId" = ${userId}
+      LEFT JOIN "Message" m ON m."channelId" = c.id
+        AND m."authorId" != ${userId}
+        AND (cr."lastReadAt" IS NULL OR m."createdAt" > cr."lastReadAt")
+      WHERE c."serverId" = ${server.id} AND c.type::text = 'TEXT'
+      GROUP BY c.id
+    `;
+    return rows.map(r => ({ channelId: r.channelId, count: Number(r.count) }));
   }
 }
