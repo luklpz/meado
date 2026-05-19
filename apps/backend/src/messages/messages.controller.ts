@@ -1,7 +1,7 @@
 import {
   Controller, Get, Post, Patch, Delete,
   Param, Body, Query, Req, UseGuards,
-  NotFoundException, ForbiddenException, BadRequestException,
+  NotFoundException, ForbiddenException, BadRequestException, InternalServerErrorException,
 } from '@nestjs/common';
 import type { Request } from 'express';
 import { AccessToken } from 'livekit-server-sdk';
@@ -12,6 +12,14 @@ import { PrismaService } from '../prisma/prisma.service';
 
 function authUser(req: Request) {
   return (req as any).user as { id: string; username: string; role: string };
+}
+
+function livekitEnv() {
+  const apiKey = process.env.LIVEKIT_API_KEY;
+  const apiSecret = process.env.LIVEKIT_API_SECRET;
+  const url = process.env.LIVEKIT_URL;
+  if (!apiKey || !apiSecret || !url) throw new InternalServerErrorException('LiveKit not configured');
+  return { apiKey, apiSecret, url };
 }
 
 const CLOUDINARY_PREFIX = 'https://res.cloudinary.com/';
@@ -112,19 +120,10 @@ export class MessagesController {
     const isMember = await this.messagesService.verifyChannelMember(channelId, id);
     if (!isMember) throw new ForbiddenException('Not a member of this server');
 
-    const token = new AccessToken(
-      process.env.LIVEKIT_API_KEY!,
-      process.env.LIVEKIT_API_SECRET!,
-      { identity: id, name: username, ttl: '4h' },
-    );
-    token.addGrant({
-      roomJoin: true,
-      room: channelId,
-      canPublish: true,
-      canSubscribe: true,
-      canPublishData: true,
-    });
+    const lk = livekitEnv();
+    const token = new AccessToken(lk.apiKey, lk.apiSecret, { identity: id, name: username, ttl: '4h' });
+    token.addGrant({ roomJoin: true, room: channelId, canPublish: true, canSubscribe: true, canPublishData: true });
 
-    return { token: await token.toJwt(), url: process.env.LIVEKIT_URL };
+    return { token: await token.toJwt(), url: lk.url };
   }
 }

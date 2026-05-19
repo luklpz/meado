@@ -1,7 +1,7 @@
 import {
   Controller, Get, Post, Patch, Delete,
   Param, Body, Req, UseGuards, UseInterceptors, UploadedFile,
-  ForbiddenException,
+  ForbiddenException, InternalServerErrorException,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
@@ -18,6 +18,14 @@ import { CreateChannelDto } from './dto/create-channel.dto';
 
 function user(req: Request) {
   return (req as any).user as { id: string; username: string; role: string };
+}
+
+function livekitEnv() {
+  const apiKey = process.env.LIVEKIT_API_KEY;
+  const apiSecret = process.env.LIVEKIT_API_SECRET;
+  const url = process.env.LIVEKIT_URL;
+  if (!apiKey || !apiSecret || !url) throw new InternalServerErrorException('LiveKit not configured');
+  return { apiKey, apiSecret, url };
 }
 
 @UseGuards(JwtAuthGuard)
@@ -78,13 +86,10 @@ export class ServersController {
     const { id, username } = user(req);
     const isMember = await this.serversService.isServerMember(slug, id);
     if (!isMember) throw new ForbiddenException('Not a member');
-    const token = new AccessToken(
-      process.env.LIVEKIT_API_KEY!,
-      process.env.LIVEKIT_API_SECRET!,
-      { identity: id, name: username, ttl: '4h' },
-    );
+    const lk = livekitEnv();
+    const token = new AccessToken(lk.apiKey, lk.apiSecret, { identity: id, name: username, ttl: '4h' });
     token.addGrant({ roomJoin: true, room: `spatial-${slug}`, canPublish: true, canSubscribe: true, canPublishData: true });
-    return { token: await token.toJwt(), url: process.env.LIVEKIT_URL };
+    return { token: await token.toJwt(), url: lk.url };
   }
 
   // ── Membership ────────────────────────────────────────────────────────

@@ -19,13 +19,20 @@ export interface PublicUser {
 
 const USERNAME_RE = /^[a-zA-Z0-9]+$/;
 
-const secret = () => process.env.JWT_SECRET ?? 'dev-secret';
+function jwtSecret(): string {
+  const s = process.env.JWT_SECRET;
+  if (!s) throw new Error('JWT_SECRET env var is not set');
+  return s;
+}
 
 const ALLOWED_AVATAR_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
 
 function normalizeEmail(email: string): string {
-  const [local, domain] = email.toLowerCase().split('@');
-  return `${local.replace(/\./g, '')}@${domain}`;
+  const atIndex = email.lastIndexOf('@');
+  if (atIndex === -1) return email.toLowerCase();
+  const local = email.slice(0, atIndex).toLowerCase().replace(/\./g, '');
+  const domain = email.slice(atIndex + 1).toLowerCase();
+  return `${local}@${domain}`;
 }
 
 @Injectable()
@@ -76,7 +83,7 @@ export class AuthService {
 
     const verifyToken = jwt.sign(
       { sub: user.id, email: user.email, type: 'verify' },
-      secret(),
+      jwtSecret(),
       { expiresIn: '24h' },
     );
 
@@ -111,7 +118,7 @@ export class AuthService {
   async verifyEmail(token: string): Promise<void> {
     let payload: any;
     try {
-      payload = jwt.verify(token, secret());
+      payload = jwt.verify(token, jwtSecret());
     } catch {
       throw new BadRequestException('El enlace de verificación no es válido o ha expirado');
     }
@@ -135,7 +142,7 @@ export class AuthService {
 
     const resetToken = jwt.sign(
       { sub: user.id, type: 'reset' },
-      secret(),
+      jwtSecret(),
       { expiresIn: '1h' },
     );
 
@@ -151,7 +158,7 @@ export class AuthService {
   async resetPassword(token: string, newPassword: string): Promise<{ message: string }> {
     let payload: any;
     try {
-      payload = jwt.verify(token, secret());
+      payload = jwt.verify(token, jwtSecret());
     } catch {
       throw new BadRequestException('El enlace de recuperación no es válido o ha expirado');
     }
@@ -193,7 +200,7 @@ export class AuthService {
 
     const socketToken = jwt.sign(
       { type: 'socket', id: user.id, username: user.username, role: user.role, avatarUrl: dbUser?.avatarUrl ?? null },
-      secret(),
+      jwtSecret(),
       { expiresIn: '1h' },
     );
 
@@ -209,7 +216,7 @@ export class AuthService {
   private buildResult(user: PublicUser): { token: string; user: PublicUser } {
     const token = jwt.sign(
       { sub: user.id, username: user.username, role: user.role },
-      secret(),
+      jwtSecret(),
       { expiresIn: '7d' },
     );
     return { token, user };

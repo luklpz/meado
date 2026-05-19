@@ -14,7 +14,9 @@ export class JwtAuthGuard implements CanActivate {
     const token: string | undefined = req.cookies?.token;
     if (!token) throw new UnauthorizedException('No autenticado');
     try {
-      const payload = jwt.verify(token, process.env.JWT_SECRET ?? 'dev-secret') as any;
+      const secret = process.env.JWT_SECRET;
+      if (!secret) throw new UnauthorizedException('Server misconfiguration');
+      const payload = jwt.verify(token, secret) as any;
       req.user = { id: payload.sub, username: payload.username, role: payload.role } satisfies JwtUser;
       return true;
     } catch {
