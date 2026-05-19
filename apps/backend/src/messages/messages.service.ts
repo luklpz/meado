@@ -25,6 +25,12 @@ function formatReactions(raw: { userId: string; emoji: string }[], userId: strin
   return Array.from(map.entries()).map(([emoji, { count, me }]) => ({ emoji, count, me }));
 }
 
+function parseCursor(cursor: string): Date {
+  const d = new Date(cursor);
+  if (isNaN(d.getTime())) throw new BadRequestException('Invalid cursor');
+  return d;
+}
+
 export interface AttachmentInput {
   url: string;
   name: string;
@@ -42,7 +48,7 @@ export class MessagesService {
     const msgs = await this.prisma.message.findMany({
       where: {
         channelId,
-        ...(before ? { createdAt: { lt: new Date(before) } } : {}),
+        ...(before ? { createdAt: { lt: parseCursor(before) } } : {}),
       },
       orderBy: { createdAt: 'desc' },
       take: Math.min(limit, 100),
