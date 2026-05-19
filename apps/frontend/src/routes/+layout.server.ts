@@ -9,6 +9,22 @@ export const load: LayoutServerLoad = async ({ locals, cookies }) => {
   const res = await fetch(`${backendUrl}/servers`, {
     headers: { Cookie: `token=${token}` },
   });
-  const servers = res.ok ? await res.json() : [];
-  return { user: locals.user, servers };
+  const servers: any[] = res.ok ? await res.json() : [];
+  const memberServers = servers.filter(s => s.isMember);
+
+  // Fetch unread totals for all member servers in parallel
+  const unreadMap: Record<string, number> = {};
+  await Promise.all(memberServers.map(async (srv) => {
+    try {
+      const r = await fetch(`${backendUrl}/servers/${srv.slug}/unread`, {
+        headers: { Cookie: `token=${token}` },
+      });
+      if (!r.ok) return;
+      const counts: { channelId: string; count: number }[] = await r.json();
+      const total = counts.reduce((a, c) => a + c.count, 0);
+      if (total > 0) unreadMap[srv.id] = total;
+    } catch { /* non-critical */ }
+  }));
+
+  return { user: locals.user, servers, serverUnread: unreadMap };
 };
