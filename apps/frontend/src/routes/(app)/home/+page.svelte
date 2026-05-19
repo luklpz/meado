@@ -355,6 +355,7 @@
 							type="text"
 							bind:value={addIdentifier}
 							placeholder="username"
+							maxlength="20"
 							onkeydown={(e) => e.key === 'Enter' && searchUsers()}
 						/>
 						<button class="btn-primary" onclick={searchUsers} disabled={searching || addIdentifier.trim().length < 2}>

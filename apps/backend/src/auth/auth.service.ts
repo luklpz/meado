@@ -50,8 +50,8 @@ export class AuthService {
     if (!USERNAME_RE.test(dto.username)) {
       throw new BadRequestException('El nombre de usuario solo puede contener letras y números');
     }
-    if (dto.username.length < 3 || dto.username.length > 32) {
-      throw new BadRequestException('El nombre de usuario debe tener entre 3 y 32 caracteres');
+    if (dto.username.length < 3 || dto.username.length > 20) {
+      throw new BadRequestException('El nombre de usuario debe tener entre 3 y 20 caracteres');
     }
     if (!dto.password || dto.password.length < 8) {
       throw new BadRequestException('La contraseña debe tener al menos 8 caracteres');

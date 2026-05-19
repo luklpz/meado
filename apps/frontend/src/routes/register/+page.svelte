@@ -59,7 +59,7 @@
 						<span class="label-hint">identificador único · solo letras y números</span>
 					</span>
 					<input type="text" bind:value={username} autocomplete="username"
-						required minlength="3" maxlength="32"
+						required minlength="3" maxlength="20"
 						class:input-error={usernameError} />
 					{#if usernameError}<span class="field-error">{usernameError}</span>{/if}
 				</label>
