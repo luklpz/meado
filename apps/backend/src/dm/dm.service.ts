@@ -2,7 +2,7 @@ import {
   Injectable, NotFoundException, ForbiddenException, BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { CloudinaryService } from '../storage/cloudinary.service';
+import { StorageService } from '../storage/storage.service';
 
 const DM_MSG_SELECT = {
   id: true,
@@ -36,7 +36,7 @@ function parseCursor(cursor: string): Date {
 export class DmService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly cloudinary: CloudinaryService,
+    private readonly storage: StorageService,
   ) {}
 
   async isMember(conversationId: string, userId: string): Promise<boolean> {
@@ -230,7 +230,7 @@ export class DmService {
     if (msg.authorId !== userId) throw new ForbiddenException('Not your message');
     const attachmentUrls = msg.attachments.map(a => a.url);
     await this.prisma.directMessage.delete({ where: { id: messageId } });
-    if (attachmentUrls.length) await this.cloudinary.deleteManyByUrls(attachmentUrls);
+    if (attachmentUrls.length) await this.storage.deleteManyByUrls(attachmentUrls);
     return { ok: true, messageId, conversationId: msg.conversationId };
   }
 

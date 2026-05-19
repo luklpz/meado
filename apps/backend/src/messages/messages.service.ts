@@ -2,7 +2,7 @@ import {
   Injectable, NotFoundException, ForbiddenException, BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { CloudinaryService } from '../storage/cloudinary.service';
+import { StorageService } from '../storage/storage.service';
 
 const MSG_SELECT = {
   id: true,
@@ -43,7 +43,7 @@ export interface AttachmentInput {
 export class MessagesService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly cloudinary: CloudinaryService,
+    private readonly storage: StorageService,
   ) {}
 
   async getMessages(channelId: string, userId: string, before?: string, limit = 50) {
@@ -147,7 +147,7 @@ export class MessagesService {
 
     const attachmentUrls = msg.attachments.map(a => a.url);
     await this.prisma.message.delete({ where: { id: messageId } });
-    if (attachmentUrls.length) await this.cloudinary.deleteManyByUrls(attachmentUrls);
+    if (attachmentUrls.length) await this.storage.deleteManyByUrls(attachmentUrls);
     return { ok: true, messageId, channelId: msg.channelId };
   }
 

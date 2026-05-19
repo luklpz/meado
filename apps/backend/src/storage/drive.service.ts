@@ -1,8 +1,9 @@
-import { Injectable, InternalServerErrorException, ForbiddenException } from '@nestjs/common';
+import { Injectable, InternalServerErrorException, ForbiddenException, Logger } from '@nestjs/common';
 import { google } from 'googleapis';
 
 @Injectable()
 export class DriveService {
+  private readonly logger = new Logger(DriveService.name);
   private readonly oauthClient = new google.auth.OAuth2(
     process.env.GOOGLE_CLIENT_ID,
     process.env.GOOGLE_CLIENT_SECRET,
@@ -94,5 +95,16 @@ export class DriveService {
     });
 
     return `https://drive.google.com/uc?export=view&id=${fileId}`;
+  }
+
+  async deleteByUrl(url: string): Promise<void> {
+    try {
+      const fileId = new URL(url).searchParams.get('id');
+      if (!fileId) return;
+      const drive = google.drive({ version: 'v3', auth: this.oauthClient });
+      await drive.files.delete({ fileId });
+    } catch (e) {
+      this.logger.warn(`Failed to delete Drive file from ${url}: ${(e as Error).message}`);
+    }
   }
 }

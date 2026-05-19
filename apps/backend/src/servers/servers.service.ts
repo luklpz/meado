@@ -4,6 +4,7 @@ import {
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../prisma/prisma.service';
 import { CloudinaryService } from '../storage/cloudinary.service';
+import { StorageService } from '../storage/storage.service';
 import type { CreateServerDto } from './dto/create-server.dto';
 import type { CreateRoleDto } from './dto/create-role.dto';
 import type { CreateChannelDto } from './dto/create-channel.dto';
@@ -14,6 +15,7 @@ export class ServersService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly cloudinaryService: CloudinaryService,
+    private readonly storageService: StorageService,
   ) {}
 
   // ── List ─────────────────────────────────────────────────────────────
@@ -196,7 +198,7 @@ export class ServersService {
     if (server.iconUrl) urls.push(server.iconUrl);
 
     await this.prisma.server.delete({ where: { id: server.id } });
-    if (urls.length) await this.cloudinaryService.deleteManyByUrls(urls);
+    if (urls.length) await this.storageService.deleteManyByUrls(urls);
     return { ok: true };
   }
 
@@ -545,7 +547,7 @@ export class ServersService {
     });
 
     await this.prisma.channel.delete({ where: { id: channelId } });
-    if (attachments.length) await this.cloudinaryService.deleteManyByUrls(attachments.map(a => a.url));
+    if (attachments.length) await this.storageService.deleteManyByUrls(attachments.map(a => a.url));
     return { ok: true };
   }
 
