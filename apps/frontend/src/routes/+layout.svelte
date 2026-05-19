@@ -4,7 +4,6 @@
 	import { onMount, onDestroy } from 'svelte';
 	import { goto, invalidateAll } from '$app/navigation';
 	import { authStore } from '$lib/auth.js';
-	import ProfileMenu from '$lib/components/ProfileMenu.svelte';
 	import { dmUnread, incrementUnread } from '$lib/dmStore.js';
 	import { serverUnread, setServerUnread } from '$lib/serverUnread.js';
 	import { socketStore } from '$lib/socket.js';
@@ -243,9 +242,6 @@
 				<span class="add-icon">+</span>
 			</button>
 
-			<div class="rail-spacer"></div>
-
-			<ProfileMenu />
 		</nav>
 
 		<div class="app-content">
