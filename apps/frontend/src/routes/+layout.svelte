@@ -284,7 +284,7 @@
 
 	<!-- Server modal -->
 	{#if showServerModal}
-		<div class="modal-overlay" role="dialog" aria-modal="true" onclick={(e) => { if (e.target === e.currentTarget) closeModal(); }}>
+		<div class="modal-overlay" role="dialog" aria-modal="true" tabindex="-1" onclick={(e) => { if (e.target === e.currentTarget) closeModal(); }} onkeydown={(e) => { if (e.key === 'Escape') closeModal(); }}>
 			<div class="server-modal">
 				<div class="modal-header">
 					<div class="modal-tabs">
