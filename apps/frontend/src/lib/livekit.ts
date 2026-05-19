@@ -203,9 +203,10 @@ function createLiveKitStore() {
 	}
 
 	async function startAudio(): Promise<void> {
-		if (!_room) return;
-		await _room.startAudio();
-		canPlayAudio.set(_room.canPlaybackAudio);
+		const room = _room;
+		if (!room) return;
+		await room.startAudio();
+		canPlayAudio.set(room.canPlaybackAudio);
 		_audioEls.forEach((el) => { el.muted = false; });
 	}
 
