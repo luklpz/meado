@@ -68,8 +68,10 @@ export class DmController {
   }
 
   @Post(':id/members')
-  addMember(@Req() req: any, @Param('id') id: string, @Body() body: { userId: string }) {
-    return this.dmService.addMember(id, req.user.id, body.userId);
+  async addMember(@Req() req: any, @Param('id') id: string, @Body() body: { userId: string }) {
+    const { user, conversation } = await this.dmService.addMember(id, req.user.id, body.userId);
+    this.gateway.broadcastDmMemberAdded(id, user, conversation);
+    return user;
   }
 
   @Patch(':id/messages/:messageId')

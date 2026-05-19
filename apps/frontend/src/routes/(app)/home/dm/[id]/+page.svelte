@@ -5,6 +5,7 @@
 	import { socketStore } from '$lib/socket.js';
 	import type { ChatSocket } from '$lib/socket.js';
 	import { clearUnread } from '$lib/dmStore.js';
+	import { conversationsStore } from '$lib/conversationsStore.js';
 	import { playPing } from '$lib/ping.js';
 	import { Users, UserPlus, Pencil, Trash2, Download, Send, Paperclip, Film, Music, FileText, FileSpreadsheet, Archive, File as FileIcon } from 'lucide-svelte';
 	import { uploadFile, goesToCloudinary } from '$lib/upload.js';
@@ -34,9 +35,8 @@
 	// svelte-ignore state_referenced_locally
 	let conversation = $state(data.conversation as Conversation);
 	// svelte-ignore state_referenced_locally
-	let conversations = $state(data.conversations as Conversation[]);
-	// svelte-ignore state_referenced_locally
 	let messages = $state<DmMessage[]>([...data.messages]);
+
 	let msgInput = $state('');
 	let sending = $state(false);
 	let fileInput = $state<HTMLInputElement | undefined>(undefined);
@@ -53,11 +53,11 @@
 	let sidebarSearch = $state('');
 	const filteredConvs = $derived(
 		sidebarSearch.trim()
-			? conversations.filter(c => {
+			? $conversationsStore.filter(c => {
 					const name = c.name ?? c.members.filter(m => m.id !== user.id).map(m => m.name || m.username).join(' ');
 					return name.toLowerCase().includes(sidebarSearch.toLowerCase());
 				})
-			: conversations
+			: $conversationsStore
 	);
 
 	// Add member modal
@@ -67,6 +67,8 @@
 	let addMemberError = $state('');
 
 	let sock: ChatSocket | null = null;
+
+	$effect(() => { conversationsStore.seed(data.conversations); });
 
 	function convName(conv: Conversation) {
 		if (conv.name) return conv.name;
@@ -147,6 +149,14 @@
 		messages = messages.map(m => m.id === d.messageId ? { ...m, reactions: d.reactions } : m);
 	}
 
+	function handleMemberAdded(d: { conversationId: string; member: { id: string; username: string; name?: string | null; avatarUrl?: string | null } }) {
+		conversationsStore.addMember(d.conversationId, d.member);
+		if (d.conversationId !== conversation.id) return;
+		if (!conversation.members.some(m => m.id === d.member.id)) {
+			conversation = { ...conversation, members: [...conversation.members, d.member] };
+		}
+	}
+
 	function toggleDmReaction(msg: DmMessage, emoji: string) {
 		if (!sock) return;
 		sock.emit('dm:reaction:toggle', { messageId: msg.id, emoji });
@@ -163,6 +173,7 @@
 			sock.on('dm:message:updated', handleDmUpdated);
 			sock.on('dm:message:deleted', handleDmDeleted);
 			sock.on('dm:reaction:updated', handleDmReactionUpdated);
+			sock.on('dm:member:added', handleMemberAdded);
 		}
 		scrollToBottom(true);
 	});
@@ -173,6 +184,7 @@
 		sock?.off('dm:message:updated', handleDmUpdated);
 		sock?.off('dm:message:deleted', handleDmDeleted);
 		sock?.off('dm:reaction:updated', handleDmReactionUpdated);
+		sock?.off('dm:member:added', handleMemberAdded);
 	});
 
 	async function sendMessage() {

@@ -3,6 +3,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { StorageService } from '../storage/storage.service';
+import { FriendsService } from '../friends/friends.service';
 
 const DM_MSG_SELECT = {
   id: true,
@@ -37,6 +38,7 @@ export class DmService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly storage: StorageService,
+    private readonly friendsService: FriendsService,
   ) {}
 
   async isMember(conversationId: string, userId: string): Promise<boolean> {
@@ -238,11 +240,27 @@ export class DmService {
     if (!(await this.isMember(conversationId, requesterId))) {
       throw new ForbiddenException('Not a member');
     }
-    const conv = await this.prisma.directConversation.findUnique({ where: { id: conversationId } });
+
+    // Bug 3: only friends can be added
+    const friendIds = await this.friendsService.getFriendIds(requesterId);
+    if (!friendIds.includes(userId)) throw new ForbiddenException('Can only add friends');
+
+    const conv = await this.prisma.directConversation.findUnique({
+      where: { id: conversationId },
+      include: {
+        members: {
+          include: { user: { select: { id: true, username: true, name: true, avatarUrl: true } } },
+        },
+        messages: {
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+          select: { content: true, createdAt: true, author: { select: { username: true, name: true } } },
+        },
+      },
+    });
     if (!conv) throw new NotFoundException('Conversation not found');
 
-    const alreadyMember = await this.isMember(conversationId, userId);
-    if (alreadyMember) throw new BadRequestException('Already a member');
+    if (conv.members.some(m => m.userId === userId)) throw new BadRequestException('Already a member');
 
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
@@ -250,7 +268,19 @@ export class DmService {
     });
     if (!user) throw new NotFoundException('User not found');
 
-    await this.prisma.directConversationMember.create({ data: { conversationId, userId } });
-    return user;
+    // Bug 1: clear canonicalKey so getOrCreate never returns this group as a 1-on-1
+    await this.prisma.$transaction([
+      this.prisma.directConversationMember.create({ data: { conversationId, userId } }),
+      this.prisma.directConversation.update({ where: { id: conversationId }, data: { canonicalKey: null } }),
+    ]);
+
+    const conversation = {
+      id: conv.id,
+      name: conv.name,
+      members: [...conv.members.map(m => m.user), user],
+      lastMessage: conv.messages[0] ?? null,
+    };
+
+    return { user, conversation };
   }
 }

@@ -5,22 +5,19 @@
 	import { socketStore } from '$lib/socket.js';
 	import type { ChatSocket } from '$lib/socket.js';
 	import { dmUnread } from '$lib/dmStore.js';
-	import { playPing } from '$lib/ping.js';
-	import { Users, MessageSquare, X, Check, Plus, Paperclip } from 'lucide-svelte';
+	import { conversationsStore, type Conversation } from '$lib/conversationsStore.js';
+	import { Users, MessageSquare, X, Check, Plus } from 'lucide-svelte';
 
 	let { data } = $props();
 	const user = $derived(data.user as { id: string; username: string; role: string; avatarUrl?: string | null });
 
 	type Friend = { id: string; user: { id: string; username: string; name?: string | null; avatarUrl?: string | null; online: boolean } };
 	type Pending = { id: string; direction: 'incoming' | 'outgoing'; user: { id: string; username: string; name?: string | null; avatarUrl?: string | null }; createdAt: string };
-	type Conversation = { id: string; name: string | null; members: { id: string; username: string; name?: string | null; avatarUrl?: string | null }[]; lastMessage: { content: string | null; createdAt: string; author: { username: string; name?: string | null } } | null };
 
 	// svelte-ignore state_referenced_locally
 	let friends = $state<Friend[]>([...data.friends]);
 	// svelte-ignore state_referenced_locally
 	let pending = $state<Pending[]>([...data.pending]);
-	// svelte-ignore state_referenced_locally
-	let conversations = $state<Conversation[]>([...data.conversations]);
 
 	let activeTab = $state<'online' | 'all' | 'pending' | 'add'>('online');
 	let addIdentifier = $state('');
@@ -39,6 +36,8 @@
 
 	let sock: ChatSocket | null = null;
 
+	$effect(() => { conversationsStore.seed(data.conversations); });
+
 	function handlePresence(data: { userId: string; online: boolean }) {
 		friends = friends.map(f =>
 			f.user.id === data.userId ? { ...f, user: { ...f.user, online: data.online } } : f
@@ -50,35 +49,17 @@
 		pending = [...pending, { id: data.id, direction: 'incoming', user: data.user, createdAt: data.createdAt }];
 	}
 
-	function handleDmMessage(msg: any) {
-		conversations = conversations
-			.map(c => c.id === msg.conversationId
-				? { ...c, lastMessage: { id: msg.id, content: msg.content, createdAt: msg.createdAt, author: msg.author } }
-				: c
-			)
-			.sort((a, b) => {
-				const ta = a.lastMessage ? new Date(a.lastMessage.createdAt).getTime() : 0;
-				const tb = b.lastMessage ? new Date(b.lastMessage.createdAt).getTime() : 0;
-				return tb - ta;
-			});
-		if (msg.author?.id !== user.id && document.hidden) {
-			playPing();
-		}
-	}
-
 	onMount(() => {
 		const token = authStore.getSocketToken();
 		if (token) {
 			sock = socketStore.connect(token);
 			sock.on('presence:update', handlePresence);
-			sock.on('dm:message:created', handleDmMessage);
 			sock.on('friend:request', handleFriendRequest);
 		}
 	});
 
 	onDestroy(() => {
 		sock?.off('presence:update', handlePresence);
-		sock?.off('dm:message:created', handleDmMessage);
 		sock?.off('friend:request', handleFriendRequest);
 	});
 
@@ -86,10 +67,10 @@
 	const incomingPending = $derived(pending.filter(p => p.direction === 'incoming'));
 	const filteredConversations = $derived(
 		searchQuery.trim()
-			? conversations.filter(c =>
+			? $conversationsStore.filter(c =>
 					(c.name ?? c.members.map(m => m.username).join('')).toLowerCase().includes(searchQuery.toLowerCase())
 				)
-			: conversations
+			: $conversationsStore
 	);
 
 	async function searchUsers() {

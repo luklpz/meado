@@ -425,4 +425,15 @@ export class MessagesGateway implements OnGatewayConnection, OnGatewayDisconnect
   broadcastDmMessageDeleted(conversationId: string, messageId: string) {
     this.server.to(`dm:${conversationId}`).emit('dm:message:deleted', { messageId, conversationId });
   }
+
+  broadcastDmMemberAdded(
+    conversationId: string,
+    newMember: { id: string; username: string; name?: string | null; avatarUrl?: string | null },
+    conversation: any,
+  ) {
+    // Notify current room members so they can update their member list
+    this.server.to(`dm:${conversationId}`).emit('dm:member:added', { conversationId, member: newMember });
+    // Bug 2: notify new member — includes conversation data so frontend can add it to the sidebar
+    this.emitToUser(newMember.id, 'dm:conversation:joined', { conversationId, conversation });
+  }
 }

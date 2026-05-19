@@ -36,6 +36,13 @@ export interface MessageReaction {
   me: boolean;
 }
 
+export interface ConversationPayload {
+  id: string;
+  name: string | null;
+  members: MessageAuthor[];
+  lastMessage: { content: string | null; createdAt: string; author: { username: string; name?: string | null } } | null;
+}
+
 export interface DmMessagePayload {
   id: string;
   content: string | null;
@@ -79,6 +86,8 @@ export interface ServerToClientEvents {
   'dm:message:deleted': (payload: { messageId: string; conversationId: string }) => void;
   'dm:typing:update': (payload: { conversationId: string; usernames: string[] }) => void;
   'dm:reaction:updated': (payload: { messageId: string; conversationId: string; reactions: MessageReaction[] }) => void;
+  'dm:member:added': (payload: { conversationId: string; member: MessageAuthor }) => void;
+  'dm:conversation:joined': (payload: { conversationId: string; conversation: ConversationPayload }) => void;
   'presence:update': (payload: { userId: string; online: boolean }) => void;
   'friend:request': (payload: { id: string; user: { id: string; username: string; avatarUrl?: string | null }; createdAt: string }) => void;
 }

@@ -5,6 +5,7 @@
 	import { goto, invalidateAll } from '$app/navigation';
 	import { authStore } from '$lib/auth.js';
 	import { dmUnread, incrementUnread } from '$lib/dmStore.js';
+	import { conversationsStore } from '$lib/conversationsStore.js';
 	import UserStatusBar from '$lib/components/UserStatusBar.svelte';
 	import { serverUnread, setServerUnread } from '$lib/serverUnread.js';
 	import { socketStore } from '$lib/socket.js';
@@ -19,10 +20,18 @@
 	let _socketUnsub: (() => void) | null = null;
 
 	function handleGlobalDm(msg: any) {
-		if (!user || msg.author?.id === user.id) return;
+		if (!user) return;
+		// Always update sidebar last message (own + others)
+		conversationsStore.updateLastMessage(msg.conversationId, {
+			content: msg.content,
+			createdAt: msg.createdAt,
+			author: msg.author,
+		});
+		if (msg.author?.id === user.id) return;
 		if ($page.url.pathname === `/home/dm/${msg.conversationId}`) return;
 		incrementUnread(msg.conversationId);
-		if (!$page.url.pathname.startsWith('/home')) playPing();
+		// On /home* only ping when hidden; on other pages always ping
+		if (!$page.url.pathname.startsWith('/home') || document.hidden) playPing();
 		if (document.hidden && Notification.permission === 'granted') {
 			const displayName = msg.author?.name ?? msg.author?.username ?? 'Alguien';
 			new Notification(`Mensaje de ${displayName}`, {
@@ -31,6 +40,11 @@
 				tag: `dm-${msg.conversationId}`,
 			});
 		}
+	}
+
+	function handleConversationJoined(d: { conversationId: string; conversation: any }) {
+		if (_activeSock) _activeSock.emit('dm:join', { conversationId: d.conversationId });
+		if (d.conversation) conversationsStore.add(d.conversation);
 	}
 
 	async function joinAllDmRooms(s: ChatSocket) {
@@ -60,11 +74,13 @@
 			if (s === _activeSock) return;
 			if (_activeSock) {
 				_activeSock.off('dm:message:created', handleGlobalDm);
+				_activeSock.off('dm:conversation:joined', handleConversationJoined);
 				_activeSock.off('connect', onSocketReconnect);
 			}
 			_activeSock = s;
 			if (s) {
 				s.on('dm:message:created', handleGlobalDm);
+				s.on('dm:conversation:joined', handleConversationJoined);
 				s.on('connect', onSocketReconnect);
 				// Join DM rooms regardless of connection state — socket.io buffers pre-connect emits.
 				// If already connected (socket was created by another page's onMount first), call now.
@@ -77,6 +93,7 @@
 		_socketUnsub?.();
 		if (_activeSock) {
 			_activeSock.off('dm:message:created', handleGlobalDm);
+			_activeSock.off('dm:conversation:joined', handleConversationJoined);
 			_activeSock.off('connect', onSocketReconnect);
 		}
 	});
