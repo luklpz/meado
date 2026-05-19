@@ -7,6 +7,7 @@
 	import { dmUnread } from '$lib/dmStore.js';
 	import { playPing } from '$lib/ping.js';
 	import { Users, MessageSquare, X, Check, Plus, Paperclip } from 'lucide-svelte';
+	import UserStatusBar from '$lib/components/UserStatusBar.svelte';
 
 	let { data } = $props();
 	const user = $derived(data.user as { id: string; username: string; role: string; avatarUrl?: string | null });
@@ -211,29 +212,33 @@
 			<button class="icon-btn" title="Nueva conversación" onclick={() => (showNewDm = true)}><Plus size={14} /></button>
 		</div>
 
-		{#each filteredConversations as conv (conv.id)}
-			{@const unread = $dmUnread.get(conv.id) ?? 0}
-			<a href="/home/dm/{conv.id}" class="dm-item">
-				<div class="dm-avatar">
-					{#if convAvatar(conv)}
-						<img src={convAvatar(conv)} alt="" />
-					{:else}
-						<span>{convInitial(conv)}</span>
+		<div class="dm-list">
+			{#each filteredConversations as conv (conv.id)}
+				{@const unread = $dmUnread.get(conv.id) ?? 0}
+				<a href="/home/dm/{conv.id}" class="dm-item">
+					<div class="dm-avatar">
+						{#if convAvatar(conv)}
+							<img src={convAvatar(conv)} alt="" />
+						{:else}
+							<span>{convInitial(conv)}</span>
+						{/if}
+					</div>
+					<div class="dm-info">
+						<div class="dm-name">{convName(conv)}</div>
+						{#if conv.lastMessage}
+							<div class="dm-last" class:dm-last-unread={unread > 0}>{conv.lastMessage.author.name || conv.lastMessage.author.username}: {conv.lastMessage.content ?? 'Archivo adjunto'}</div>
+						{/if}
+					</div>
+					{#if unread > 0}
+						<span class="dm-unread-badge">{unread > 9 ? '9+' : unread}</span>
+					{:else if conv.lastMessage}
+						<span class="dm-time">{formatTime(conv.lastMessage.createdAt)}</span>
 					{/if}
-				</div>
-				<div class="dm-info">
-					<div class="dm-name">{convName(conv)}</div>
-					{#if conv.lastMessage}
-						<div class="dm-last" class:dm-last-unread={unread > 0}>{conv.lastMessage.author.name || conv.lastMessage.author.username}: {conv.lastMessage.content ?? 'Archivo adjunto'}</div>
-					{/if}
-				</div>
-				{#if unread > 0}
-					<span class="dm-unread-badge">{unread > 9 ? '9+' : unread}</span>
-				{:else if conv.lastMessage}
-					<span class="dm-time">{formatTime(conv.lastMessage.createdAt)}</span>
-				{/if}
-			</a>
-		{/each}
+				</a>
+			{/each}
+		</div>
+
+		<UserStatusBar />
 	</aside>
 
 	<!-- Main content -->
@@ -460,6 +465,12 @@
 		display: flex;
 		flex-direction: column;
 		overflow: hidden;
+	}
+
+	.dm-list {
+		flex: 1;
+		overflow-y: auto;
+		min-height: 0;
 	}
 
 	.search-bar {

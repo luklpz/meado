@@ -8,6 +8,7 @@
 	import { playPing } from '$lib/ping.js';
 	import { Users, UserPlus, Pencil, Trash2, Download, Send, Paperclip, Film, Music, FileText, FileSpreadsheet, Archive, File as FileIcon } from 'lucide-svelte';
 	import { uploadToDrive } from '$lib/driveUpload.js';
+	import UserStatusBar from '$lib/components/UserStatusBar.svelte';
 
 	let { data } = $props();
 	const user = $derived(data.user as { id: string; username: string; role: string; avatarUrl?: string | null });
@@ -353,24 +354,28 @@
 			<span>Mensajes directos</span>
 		</div>
 
-		{#each filteredConvs as conv (conv.id)}
-			{@const isActive = conv.id === conversation.id}
-			<a href="/home/dm/{conv.id}" class="dm-item" class:dm-item-active={isActive}>
-				<div class="dm-avatar">
-					{#if convAvatar(conv)}
-						<img src={convAvatar(conv)} alt="" />
-					{:else}
-						<span>{convInitial(conv)}</span>
-					{/if}
-				</div>
-				<div class="dm-info">
-					<div class="dm-name">{convName(conv)}</div>
-					{#if conv.lastMessage}
-						<div class="dm-last">{conv.lastMessage.author.name || conv.lastMessage.author.username}: {conv.lastMessage.content ?? '📎'}</div>
-					{/if}
-				</div>
-			</a>
-		{/each}
+		<div class="dm-list">
+			{#each filteredConvs as conv (conv.id)}
+				{@const isActive = conv.id === conversation.id}
+				<a href="/home/dm/{conv.id}" class="dm-item" class:dm-item-active={isActive}>
+					<div class="dm-avatar">
+						{#if convAvatar(conv)}
+							<img src={convAvatar(conv)} alt="" />
+						{:else}
+							<span>{convInitial(conv)}</span>
+						{/if}
+					</div>
+					<div class="dm-info">
+						<div class="dm-name">{convName(conv)}</div>
+						{#if conv.lastMessage}
+							<div class="dm-last">{conv.lastMessage.author.name || conv.lastMessage.author.username}: {conv.lastMessage.content ?? 'Archivo adjunto'}</div>
+						{/if}
+					</div>
+				</a>
+			{/each}
+		</div>
+
+		<UserStatusBar />
 	</aside>
 
 	<!-- Chat -->
@@ -616,9 +621,15 @@
 		border-right: 1px solid var(--border);
 		display: flex;
 		flex-direction: column;
+		overflow: hidden;
+	}
+
+	.dm-list {
+		flex: 1;
 		overflow-y: auto;
 		overflow-x: hidden;
 		scrollbar-width: thin;
+		min-height: 0;
 	}
 
 	.search-bar {

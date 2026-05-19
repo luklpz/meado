@@ -9,6 +9,7 @@
 	import { PERMISSION_LABELS, PERMISSION_CATEGORIES } from '$lib/permissions.js';
 	import PhaserGame from '$lib/game/PhaserGame.svelte';
 	import ServerProfileCard from '$lib/components/ServerProfileCard.svelte';
+	import UserStatusBar from '$lib/components/UserStatusBar.svelte';
 	import { uploadToDrive } from '$lib/driveUpload.js';
 	import {
 		Mic, MicOff, Monitor, MonitorOff, PhoneOff,
@@ -140,9 +141,6 @@
 		return { userId: msg.author.id, username: msg.author.username, name: msg.author.name, avatarUrl: msg.author.avatarUrl, nickname: member?.nickname, role: member?.role };
 	}
 
-	// ── Profile dropdown ───────────────────────────────────────────────────
-	let showProfile = $state(false);
-
 	// ── Icon upload ────────────────────────────────────────────────────────
 	let iconUploadError = $state('');
 	// svelte-ignore state_referenced_locally
@@ -168,11 +166,6 @@
 		toastTimer = setTimeout(() => (toast = ''), 2500);
 	}
 
-	// ── Reactive avatar from auth store ───────────────────────────────────
-	const authUser = authStore.user;
-	// svelte-ignore state_referenced_locally
-	let localAvatarUrl = $state(user.avatarUrl ?? null);
-	$effect(() => { if ($authUser?.avatarUrl) localAvatarUrl = $authUser.avatarUrl; });
 	$effect(() => { if ($livekitError) showToast($livekitError); });
 
 	// ── Unread counts ──────────────────────────────────────────────────────
@@ -839,26 +832,6 @@
 		}
 	}
 
-	// ── Profile ───────────────────────────────────────────────────────────
-	async function uploadAvatar(e: Event) {
-		const file = (e.target as HTMLInputElement).files?.[0];
-		if (!file) return;
-		try {
-			await authStore.updateAvatar(file);
-			showProfile = false;
-		} catch {
-			showToast('Error al subir el avatar');
-		}
-		(e.target as HTMLInputElement).value = '';
-	}
-
-	async function handleLogout() {
-		socketStore.disconnect();
-		livekitStore.disconnect();
-		await authStore.logout();
-		goto('/login');
-	}
-
 	// ── Helpers ───────────────────────────────────────────────────────────
 	async function copyInviteLink() {
 		const url = `${location.origin}/servers/${server.slug}`;
@@ -1049,39 +1022,7 @@
 			{/each}
 		</nav>
 
-		<!-- User area -->
-		<div class="user-area">
-			{#if voiceChannelId}
-				<div class="voice-status">
-					<span class="voice-status-label">🟢 En voz</span>
-					<div class="voice-status-actions">
-						<button class="ctrl-btn" class:active={$micEnabledStore} title={$micEnabledStore ? 'Silenciar' : 'Activar micro'} onclick={() => livekitStore.toggleMic()}>
-							{#if $micEnabledStore}<Mic size={14} />{:else}<MicOff size={14} />{/if}
-						</button>
-						<button class="ctrl-btn danger" title="Desconectar" onclick={leaveVoice}>📵</button>
-					</div>
-				</div>
-			{/if}
-			<div class="user-info-row">
-				<button class="user-info" onclick={() => (showProfile = !showProfile)} title="Perfil">
-					{#if localAvatarUrl}
-						<img src={localAvatarUrl} class="avatar-sm" alt="" />
-					{:else}
-						<div class="avatar-sm avatar-init">{avatarInitial(user.username)}</div>
-					{/if}
-					<span class="username-text">{user.username}</span>
-				</button>
-				{#if showProfile}
-					<div class="profile-menu" role="menu">
-						<label class="profile-menu-item">
-							Cambiar avatar
-							<input type="file" accept="image/jpeg,image/png,image/gif,image/webp" class="hidden-file" onchange={uploadAvatar} />
-						</label>
-						<button class="profile-menu-item danger" onclick={handleLogout}>Cerrar sesión</button>
-					</div>
-				{/if}
-			</div>
-		</div>
+		<UserStatusBar />
 	</aside>
 
 	<!-- Server name dropdown (fixed-positioned to escape sidebar overflow) -->
