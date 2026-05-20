@@ -3,6 +3,7 @@
 	import { page } from '$app/stores';
 	import { onMount, onDestroy } from 'svelte';
 	import { goto, invalidateAll } from '$app/navigation';
+	import { browser } from '$app/environment';
 	import { authStore } from '$lib/auth.js';
 	import { dmUnread, incrementUnread } from '$lib/dmStore.js';
 	import { conversationsStore } from '$lib/conversationsStore.js';
@@ -110,7 +111,7 @@
 			_activeSock.off('dm:conversation:joined', handleConversationJoined);
 			_activeSock.off('connect', onSocketReconnect);
 		}
-		window.removeEventListener('beforeunload', leaveActiveVoice);
+		if (browser) window.removeEventListener('beforeunload', leaveActiveVoice);
 	});
 
 	const user = $derived(data.user as { id: string; username: string; role: string; avatarUrl?: string | null } | null);
