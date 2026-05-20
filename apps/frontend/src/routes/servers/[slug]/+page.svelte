@@ -200,17 +200,23 @@
 	let voiceLayout = $state<'grid' | 'spotlight' | 'sidebar'>('grid');
 	let fullscreenShare = $state<string | null>(null);
 	let _reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+	let _reconnectAttempts = 0;
+	const MAX_RECONNECT_ATTEMPTS = 5;
 
 	$effect(() => {
 		if ($livekitStatus === 'error' && voiceChannelId && !joiningVoice) {
+			if (_reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) return;
 			if (_reconnectTimer) clearTimeout(_reconnectTimer);
 			_reconnectTimer = setTimeout(async () => {
 				const ch = channels.find((c) => c.id === voiceChannelId);
-				if (ch && $livekitStatus === 'error') await joinVoiceChannel(ch);
+				if (ch && $livekitStatus === 'error') {
+					_reconnectAttempts++;
+					await joinVoiceChannel(ch);
+				}
 			}, 3000);
-		} else if ($livekitStatus !== 'error' && _reconnectTimer) {
-			clearTimeout(_reconnectTimer);
-			_reconnectTimer = null;
+		} else if ($livekitStatus !== 'error') {
+			_reconnectAttempts = 0;
+			if (_reconnectTimer) { clearTimeout(_reconnectTimer); _reconnectTimer = null; }
 		}
 	});
 
@@ -302,7 +308,13 @@
 				socket.emit('channel:join', { channelId: selectedChannel.id });
 				if (selectedChannel.type === 'TEXT') loadMessages(selectedChannel.id);
 			}
-			if (voiceChannelId) socket.emit('voice:join', { channelId: voiceChannelId });
+			// Only signal voice presence if LiveKit is still connected.
+			// If LiveKit is in error state the auto-reconnect timer handles a full rejoin
+			// (including LiveKit reconnect). Emitting voice:join here while LiveKit is down
+			// would show the user as "in channel" to peers but with no audio.
+			if (voiceChannelId && get(livekitStatus) !== 'error') {
+				socket.emit('voice:join', { channelId: voiceChannelId });
+			}
 		});
 
 		socket.emit('server:subscribe', {
@@ -330,6 +342,7 @@
 			socket.off('disconnect');
 			socket.off('connect');
 			clearTimeout(typingTimer);
+			if (_reconnectTimer) { clearTimeout(_reconnectTimer); _reconnectTimer = null; }
 			// Only leave the TEXT channel socket room — voice persists until user explicitly leaves
 			if (selectedChannel?.type === 'TEXT') socket.emit('channel:leave', { channelId: selectedChannel.id });
 		};
@@ -594,6 +607,8 @@
 	async function joinVoiceChannel(ch: Channel) {
 		if (joiningVoice) return;
 		joiningVoice = true;
+		// Consume mic-restore flag BEFORE disconnect() clears it internally
+		const shouldRestoreMic = livekitStore.consumeWasEnabled();
 		try {
 			// Leave any active voice call (including one on a different server)
 			const currentVoice = get(activeVoice);
@@ -618,6 +633,11 @@
 			voiceChannelId = ch.id;
 			selectedChannel = ch;
 			activeVoice.set({ channelId: ch.id, channelName: ch.name, serverId: server.id, serverSlug: server.slug, serverName: server.name });
+			_reconnectAttempts = 0;
+			// Auto-restore mic if it was on before the unexpected disconnect
+			if (shouldRestoreMic) {
+				try { await livekitStore.toggleMic(); } catch { /* user can re-enable manually */ }
+			}
 		} finally {
 			joiningVoice = false;
 		}

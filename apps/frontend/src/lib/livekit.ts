@@ -49,6 +49,7 @@ function createLiveKitStore() {
 	let _rafId: number | null = null;
 	let _diagInterval: ReturnType<typeof setInterval> | null = null;
 	let _audioEls: HTMLAudioElement[] = [];
+	let _wasEnabled = false; // mic was on before unexpected disconnect
 
 	async function connect(url: string, token: string): Promise<Room> {
 		status.set('connecting');
@@ -92,6 +93,7 @@ function createLiveKitStore() {
 			_screenAudioTrack?.stop(); _screenAudioTrack = null;
 			_audioEls.forEach((el) => el.remove());
 			_audioEls = [];
+			_wasEnabled = get(micEnabled); // save mic state before clearing for auto-restore on reconnect
 			micEnabled.set(false);
 			audioLevel.set(0);
 			activeSpeakers.set([]);
@@ -400,7 +402,14 @@ function createLiveKitStore() {
 		errorMessage.set(msg);
 	}
 
+	function consumeWasEnabled(): boolean {
+		const v = _wasEnabled;
+		_wasEnabled = false;
+		return v;
+	}
+
 	function disconnect(): void {
+		_wasEnabled = false; // clear on explicit disconnect — user chose to leave
 		const roomToDisconnect = _room;
 		_room = null; // null first so RoomEvent.Disconnected handler knows this is explicit
 		if (_rafId) { cancelAnimationFrame(_rafId); _rafId = null; }
@@ -430,7 +439,7 @@ function createLiveKitStore() {
 		canPlayAudio, diagnostics, micGain, outputDevices, selectedOutputId, outputVolume,
 		activeSpeakers, mutedParticipants, screenEnabled, screenQuality, screenShares,
 		connect, enumerateDevices, startAudio, toggleMic, toggleScreen,
-		setGain, selectDevice, selectOutputDevice, setOutputVolume, setError, disconnect,
+		setGain, selectDevice, selectOutputDevice, setOutputVolume, setError, disconnect, consumeWasEnabled,
 	};
 }
 
