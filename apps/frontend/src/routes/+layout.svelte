@@ -12,7 +12,10 @@
 	import type { ChatSocket } from '$lib/socket.js';
 	import { playPing } from '$lib/ping.js';
 	import { uploadStore, formatSpeed } from '$lib/uploadStore.svelte.js';
-	import { X, Check, MessageSquare, Map, Globe, Lock, ClipboardList } from 'lucide-svelte';
+	import { activeVoice } from '$lib/voiceStore.js';
+	import { livekitStore } from '$lib/livekit.js';
+	import { get } from 'svelte/store';
+	import { X, Check, MessageSquare, Map, Globe, Lock, ClipboardList, PhoneOff, Volume2 } from 'lucide-svelte';
 
 	let { data, children } = $props();
 
@@ -60,11 +63,22 @@
 		if (_activeSock && user) joinAllDmRooms(_activeSock);
 	}
 
+	function leaveActiveVoice() {
+		const av = get(activeVoice);
+		if (!av) return;
+		const socket = _activeSock;
+		socket?.emit('voice:leave', { channelId: av.channelId });
+		livekitStore.disconnect();
+		activeVoice.set(null);
+	}
+
 	onMount(() => {
 		authStore.init();
 		if (user && typeof Notification !== 'undefined' && Notification.permission === 'default') {
 			Notification.requestPermission().catch(() => {});
 		}
+
+		window.addEventListener('beforeunload', leaveActiveVoice);
 		// Seed server unread badges from server-loaded data
 		const initialUnread = (data as any).serverUnread as Record<string, number> | undefined;
 		if (initialUnread) {
@@ -96,6 +110,7 @@
 			_activeSock.off('dm:conversation:joined', handleConversationJoined);
 			_activeSock.off('connect', onSocketReconnect);
 		}
+		window.removeEventListener('beforeunload', leaveActiveVoice);
 	});
 
 	const user = $derived(data.user as { id: string; username: string; role: string; avatarUrl?: string | null } | null);
@@ -268,6 +283,19 @@
 	</div>
 
 	<UserStatusBar />
+
+	<!-- Global voice HUD -->
+	{#if $activeVoice}
+		<div class="voice-hud">
+			<span class="voice-hud-icon"><Volume2 size={14} /></span>
+			<div class="voice-hud-info">
+				<span class="voice-hud-channel">{$activeVoice.channelName}</span>
+				<span class="voice-hud-server">{$activeVoice.serverName}</span>
+			</div>
+			<a href="/servers/{$activeVoice.serverSlug}" class="voice-hud-link">Volver</a>
+			<button class="voice-hud-leave" onclick={leaveActiveVoice} title="Salir de la llamada"><PhoneOff size={14} /></button>
+		</div>
+	{/if}
 
 	<!-- Global upload tray -->
 	{#if uploadStore.list.length > 0}
@@ -806,6 +834,75 @@
 	.btn-ghost:hover { border-color: var(--accent); color: var(--accent); }
 
 	.error { font-size: 0.75rem; color: var(--error); }
+
+	/* ── Global voice HUD ── */
+	.voice-hud {
+		position: fixed;
+		bottom: 56px;
+		left: 4px;
+		z-index: 590;
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		background: var(--bg-surface);
+		border: 1px solid var(--border-strong);
+		border-radius: var(--radius-lg);
+		padding: 0.4rem 0.6rem;
+		box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+		min-width: 180px;
+		max-width: 220px;
+	}
+
+	.voice-hud-icon { color: var(--success, #22c55e); display: flex; align-items: center; flex-shrink: 0; }
+
+	.voice-hud-info {
+		flex: 1;
+		display: flex;
+		flex-direction: column;
+		overflow: hidden;
+	}
+
+	.voice-hud-channel {
+		font-size: 0.72rem;
+		font-weight: 700;
+		color: var(--text-primary);
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+
+	.voice-hud-server {
+		font-size: 0.62rem;
+		color: var(--text-muted);
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+
+	.voice-hud-link {
+		font-size: 0.65rem;
+		color: var(--accent);
+		text-decoration: none;
+		flex-shrink: 0;
+		font-weight: 600;
+	}
+
+	.voice-hud-link:hover { text-decoration: underline; }
+
+	.voice-hud-leave {
+		background: none;
+		border: none;
+		color: var(--error, #ef4444);
+		cursor: pointer;
+		display: flex;
+		align-items: center;
+		padding: 0.15rem;
+		border-radius: var(--radius-sm);
+		flex-shrink: 0;
+		transition: background var(--transition);
+	}
+
+	.voice-hud-leave:hover { background: var(--error-surface, rgba(239,68,68,0.12)); }
 
 	/* ── Global upload tray ── */
 	.upload-tray {

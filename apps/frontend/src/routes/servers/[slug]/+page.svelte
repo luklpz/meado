@@ -1,9 +1,11 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { get } from 'svelte/store';
 	import { goto } from '$app/navigation';
 	import { authStore } from '$lib/auth.js';
 	import { socketStore } from '$lib/socket.js';
 	import { livekitStore } from '$lib/livekit.js';
+	import { activeVoice } from '$lib/voiceStore.js';
 	import { clearServerUnread, setServerUnread } from '$lib/serverUnread.js';
 	import type { MessagePayload, VoiceMember, MessageReaction } from '$lib/types/socket-events.types.js';
 	import { PERMISSION_LABELS, PERMISSION_CATEGORIES } from '$lib/permissions.js';
@@ -308,6 +310,12 @@
 			channelIds: channels.filter((c) => c.type === 'VOICE').map((c) => c.id),
 		});
 
+		// Restore voice state if returning to this server while a call is active
+		const av = get(activeVoice);
+		if (av && av.serverId === server.id) {
+			voiceChannelId = av.channelId;
+		}
+
 		if (textChannels.length > 0) selectChannel(textChannels[0]);
 
 		return () => {
@@ -322,8 +330,8 @@
 			socket.off('disconnect');
 			socket.off('connect');
 			clearTimeout(typingTimer);
-			if (selectedChannel) socket.emit('channel:leave', { channelId: selectedChannel.id });
-			if (voiceChannelId) { socket.emit('voice:leave', { channelId: voiceChannelId }); livekitStore.disconnect(); }
+			// Only leave the TEXT channel socket room — voice persists until user explicitly leaves
+			if (selectedChannel?.type === 'TEXT') socket.emit('channel:leave', { channelId: selectedChannel.id });
 		};
 	});
 
@@ -587,7 +595,15 @@
 		if (joiningVoice) return;
 		joiningVoice = true;
 		try {
-			if (voiceChannelId) await leaveVoice();
+			// Leave any active voice call (including one on a different server)
+			const currentVoice = get(activeVoice);
+			if (currentVoice) {
+				const socket = socketStore.raw();
+				socket?.emit('voice:leave', { channelId: currentVoice.channelId });
+				livekitStore.disconnect();
+				activeVoice.set(null);
+				voiceChannelId = null;
+			}
 			const res = await fetch(`/api/channels/${ch.id}/livekit-token`, { credentials: 'include' });
 			if (!res.ok) { showToast('No se pudo obtener acceso al canal de voz'); return; }
 			const { token, url } = await res.json();
@@ -601,6 +617,7 @@
 			socket?.emit('voice:join', { channelId: ch.id });
 			voiceChannelId = ch.id;
 			selectedChannel = ch;
+			activeVoice.set({ channelId: ch.id, channelName: ch.name, serverId: server.id, serverSlug: server.slug, serverName: server.name });
 		} finally {
 			joiningVoice = false;
 		}
@@ -612,6 +629,7 @@
 		socket?.emit('voice:leave', { channelId: voiceChannelId });
 		livekitStore.disconnect();
 		voiceChannelId = null;
+		activeVoice.set(null);
 		const dest = prevTextChannel ?? (textChannels.length > 0 ? textChannels[0] : null);
 		if (dest) selectChannel(dest);
 	}
