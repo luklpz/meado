@@ -480,8 +480,9 @@
 		const content = msgInput.trim();
 		msgInput = '';
 		const channelId = selectedChannel.id;
+
+		let url: string, name: string, size: number, mimeType: string;
 		try {
-			let url: string, name: string, size: number, mimeType: string;
 			if (goesToCloudinary(file)) {
 				const r = await uploadFile(file);
 				({ url, name, size, mimeType } = r);
@@ -489,6 +490,9 @@
 				const r = await uploadToDrive(file);
 				url = r.url; name = file.name; size = file.size; mimeType = file.type || 'application/octet-stream';
 			}
+		} catch { return; } // upload tray already shows the error
+
+		try {
 			const msgRes = await fetch(`/api/channels/${channelId}/messages`, {
 				method: 'POST',
 				credentials: 'include',
@@ -497,7 +501,7 @@
 			});
 			if (!msgRes.ok) showToast('Error al enviar el archivo');
 		} catch {
-			// upload tray shows the specific error
+			showToast('Error al enviar el archivo');
 		}
 	}
 
@@ -1285,7 +1289,7 @@
 			<div class="input-area">
 				<div class="input-box">
 					<button class="attach-btn" title="Adjuntar archivo" onclick={() => fileInput?.click()}><Paperclip size={16} /></button>
-					<input class="hidden-file" type="file" accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.zip,.rar" bind:this={fileInput} onchange={onFileChange} />
+					<input class="hidden-file" type="file" accept="image/jpeg,image/png,image/gif,image/webp,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.zip,.rar" bind:this={fileInput} onchange={onFileChange} />
 					<textarea class="msg-input" placeholder="Escribir en #{selectedChannel.name}" bind:value={msgInput} onkeydown={onKeydown} onpaste={onPaste} rows="1" maxlength="4000"></textarea>
 					<button class="send-btn" disabled={!msgInput.trim() || sendingMsg} onclick={() => sendMessage()}><Send size={15} /></button>
 				</div>

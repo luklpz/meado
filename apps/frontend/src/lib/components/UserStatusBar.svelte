@@ -41,10 +41,10 @@
 	// ── Element refs ──────────────────────────────────────────────────────
 	let themeBtnEl = $state<HTMLButtonElement>();
 	let statusBtnEl = $state<HTMLButtonElement>();
-	let micChevronEl: HTMLButtonElement;
-	let outChevronEl: HTMLButtonElement;
-	let fileInput: HTMLInputElement;
-	let settingsFileInput: HTMLInputElement;
+	let micChevronEl = $state<HTMLButtonElement | null>(null);
+	let outChevronEl = $state<HTMLButtonElement | null>(null);
+	let fileInput = $state<HTMLInputElement | null>(null);
+	let settingsFileInput = $state<HTMLInputElement | null>(null);
 
 	// ── Profile panel state ───────────────────────────────────────────────
 	let uploading = $state(false);
@@ -128,7 +128,7 @@
 	async function openMicFlyout() {
 		await requestAudioPerm();
 		await livekitStore.enumerateDevices();
-		micFlyoutLeft = clampLeft(micChevronEl.getBoundingClientRect().left, 260);
+		micFlyoutLeft = clampLeft(micChevronEl?.getBoundingClientRect().left ?? 0, 260);
 		showMicFlyout = !showMicFlyout;
 		showOutFlyout = false;
 	}
@@ -136,7 +136,7 @@
 	// ── Output flyout ─────────────────────────────────────────────────────
 	async function openOutFlyout() {
 		await livekitStore.enumerateDevices();
-		outFlyoutLeft = clampLeft(outChevronEl.getBoundingClientRect().left, 260);
+		outFlyoutLeft = clampLeft(outChevronEl?.getBoundingClientRect().left ?? 0, 260);
 		showOutFlyout = !showOutFlyout;
 		showMicFlyout = false;
 	}
@@ -326,7 +326,7 @@
 					<div class="settings-section">
 						<div class="settings-label">Foto de perfil</div>
 						<div class="settings-avatar-row">
-							<button class="settings-avatar-btn" onclick={() => settingsFileInput.click()} disabled={settingsUploading} title="Cambiar avatar">
+							<button class="settings-avatar-btn" onclick={() => settingsFileInput?.click()} disabled={settingsUploading} title="Cambiar avatar">
 								{#if $user?.avatarUrl}
 									<img src={$user.avatarUrl} alt={$user.username} class="settings-avatar-img" />
 								{:else if $user}
@@ -452,7 +452,7 @@
 			<div class="card-header">
 				<div class="banner"></div>
 				<div class="header-bottom">
-					<button class="avatar-wrap" onclick={() => fileInput.click()} disabled={uploading} title="Cambiar foto de perfil">
+					<button class="avatar-wrap" onclick={() => fileInput?.click()} disabled={uploading} title="Cambiar foto de perfil">
 						{#if $user?.avatarUrl}
 							<img src={$user.avatarUrl} alt={$user.username} class="avatar-lg" />
 						{:else if $user}

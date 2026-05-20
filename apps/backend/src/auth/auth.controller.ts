@@ -1,6 +1,6 @@
 import {
   Controller, Post, Get, Patch, Body, Res, Req, Query,
-  HttpCode, UseGuards, UseInterceptors, UploadedFile,
+  HttpCode, UseGuards, UseInterceptors, UploadedFile, BadRequestException,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { Throttle } from '@nestjs/throttler';
@@ -76,9 +76,10 @@ export class AuthController {
     limits: { fileSize: 10 * 1024 * 1024 },
   }))
   async uploadAvatar(
-    @UploadedFile() file: Express.Multer.File,
+    @UploadedFile() file: Express.Multer.File | undefined,
     @Req() req: Request,
   ) {
+    if (!file) throw new BadRequestException('No se recibió ningún archivo');
     return this.authService.updateAvatar((req as any).user.id, file);
   }
 

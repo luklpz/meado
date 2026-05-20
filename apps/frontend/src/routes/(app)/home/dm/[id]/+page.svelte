@@ -162,12 +162,17 @@
 		sock.emit('dm:reaction:toggle', { messageId: msg.id, emoji });
 	}
 
+	function handleReconnect() {
+		sock?.emit('dm:join', { conversationId: conversation.id });
+	}
+
 	onMount(() => {
 		clearUnread(conversation.id);
 		const token = authStore.getSocketToken();
 		if (token) {
 			sock = socketStore.connect(token);
 			sock.emit('dm:join', { conversationId: conversation.id });
+			sock.on('connect', handleReconnect);
 			sock.on('dm:message:created', handleNewMessage);
 			sock.on('dm:typing:update', handleTypingUpdate);
 			sock.on('dm:message:updated', handleDmUpdated);
@@ -179,6 +184,7 @@
 	});
 
 	onDestroy(() => {
+		sock?.off('connect', handleReconnect);
 		sock?.off('dm:message:created', handleNewMessage);
 		sock?.off('dm:typing:update', handleTypingUpdate);
 		sock?.off('dm:message:updated', handleDmUpdated);
@@ -211,8 +217,8 @@
 		const content = msgInput.trim();
 		msgInput = '';
 		const convId = conversation.id;
+		let url: string, name: string, size: number, mimeType: string;
 		try {
-			let url: string, name: string, size: number, mimeType: string;
 			if (goesToCloudinary(file)) {
 				const r = await uploadFile(file);
 				({ url, name, size, mimeType } = r);
@@ -220,13 +226,14 @@
 				const r = await uploadToDrive(file);
 				url = r.url; name = file.name; size = file.size; mimeType = file.type || 'application/octet-stream';
 			}
-			await fetch(`/api/dm/${convId}/messages`, {
-				method: 'POST',
-				credentials: 'include',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ content: content || undefined, attachmentUrl: url, attachmentName: name, attachmentSize: size, attachmentMimeType: mimeType }),
-			});
-		} catch { /* upload tray shows error */ }
+		} catch { return; } // upload tray already shows the error
+
+		await fetch(`/api/dm/${convId}/messages`, {
+			method: 'POST',
+			credentials: 'include',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ content: content || undefined, attachmentUrl: url, attachmentName: name, attachmentSize: size, attachmentMimeType: mimeType }),
+		}).catch(() => {});
 	}
 
 	function onFileChange(e: Event) {
@@ -573,7 +580,7 @@
 		<div class="input-area">
 			<div class="input-box">
 				<button class="attach-btn" title="Adjuntar archivo" onclick={() => fileInput?.click()}><Paperclip size={16} /></button>
-				<input class="hidden-file" type="file" accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.zip,.rar" bind:this={fileInput} onchange={onFileChange} />
+				<input class="hidden-file" type="file" accept="image/jpeg,image/png,image/gif,image/webp,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.zip,.rar" bind:this={fileInput} onchange={onFileChange} />
 				<textarea
 					placeholder="Escribe un mensaje a {convName(conversation)}…"
 					bind:value={msgInput}

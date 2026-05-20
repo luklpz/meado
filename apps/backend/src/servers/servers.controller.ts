@@ -1,7 +1,7 @@
 import {
   Controller, Get, Post, Patch, Delete,
   Param, Body, Req, UseGuards, UseInterceptors, UploadedFile,
-  ForbiddenException, InternalServerErrorException,
+  BadRequestException, ForbiddenException, InternalServerErrorException,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
@@ -61,9 +61,10 @@ export class ServersController {
   @UseInterceptors(FileInterceptor('file', { storage: memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } }))
   updateIcon(
     @Param('slug') slug: string,
-    @UploadedFile() file: Express.Multer.File,
+    @UploadedFile() file: Express.Multer.File | undefined,
     @Req() req: Request,
   ) {
+    if (!file) throw new BadRequestException('No se recibió ningún archivo');
     const { id, role } = user(req);
     return this.serversService.updateIcon(slug, file, id, role);
   }
