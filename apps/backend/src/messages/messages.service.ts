@@ -65,6 +65,7 @@ export class MessagesService {
     if (!content?.trim() && (!attachments || attachments.length === 0)) {
       throw new BadRequestException('Message must have content or attachment');
     }
+    if (content && content.length > 4000) throw new BadRequestException('Message too long (max 4000 chars)');
     const isMember = await this.verifyChannelMember(channelId, authorId);
     if (!isMember) throw new ForbiddenException('Not a member of this server');
     const msg = await this.prisma.message.create({

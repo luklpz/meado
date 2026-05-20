@@ -37,13 +37,13 @@ export class CloudinaryService {
         },
         (error, result) => {
           if (error || !result) {
-            reject(new InternalServerErrorException('Cloudinary upload failed'));
+            reject(new InternalServerErrorException('Error al subir el archivo. Comprueba la configuración del servicio de almacenamiento.'));
           } else {
             resolve(result.secure_url);
           }
         },
       );
-      stream.on('error', () => reject(new InternalServerErrorException('Cloudinary upload failed')));
+      stream.on('error', () => reject(new InternalServerErrorException('Error al subir el archivo. Comprueba la configuración del servicio de almacenamiento.')));
       stream.end(buffer);
     });
   }

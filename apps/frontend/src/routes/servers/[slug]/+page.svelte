@@ -476,7 +476,7 @@
 			});
 			if (!msgRes.ok) showToast('Error al enviar el archivo');
 		} catch {
-			showToast('Error al subir el archivo');
+			// upload tray shows the specific error
 		}
 	}
 
@@ -1129,7 +1129,7 @@
 									{#if editingId === msg.id}
 										<div class="edit-box">
 											<!-- svelte-ignore a11y_autofocus -->
-										<textarea class="edit-input" bind:value={editingContent} onkeydown={(e) => onEditKeydown(e, msg)} rows="2" autofocus></textarea>
+										<textarea class="edit-input" bind:value={editingContent} onkeydown={(e) => onEditKeydown(e, msg)} rows="2" maxlength="4000" autofocus></textarea>
 											<div class="edit-actions">
 												<button class="edit-cancel" onclick={cancelEdit}>Cancelar</button>
 												<button class="edit-save" onclick={() => submitEdit(msg)}>Guardar</button>
@@ -1175,7 +1175,7 @@
 									{#if editingId === msg.id}
 										<div class="edit-box">
 											<!-- svelte-ignore a11y_autofocus -->
-										<textarea class="edit-input" bind:value={editingContent} onkeydown={(e) => onEditKeydown(e, msg)} rows="2" autofocus></textarea>
+										<textarea class="edit-input" bind:value={editingContent} onkeydown={(e) => onEditKeydown(e, msg)} rows="2" maxlength="4000" autofocus></textarea>
 											<div class="edit-actions">
 												<button class="edit-cancel" onclick={cancelEdit}>Cancelar</button>
 												<button class="edit-save" onclick={() => submitEdit(msg)}>Guardar</button>

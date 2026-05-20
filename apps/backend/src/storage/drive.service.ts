@@ -36,9 +36,9 @@ export class DriveService {
       },
     );
 
-    if (!res.ok) throw new InternalServerErrorException('Drive init failed');
+    if (!res.ok) throw new InternalServerErrorException('No se pudo iniciar la subida a Drive. Comprueba las credenciales de Google.');
     const uploadUrl = res.headers.get('location');
-    if (!uploadUrl) throw new InternalServerErrorException('No upload URL from Drive');
+    if (!uploadUrl) throw new InternalServerErrorException('Drive no devolvió una URL de subida válida.');
 
     const nonce = crypto.randomUUID();
     this.pendingNonces.add(nonce);
@@ -85,7 +85,7 @@ export class DriveService {
       body,
     });
 
-    if (!res.ok) throw new InternalServerErrorException('Drive upload failed');
+    if (!res.ok) throw new InternalServerErrorException('Error al subir el archivo a Drive.');
     const { id: fileId } = await res.json() as { id: string };
 
     const drive = google.drive({ version: 'v3', auth: this.oauthClient });

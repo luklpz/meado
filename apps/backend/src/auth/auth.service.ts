@@ -3,11 +3,15 @@ import {
 } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import * as jwt from 'jsonwebtoken';
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const disposableDomains: string[] = require('disposable-email-domains');
 import { PrismaService } from '../prisma/prisma.service';
 import { EmailService } from '../email/email.service';
 import { CloudinaryService } from '../storage/cloudinary.service';
 import type { RegisterDto } from './dto/register.dto';
 import type { LoginDto } from './dto/login.dto';
+
+const DISPOSABLE_DOMAINS = new Set(disposableDomains);
 
 export interface PublicUser {
   id: string;
@@ -55,6 +59,11 @@ export class AuthService {
     }
     if (!dto.password || dto.password.length < 8) {
       throw new BadRequestException('La contraseña debe tener al menos 8 caracteres');
+    }
+
+    const emailDomain = dto.email.slice(dto.email.lastIndexOf('@') + 1).toLowerCase();
+    if (DISPOSABLE_DOMAINS.has(emailDomain)) {
+      throw new BadRequestException('No se permiten direcciones de email temporales o desechables');
     }
 
     const normalizedEmail = normalizeEmail(dto.email);

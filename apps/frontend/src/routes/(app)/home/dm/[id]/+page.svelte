@@ -459,7 +459,7 @@
 								</div>
 								{#if editingId === msg.id}
 									<div class="edit-box">
-										<textarea bind:value={editingContent} onkeydown={(e) => onEditKeydown(e, msg)} rows="1" class="edit-input"></textarea>
+										<textarea bind:value={editingContent} onkeydown={(e) => onEditKeydown(e, msg)} rows="1" maxlength="4000" class="edit-input"></textarea>
 										<div class="edit-actions">
 											<button class="edit-save" onclick={() => submitEdit(msg)}>Guardar</button>
 											<button class="edit-cancel" onclick={cancelEdit}>Esc · Cancelar</button>
@@ -506,7 +506,7 @@
 							<div class="msg-body">
 								{#if editingId === msg.id}
 									<div class="edit-box">
-										<textarea bind:value={editingContent} onkeydown={(e) => onEditKeydown(e, msg)} rows="1" class="edit-input"></textarea>
+										<textarea bind:value={editingContent} onkeydown={(e) => onEditKeydown(e, msg)} rows="1" maxlength="4000" class="edit-input"></textarea>
 										<div class="edit-actions">
 											<button class="edit-save" onclick={() => submitEdit(msg)}>Guardar</button>
 											<button class="edit-cancel" onclick={cancelEdit}>Esc · Cancelar</button>

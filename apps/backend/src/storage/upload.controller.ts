@@ -31,8 +31,10 @@ export class UploadController {
     limits: { fileSize: MAX_SIZE },
   }))
   async uploadFile(@UploadedFile() file: Express.Multer.File | undefined) {
-    if (!file) throw new BadRequestException('No file provided');
-    if (!ALLOWED_MIME_TYPES.has(file.mimetype)) throw new BadRequestException('Tipo de archivo no permitido');
+    if (!file) throw new BadRequestException('No se recibió ningún archivo');
+    if (!ALLOWED_MIME_TYPES.has(file.mimetype)) {
+      throw new BadRequestException(`Tipo de archivo no permitido (${file.mimetype}). Solo se aceptan imágenes (JPEG, PNG, GIF, WebP), PDF y archivos de texto/código.`);
+    }
 
     const resourceType = file.mimetype.startsWith('image/') ? 'image' : 'raw';
 
