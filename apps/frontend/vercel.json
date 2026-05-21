@@ -1,5 +1,5 @@
 {
   "rewrites": [
-    { "source": "/api/:path*", "destination": "https://meado.onrender.com/:path*" }
+    { "source": "/api/:path*", "destination": "https://meado-backend.onrender.com/:path*" }
   ]
 }
