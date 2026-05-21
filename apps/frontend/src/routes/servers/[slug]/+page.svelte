@@ -11,7 +11,7 @@
 	import { PERMISSION_LABELS, PERMISSION_CATEGORIES } from '$lib/permissions.js';
 	import PhaserGame from '$lib/game/PhaserGame.svelte';
 	import ServerProfileCard from '$lib/components/ServerProfileCard.svelte';
-	import { uploadFile, goesToCloudinary } from '$lib/upload.js';
+	import { uploadFile, goesToCloudinary, cloudinaryDownloadUrl } from '$lib/upload.js';
 	import {
 		Mic, MicOff, Monitor, MonitorOff, PhoneOff,
 		LayoutGrid, Focus, PanelRight,
@@ -1204,7 +1204,7 @@
 														<a href={att.url} target="_blank" rel="noreferrer" class="att-name">{att.name}</a>
 														<span class="att-size">{fileSize(att.size)}</span>
 													</div>
-													<a href={att.url} download={att.name} rel="noreferrer" class="att-dl" aria-label="Descargar"><Download size={14} /></a>
+													<a href={cloudinaryDownloadUrl(att.url, att.name)} rel="noreferrer" class="att-dl" aria-label="Descargar"><Download size={14} /></a>
 												</div>
 											{/if}
 										</div>
@@ -1250,7 +1250,7 @@
 														<a href={att.url} target="_blank" rel="noreferrer" class="att-name">{att.name}</a>
 														<span class="att-size">{fileSize(att.size)}</span>
 													</div>
-													<a href={att.url} download={att.name} rel="noreferrer" class="att-dl" aria-label="Descargar"><Download size={14} /></a>
+													<a href={cloudinaryDownloadUrl(att.url, att.name)} rel="noreferrer" class="att-dl" aria-label="Descargar"><Download size={14} /></a>
 												</div>
 											{/if}
 										</div>

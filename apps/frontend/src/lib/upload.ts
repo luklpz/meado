@@ -13,6 +13,12 @@ export function goesToCloudinary(file: File): boolean {
   return file.size <= MAX_CLOUDINARY;
 }
 
+export function cloudinaryDownloadUrl(url: string, filename: string): string {
+  if (!url.includes('res.cloudinary.com')) return url;
+  const safe = encodeURIComponent(filename).replace(/%2F/g, '/');
+  return url.replace('/upload/', `/upload/fl_attachment:${safe}/`);
+}
+
 export async function uploadFile(file: File): Promise<UploadResult> {
   const uploadId = crypto.randomUUID();
   uploadStore.add(uploadId, file.name);
