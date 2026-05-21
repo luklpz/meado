@@ -1,8 +1,9 @@
 import {
-  Controller, Post, UploadedFile, UseGuards, UseInterceptors, BadRequestException,
+  Controller, Get, Post, UploadedFile, UseGuards, UseInterceptors, BadRequestException,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
+import { v2 as cloudinary } from 'cloudinary';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CloudinaryService } from './cloudinary.service';
 
@@ -24,6 +25,19 @@ const MAX_SIZE = 25 * 1024 * 1024; // 25 MB
 @Controller('upload')
 export class UploadController {
   constructor(private readonly cloudinary: CloudinaryService) {}
+
+  @Get('ping')
+  async ping() {
+    const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
+    const apiKey = process.env.CLOUDINARY_API_KEY;
+    const hasSecret = !!process.env.CLOUDINARY_API_SECRET;
+    try {
+      const result = await cloudinary.api.ping();
+      return { ok: true, status: result.status, cloudName, apiKeyPrefix: apiKey?.slice(0, 4), hasSecret };
+    } catch (e) {
+      return { ok: false, error: (e as Error).message, cloudName, apiKeyPrefix: apiKey?.slice(0, 4), hasSecret };
+    }
+  }
 
   @Post()
   @UseInterceptors(FileInterceptor('file', {
