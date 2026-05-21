@@ -41,8 +41,12 @@ export class UploadController {
       throw new BadRequestException('Tipo de archivo no permitido (SVG).');
     }
 
+    const safeFilename = file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_');
+    const publicId = `${Date.now()}-${safeFilename}`;
+
     const url = await this.cloudinary.upload(file.buffer, {
       folder: 'meado/attachments',
+      publicId,
       resourceType: 'auto',
     });
 

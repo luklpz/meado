@@ -8,7 +8,7 @@
 	import { conversationsStore } from '$lib/conversationsStore.js';
 	import { playPing } from '$lib/ping.js';
 	import { Users, UserPlus, Pencil, Trash2, Download, Send, Paperclip, Film, Music, FileText, FileSpreadsheet, Archive, File as FileIcon } from 'lucide-svelte';
-	import { uploadFile, goesToCloudinary, cloudinaryDownloadUrl } from '$lib/upload.js';
+	import { uploadFile, goesToCloudinary } from '$lib/upload.js';
 
 	let { data } = $props();
 	const user = $derived(data.user as { id: string; username: string; role: string; avatarUrl?: string | null });
@@ -492,7 +492,7 @@
 															<a href={att.url} target="_blank" rel="noreferrer" class="att-file-name">{att.name}</a>
 															<span class="att-size">{fileSize(att.size)}</span>
 														</div>
-														<a href={cloudinaryDownloadUrl(att.url, att.name)} rel="noreferrer" class="att-dl" aria-label="Descargar"><Download size={14} /></a>
+														<a href={att.url} target="_blank" rel="noreferrer" class="att-dl" aria-label="Descargar"><Download size={14} /></a>
 													</div>
 												{/if}
 											{/each}
@@ -539,7 +539,7 @@
 															<a href={att.url} target="_blank" rel="noreferrer" class="att-file-name">{att.name}</a>
 															<span class="att-size">{fileSize(att.size)}</span>
 														</div>
-														<a href={cloudinaryDownloadUrl(att.url, att.name)} rel="noreferrer" class="att-dl" aria-label="Descargar"><Download size={14} /></a>
+														<a href={att.url} target="_blank" rel="noreferrer" class="att-dl" aria-label="Descargar"><Download size={14} /></a>
 													</div>
 												{/if}
 											{/each}
