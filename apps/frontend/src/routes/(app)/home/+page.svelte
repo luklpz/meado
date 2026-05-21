@@ -49,8 +49,12 @@
 		pending = [...pending, { id: data.id, direction: 'incoming', user: data.user, createdAt: data.createdAt }];
 	}
 
-	onMount(() => {
-		const token = authStore.getSocketToken();
+	onMount(async () => {
+		let token = authStore.getSocketToken();
+		if (!token) {
+			await authStore.init();
+			token = authStore.getSocketToken();
+		}
 		if (token) {
 			sock = socketStore.connect(token);
 			sock.on('presence:update', handlePresence);

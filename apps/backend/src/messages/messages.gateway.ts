@@ -112,7 +112,7 @@ export class MessagesGateway implements OnGatewayConnection, OnGatewayDisconnect
               }
             }
           }
-        });
+        }).catch(() => {});
       }
     }
 

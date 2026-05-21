@@ -28,23 +28,32 @@ export class CloudinaryService {
 
   upload(buffer: Buffer, options: { folder: string; publicId?: string; resourceType?: 'image' | 'video' | 'raw' | 'auto' }): Promise<string> {
     return new Promise((resolve, reject) => {
-      const stream = cloudinary.uploader.upload_stream(
-        {
-          folder: options.folder,
-          public_id: options.publicId,
-          overwrite: !!options.publicId,
-          resource_type: options.resourceType ?? 'image',
-        },
-        (error, result) => {
-          if (error || !result) {
-            reject(new InternalServerErrorException('Error al subir el archivo. Comprueba la configuración del servicio de almacenamiento.'));
-          } else {
-            resolve(result.secure_url);
-          }
-        },
-      );
-      stream.on('error', () => reject(new InternalServerErrorException('Error al subir el archivo. Comprueba la configuración del servicio de almacenamiento.')));
-      stream.end(buffer);
+      try {
+        const stream = cloudinary.uploader.upload_stream(
+          {
+            folder: options.folder,
+            public_id: options.publicId,
+            overwrite: !!options.publicId,
+            resource_type: options.resourceType ?? 'image',
+          },
+          (error, result) => {
+            if (error || !result) {
+              this.logger.error(`Cloudinary upload error: ${error?.message ?? 'no result'} (http_code=${error?.http_code})`);
+              reject(new InternalServerErrorException('Error al subir el archivo. Comprueba la configuración del servicio de almacenamiento.'));
+            } else {
+              resolve(result.secure_url);
+            }
+          },
+        );
+        stream.on('error', (err) => {
+          this.logger.error(`Cloudinary stream error: ${(err as Error)?.message}`);
+          reject(new InternalServerErrorException('Error al subir el archivo. Comprueba la configuración del servicio de almacenamiento.'));
+        });
+        stream.end(buffer);
+      } catch (err) {
+        this.logger.error(`Cloudinary setup error: ${(err as Error)?.message}`);
+        reject(new InternalServerErrorException('Error al subir el archivo. Comprueba la configuración del servicio de almacenamiento.'));
+      }
     });
   }
 

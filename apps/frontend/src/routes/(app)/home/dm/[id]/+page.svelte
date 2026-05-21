@@ -166,9 +166,13 @@
 		sock?.emit('dm:join', { conversationId: conversation.id });
 	}
 
-	onMount(() => {
+	onMount(async () => {
 		clearUnread(conversation.id);
-		const token = authStore.getSocketToken();
+		let token = authStore.getSocketToken();
+		if (!token) {
+			await authStore.init();
+			token = authStore.getSocketToken();
+		}
 		if (token) {
 			sock = socketStore.connect(token);
 			sock.emit('dm:join', { conversationId: conversation.id });
@@ -184,6 +188,7 @@
 	});
 
 	onDestroy(() => {
+		if (typingTimeout) { clearTimeout(typingTimeout); typingTimeout = null; }
 		sock?.off('connect', handleReconnect);
 		sock?.off('dm:message:created', handleNewMessage);
 		sock?.off('dm:typing:update', handleTypingUpdate);

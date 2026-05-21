@@ -243,94 +243,106 @@
 
 	// ── Socket setup ───────────────────────────────────────────────────────
 	onMount(() => {
-		const token = authStore.getSocketToken();
-		if (!token) { goto('/login'); return; }
-		const socket = socketStore.connect(token);
+		let _socket: ReturnType<typeof socketStore.connect> | null = null;
 
-		// Load persisted unread counts and clear this server's rail badge
-		clearServerUnread(server.id);
-		fetch(`/api/servers/${server.slug}/unread`, { credentials: 'include' })
-			.then(r => r.ok ? r.json() : [])
-			.then((counts: { channelId: string; count: number }[]) => {
-				const m = new Map<string, number>();
-				for (const c of counts) if (c.count > 0) m.set(c.channelId, c.count);
-				unread = m;
-			})
-			.catch(() => {});
-
-		socket.on('message:created', (msg) => {
-			if (msg.channelId === selectedChannel?.id) {
-				messages = [...messages, msg];
-				scrollToBottom();
-				fetch(`/api/channels/${msg.channelId}/read`, { method: 'PATCH', credentials: 'include' }).catch(() => {});
-			} else {
-				unread = new Map(unread).set(msg.channelId, (unread.get(msg.channelId) ?? 0) + 1);
-				playNotificationSound();
-				if (document.hidden) showBrowserNotification(msg);
+		(async () => {
+			let token = authStore.getSocketToken();
+			if (!token) {
+				await authStore.init();
+				token = authStore.getSocketToken();
 			}
-		});
-		socket.on('message:updated', (msg) => {
-			if (msg.channelId !== selectedChannel?.id) return;
-			messages = messages.map((m) => (m.id === msg.id ? msg : m));
-		});
-		socket.on('message:deleted', ({ messageId, channelId }) => {
-			if (channelId !== selectedChannel?.id) return;
-			messages = messages.filter((m) => m.id !== messageId);
-		});
-		socket.on('voice:state', ({ channelId, members: m }) => {
-			voiceMembers = new Map(voiceMembers).set(channelId, m);
-		});
-		socket.on('voice:joined', ({ channelId, member }) => {
-			const prev = voiceMembers.get(channelId) ?? [];
-			if (prev.find((m) => m.userId === member.userId)) return;
-			voiceMembers = new Map(voiceMembers).set(channelId, [...prev, member]);
-		});
-		socket.on('voice:left', ({ channelId, userId }) => {
-			const prev = voiceMembers.get(channelId) ?? [];
-			voiceMembers = new Map(voiceMembers).set(channelId, prev.filter((m) => m.userId !== userId));
-		});
-		socket.on('typing:update', ({ channelId, usernames }) => {
-			if (channelId !== selectedChannel?.id) return;
-			typingUsernames = usernames.filter((u) => u !== user.username);
-		});
-		socket.on('reaction:updated', ({ messageId, reactions }) => {
-			messages = messages.map((m) => m.id === messageId ? { ...m, reactions } : m);
-		});
-		socket.on('disconnect', () => { socketConnected = false; });
-		socket.on('connect', () => {
-			socketConnected = true;
-			voiceMembers = new Map();
+			if (!token) { goto('/login'); return; }
+			const socket = socketStore.connect(token);
+			_socket = socket;
+
+			// Load persisted unread counts and clear this server's rail badge
+			clearServerUnread(server.id);
+			fetch(`/api/servers/${server.slug}/unread`, { credentials: 'include' })
+				.then(r => r.ok ? r.json() : [])
+				.then((counts: { channelId: string; count: number }[]) => {
+					const m = new Map<string, number>();
+					for (const c of counts) if (c.count > 0) m.set(c.channelId, c.count);
+					if (selectedChannel) m.set(selectedChannel.id, 0);
+					unread = m;
+				})
+				.catch(() => {});
+
+			socket.on('message:created', (msg) => {
+				if (msg.channelId === selectedChannel?.id) {
+					messages = [...messages, msg];
+					scrollToBottom();
+					fetch(`/api/channels/${msg.channelId}/read`, { method: 'PATCH', credentials: 'include' }).catch(() => {});
+				} else {
+					unread = new Map(unread).set(msg.channelId, (unread.get(msg.channelId) ?? 0) + 1);
+					playNotificationSound();
+					if (document.hidden) showBrowserNotification(msg);
+				}
+			});
+			socket.on('message:updated', (msg) => {
+				if (msg.channelId !== selectedChannel?.id) return;
+				messages = messages.map((m) => (m.id === msg.id ? msg : m));
+			});
+			socket.on('message:deleted', ({ messageId, channelId }) => {
+				if (channelId !== selectedChannel?.id) return;
+				messages = messages.filter((m) => m.id !== messageId);
+			});
+			socket.on('voice:state', ({ channelId, members: m }) => {
+				voiceMembers = new Map(voiceMembers).set(channelId, m);
+			});
+			socket.on('voice:joined', ({ channelId, member }) => {
+				const prev = voiceMembers.get(channelId) ?? [];
+				if (prev.find((m) => m.userId === member.userId)) return;
+				voiceMembers = new Map(voiceMembers).set(channelId, [...prev, member]);
+			});
+			socket.on('voice:left', ({ channelId, userId }) => {
+				const prev = voiceMembers.get(channelId) ?? [];
+				voiceMembers = new Map(voiceMembers).set(channelId, prev.filter((m) => m.userId !== userId));
+			});
+			socket.on('typing:update', ({ channelId, usernames }) => {
+				if (channelId !== selectedChannel?.id) return;
+				typingUsernames = usernames.filter((u) => u !== user.username);
+			});
+			socket.on('reaction:updated', ({ messageId, reactions }) => {
+				messages = messages.map((m) => m.id === messageId ? { ...m, reactions } : m);
+			});
+			socket.on('disconnect', () => { socketConnected = false; });
+			socket.on('connect', () => {
+				socketConnected = true;
+				voiceMembers = new Map();
+				socket.emit('server:subscribe', {
+					serverId: server.id,
+					channelIds: channels.filter((c) => c.type === 'VOICE').map((c) => c.id),
+				});
+				if (selectedChannel) {
+					socket.emit('channel:join', { channelId: selectedChannel.id });
+					if (selectedChannel.type === 'TEXT') loadMessages(selectedChannel.id);
+				}
+				// Only signal voice presence if LiveKit is still connected.
+				// If LiveKit is in error state the auto-reconnect timer handles a full rejoin
+				// (including LiveKit reconnect). Emitting voice:join here while LiveKit is down
+				// would show the user as "in channel" to peers but with no audio.
+				if (voiceChannelId && get(livekitStatus) !== 'error') {
+					socket.emit('voice:join', { channelId: voiceChannelId });
+				}
+			});
+
 			socket.emit('server:subscribe', {
 				serverId: server.id,
 				channelIds: channels.filter((c) => c.type === 'VOICE').map((c) => c.id),
 			});
-			if (selectedChannel) {
-				socket.emit('channel:join', { channelId: selectedChannel.id });
-				if (selectedChannel.type === 'TEXT') loadMessages(selectedChannel.id);
+
+			// Restore voice state if returning to this server while a call is active
+			const av = get(activeVoice);
+			if (av && av.serverId === server.id) {
+				voiceChannelId = av.channelId;
 			}
-			// Only signal voice presence if LiveKit is still connected.
-			// If LiveKit is in error state the auto-reconnect timer handles a full rejoin
-			// (including LiveKit reconnect). Emitting voice:join here while LiveKit is down
-			// would show the user as "in channel" to peers but with no audio.
-			if (voiceChannelId && get(livekitStatus) !== 'error') {
-				socket.emit('voice:join', { channelId: voiceChannelId });
-			}
-		});
 
-		socket.emit('server:subscribe', {
-			serverId: server.id,
-			channelIds: channels.filter((c) => c.type === 'VOICE').map((c) => c.id),
-		});
-
-		// Restore voice state if returning to this server while a call is active
-		const av = get(activeVoice);
-		if (av && av.serverId === server.id) {
-			voiceChannelId = av.channelId;
-		}
-
-		if (textChannels.length > 0) selectChannel(textChannels[0]);
+			if (textChannels.length > 0) selectChannel(textChannels[0]);
+		})();
 
 		return () => {
+			const socket = _socket;
+			if (!socket) return;
 			socket.off('message:created');
 			socket.off('message:updated');
 			socket.off('message:deleted');
