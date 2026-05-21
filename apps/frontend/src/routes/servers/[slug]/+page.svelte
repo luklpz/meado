@@ -12,7 +12,6 @@
 	import PhaserGame from '$lib/game/PhaserGame.svelte';
 	import ServerProfileCard from '$lib/components/ServerProfileCard.svelte';
 	import { uploadFile, goesToCloudinary } from '$lib/upload.js';
-	import { uploadToDrive } from '$lib/driveUpload.js';
 	import {
 		Mic, MicOff, Monitor, MonitorOff, PhoneOff,
 		LayoutGrid, Focus, PanelRight,
@@ -499,8 +498,7 @@
 				const r = await uploadFile(file);
 				({ url, name, size, mimeType } = r);
 			} else {
-				const r = await uploadToDrive(file);
-				url = r.url; name = file.name; size = file.size; mimeType = file.type || 'application/octet-stream';
+				throw new Error('El archivo supera el límite de 25 MB.');
 			}
 		} catch { return; } // upload tray already shows the error
 

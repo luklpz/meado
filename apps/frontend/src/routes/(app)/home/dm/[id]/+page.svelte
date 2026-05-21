@@ -9,7 +9,6 @@
 	import { playPing } from '$lib/ping.js';
 	import { Users, UserPlus, Pencil, Trash2, Download, Send, Paperclip, Film, Music, FileText, FileSpreadsheet, Archive, File as FileIcon } from 'lucide-svelte';
 	import { uploadFile, goesToCloudinary } from '$lib/upload.js';
-	import { uploadToDrive } from '$lib/driveUpload.js';
 
 	let { data } = $props();
 	const user = $derived(data.user as { id: string; username: string; role: string; avatarUrl?: string | null });
@@ -228,8 +227,7 @@
 				const r = await uploadFile(file);
 				({ url, name, size, mimeType } = r);
 			} else {
-				const r = await uploadToDrive(file);
-				url = r.url; name = file.name; size = file.size; mimeType = file.type || 'application/octet-stream';
+				throw new Error('El archivo supera el límite de 25 MB.');
 			}
 		} catch { return; } // upload tray already shows the error
 

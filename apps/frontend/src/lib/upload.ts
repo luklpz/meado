@@ -9,17 +9,8 @@ export interface UploadResult {
 
 const MAX_CLOUDINARY = 25 * 1024 * 1024; // 25 MB
 
-const CLOUDINARY_CODE_TYPES = new Set([
-  'application/json', 'application/xml', 'application/javascript',
-]);
-
 export function goesToCloudinary(file: File): boolean {
-  if (file.size > MAX_CLOUDINARY) return false;
-  if (file.type.startsWith('image/')) return true;
-  if (file.type === 'application/pdf') return true;
-  if (file.type.startsWith('text/')) return true;
-  if (CLOUDINARY_CODE_TYPES.has(file.type)) return true;
-  return false;
+  return file.size <= MAX_CLOUDINARY;
 }
 
 export async function uploadFile(file: File): Promise<UploadResult> {
