@@ -105,30 +105,37 @@
 	}
 
 	async function sendRequestToUser(userId: string, username: string) {
-		const res = await fetch('/api/friends/request', {
-			method: 'POST',
-			headers: { 'Content-Type': 'application/json' },
-			credentials: 'include',
-			body: JSON.stringify({ identifier: username }),
-		});
-		if (!res.ok) {
-			const err = await res.json().catch(() => ({}));
-			addError = err.message ?? 'Error al enviar solicitud.';
-			return;
+		try {
+			const res = await fetch('/api/friends/request', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				credentials: 'include',
+				body: JSON.stringify({ identifier: username }),
+			});
+			if (!res.ok) {
+				const err = await res.json().catch(() => ({}));
+				addError = err.message ?? 'Error al enviar solicitud.';
+				return;
+			}
+			const p = await res.json();
+			addSuccess = `Solicitud enviada a ${username}.`;
+			pending = [...pending, { id: p.id, direction: 'outgoing', user: p.receiver, createdAt: p.createdAt }];
+			searchResults = searchResults.filter(u => u.id !== userId);
+		} catch {
+			addError = 'Error de conexión. Inténtalo de nuevo.';
 		}
-		const p = await res.json();
-		addSuccess = `Solicitud enviada a ${username}.`;
-		pending = [...pending, { id: p.id, direction: 'outgoing', user: p.receiver, createdAt: p.createdAt }];
-		// Remove from results
-		searchResults = searchResults.filter(u => u.id !== userId);
 	}
 
 	async function acceptFriend(friendshipId: string) {
-		const res = await fetch(`/api/friends/accept/${friendshipId}`, { method: 'POST', credentials: 'include' });
-		if (!res.ok) { addError = 'Error al aceptar la solicitud'; return; }
-		const f = await res.json();
-		pending = pending.filter(p => p.id !== friendshipId);
-		friends = [...friends, { id: f.id, user: { ...f.sender, online: false } }];
+		try {
+			const res = await fetch(`/api/friends/accept/${friendshipId}`, { method: 'POST', credentials: 'include' });
+			if (!res.ok) { addError = 'Error al aceptar la solicitud'; return; }
+			const f = await res.json();
+			pending = pending.filter(p => p.id !== friendshipId);
+			friends = [...friends, { id: f.id, user: { ...f.sender, online: false } }];
+		} catch {
+			addError = 'Error de conexión. Inténtalo de nuevo.';
+		}
 	}
 
 	async function removeFriend(friendshipId: string) {
@@ -152,6 +159,8 @@
 			if (!res.ok) { dmError = 'No se pudo abrir la conversación'; return; }
 			const conv = await res.json();
 			goto(`/home/dm/${conv.id}`);
+		} catch {
+			dmError = 'Error de conexión. Inténtalo de nuevo.';
 		} finally {
 			dmLoading = false;
 		}
