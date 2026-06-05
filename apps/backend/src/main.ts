@@ -10,7 +10,7 @@ async function bootstrap() {
   app.use(cookieParser());
   app.use(helmet({ contentSecurityPolicy: false }));
   app.enableCors({
-    origin: process.env.CORS_ORIGIN?.split(',') ?? '*',
+    origin: process.env.CORS_ORIGIN?.split(',').map(s => s.trim()) ?? '*',
     credentials: true,
   });
   app.useGlobalFilters(new MulterExceptionFilter());

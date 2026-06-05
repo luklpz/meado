@@ -166,9 +166,13 @@ export class ServersService {
     const server = await this.assertPermission(slug, userId, userRole, 'manageServer');
 
     let passwordHash = server.passwordHash;
-    if (data.accessType === 'PASSWORD' && data.password) {
-      passwordHash = await bcrypt.hash(data.password, 12);
-    } else if (data.accessType && data.accessType !== 'PASSWORD') {
+    if (data.accessType === 'PASSWORD') {
+      if (data.password) {
+        passwordHash = await bcrypt.hash(data.password, 12);
+      } else if (!server.passwordHash) {
+        throw new BadRequestException('Password required when setting PASSWORD access type');
+      }
+    } else if (data.accessType) {
       passwordHash = null;
     }
 
