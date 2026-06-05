@@ -77,6 +77,7 @@
 	let addMemberError = $state('');
 
 	let sock: ChatSocket | null = null;
+	// svelte-ignore state_referenced_locally
 	let currentConvId = data.conversation.id;
 
 	$effect(() => {
@@ -86,7 +87,12 @@
 	$effect(() => {
 		const newConvId = (data.conversation as Conversation).id;
 		if (newConvId === currentConvId) return;
+		const oldConvId = currentConvId;
 		currentConvId = newConvId;
+
+		if (typingTimeout) { clearTimeout(typingTimeout); typingTimeout = null; }
+		sock?.emit('dm:typing:stop', { conversationId: oldConvId });
+		sock?.emit('dm:leave', { conversationId: oldConvId });
 
 		conversation = data.conversation as Conversation;
 		messages = [...(data.messages as DmMessage[])];
@@ -94,6 +100,7 @@
 		msgInput = '';
 		typingUsernames = [];
 		editingId = null;
+		editingContent = '';
 		hoveredId = null;
 		profileCardUserId = null;
 
@@ -1103,20 +1110,6 @@
 
 	.send-btn:disabled { opacity: 0.4; cursor: default; transform: none; }
 	.send-btn:not(:disabled):hover { filter: brightness(1.06); transform: scale(1.08); }
-
-	.att-file {
-		display: inline-flex;
-		align-items: center;
-		gap: 0.4rem;
-		padding: 0.4rem 0.65rem;
-		background: var(--bg-elevated);
-		border: 1px solid var(--border);
-		border-radius: var(--radius);
-		text-decoration: none;
-		color: var(--text-secondary);
-		font-size: 0.8rem;
-		max-width: 320px;
-	}
 
 	.att-size { font-size: 0.68rem; color: var(--text-muted); flex-shrink: 0; }
 
