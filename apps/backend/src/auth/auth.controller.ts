@@ -99,7 +99,7 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   @Patch('profile')
   @HttpCode(200)
-  updateProfile(@Req() req: Request, @Body() body: { name?: string }) {
+  updateProfile(@Req() req: Request, @Body() body: { name?: string; bio?: string; pronouns?: string; bannerColor?: string }) {
     return this.authService.updateProfile((req as any).user.id, body);
   }
 }

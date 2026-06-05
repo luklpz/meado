@@ -6,6 +6,9 @@ export interface AuthUser {
 	name?: string | null;
 	role: string;
 	avatarUrl?: string | null;
+	bio?: string | null;
+	pronouns?: string | null;
+	bannerColor?: string | null;
 }
 
 const API = '/api';
@@ -19,7 +22,7 @@ function createAuthStore() {
 			const res = await fetch(`${API}/auth/me`, { credentials: 'include' });
 			if (!res.ok) { user.set(null); return null; }
 			const data = await res.json();
-			const u: AuthUser = { id: data.id, username: data.username, name: data.name, role: data.role, avatarUrl: data.avatarUrl };
+			const u: AuthUser = { id: data.id, username: data.username, name: data.name, role: data.role, avatarUrl: data.avatarUrl, bio: data.bio, pronouns: data.pronouns, bannerColor: data.bannerColor };
 			user.set(u);
 			_socketToken = data.socketToken ?? null;
 			return u;
@@ -110,19 +113,19 @@ function createAuthStore() {
 		user.update(u => u ? { ...u, avatarUrl: data.avatarUrl } : u);
 	}
 
-	async function updateProfile(name: string): Promise<void> {
+	async function updateProfile(dto: { name?: string; bio?: string; pronouns?: string; bannerColor?: string }): Promise<void> {
 		const res = await fetch(`${API}/auth/profile`, {
 			method: 'PATCH',
 			headers: { 'Content-Type': 'application/json' },
 			credentials: 'include',
-			body: JSON.stringify({ name: name.trim() || null }),
+			body: JSON.stringify(dto),
 		});
 		if (!res.ok) {
 			const err = await res.json().catch(() => ({}));
 			throw new Error(err.message ?? 'Error al actualizar el perfil.');
 		}
 		const data = await res.json();
-		user.update(u => u ? { ...u, name: data.name } : u);
+		user.update(u => u ? { ...u, ...data } : u);
 	}
 
 	function getSocketToken(): string | null {

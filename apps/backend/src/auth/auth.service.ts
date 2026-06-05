@@ -19,6 +19,9 @@ export interface PublicUser {
   name?: string | null;
   role: string;
   avatarUrl?: string | null;
+  bio?: string | null;
+  pronouns?: string | null;
+  bannerColor?: string | null;
 }
 
 const USERNAME_RE = /^[a-zA-Z0-9]+$/;
@@ -204,7 +207,7 @@ export class AuthService {
   async getMe(user: PublicUser): Promise<PublicUser & { socketToken: string }> {
     const dbUser = await this.prisma.user.findUnique({
       where: { id: user.id },
-      select: { avatarUrl: true, name: true },
+      select: { avatarUrl: true, name: true, bio: true, pronouns: true, bannerColor: true },
     });
 
     const socketToken = jwt.sign(
@@ -213,13 +216,28 @@ export class AuthService {
       { expiresIn: '1h' },
     );
 
-    return { ...user, name: dbUser?.name, avatarUrl: dbUser?.avatarUrl, socketToken };
+    return {
+      ...user,
+      name: dbUser?.name,
+      avatarUrl: dbUser?.avatarUrl,
+      bio: dbUser?.bio,
+      pronouns: dbUser?.pronouns,
+      bannerColor: dbUser?.bannerColor,
+      socketToken,
+    };
   }
 
-  async updateProfile(userId: string, dto: { name?: string }): Promise<{ name: string | null }> {
-    const name = dto.name?.trim() || null;
-    await this.prisma.user.update({ where: { id: userId }, data: { name } });
-    return { name };
+  async updateProfile(
+    userId: string,
+    dto: { name?: string; bio?: string; pronouns?: string; bannerColor?: string },
+  ): Promise<{ name: string | null; bio: string | null; pronouns: string | null; bannerColor: string | null }> {
+    const data: Record<string, string | null> = {};
+    if ('name' in dto) data.name = dto.name?.trim() || null;
+    if ('bio' in dto) data.bio = dto.bio?.trim() || null;
+    if ('pronouns' in dto) data.pronouns = dto.pronouns?.trim() || null;
+    if ('bannerColor' in dto) data.bannerColor = dto.bannerColor || null;
+    const updated = await this.prisma.user.update({ where: { id: userId }, data, select: { name: true, bio: true, pronouns: true, bannerColor: true } });
+    return updated;
   }
 
   private buildResult(user: PublicUser): { token: string; user: PublicUser } {

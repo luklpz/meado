@@ -27,7 +27,7 @@
 	let showMicFlyout = $state(false);
 	let showOutFlyout = $state(false);
 	let showSettingsModal = $state(false);
-	let settingsTab = $state<'account' | 'voice' | 'appearance'>('account');
+	let settingsTab = $state<'account' | 'profile' | 'voice' | 'appearance'>('account');
 
 	// ── Flyout positions ──────────────────────────────────────────────────
 	let micFlyoutLeft = $state(0);
@@ -82,6 +82,22 @@
 	let settingsNameError = $state('');
 	let settingsUploading = $state(false);
 	let settingsUploadError = $state('');
+
+	// ── Profile tab state ─────────────────────────────────────────────────
+	let profileBio = $state('');
+	let profilePronouns = $state('');
+	let profileBannerColor = $state('#5865f2');
+	let profileSaving = $state(false);
+	let profileSaved = $state(false);
+	let profileError = $state('');
+
+	$effect(() => {
+		if (settingsTab === 'profile' && $user) {
+			profileBio = $user.bio ?? '';
+			profilePronouns = $user.pronouns ?? '';
+			profileBannerColor = $user.bannerColor ?? '#5865f2';
+		}
+	});
 
 	// ── Position helpers ──────────────────────────────────────────────────
 	function clampLeft(left: number, width: number): number {
@@ -178,11 +194,24 @@
 		}
 	}
 
+	async function saveProfile() {
+		profileSaving = true; profileError = ''; profileSaved = false;
+		try {
+			await authStore.updateProfile({ bio: profileBio, pronouns: profilePronouns, bannerColor: profileBannerColor });
+			profileSaved = true;
+			setTimeout(() => { profileSaved = false; }, 2000);
+		} catch (err) {
+			profileError = err instanceof Error ? err.message : 'Error al guardar';
+		} finally {
+			profileSaving = false;
+		}
+	}
+
 	async function saveName(isSettings = false) {
 		const val = isSettings ? settingsNameInput : nameInput;
 		if (isSettings) settingsNameError = ''; else nameError = '';
 		try {
-			await authStore.updateProfile(val);
+			await authStore.updateProfile({ name: val });
 			if (isSettings) settingsEditingName = false; else editingName = false;
 		} catch (err) {
 			const msg = err instanceof Error ? err.message : 'Error';
@@ -275,8 +304,7 @@
 			<nav class="settings-nav">
 				<div class="settings-nav-group-label">Ajustes de usuario</div>
 				<button class="settings-nav-item" class:active={settingsTab === 'account'} onclick={() => (settingsTab = 'account')}>Mi cuenta</button>
-				<!-- TODO: perfil — bio, pronombres, banner color; requires extended user profile fields in backend -->
-				<button class="settings-nav-item" disabled title="Próximamente">Perfil</button>
+				<button class="settings-nav-item" class:active={settingsTab === 'profile'} onclick={() => (settingsTab = 'profile')}>Perfil</button>
 				<!-- TODO: privacidad — DM permissions, friend requests, activity status; requires backend privacy settings -->
 				<button class="settings-nav-item" disabled title="Próximamente">Privacidad</button>
 				<div class="settings-nav-group-label" style="margin-top:0.5rem">Ajustes de la app</div>
@@ -292,7 +320,7 @@
 			<div class="settings-body">
 				<div class="settings-title-row">
 					<h2 class="settings-title">
-						{#if settingsTab === 'account'}Mi cuenta{:else if settingsTab === 'voice'}Voz y audio{:else}Apariencia{/if}
+						{#if settingsTab === 'account'}Mi cuenta{:else if settingsTab === 'profile'}Perfil{:else if settingsTab === 'voice'}Voz y audio{:else}Apariencia{/if}
 					</h2>
 					<button class="settings-close" onclick={() => (showSettingsModal = false)}><X size={18} /></button>
 				</div>
@@ -360,6 +388,58 @@
 								</button>
 							{/each}
 						</div>
+					</div>
+
+				{:else if settingsTab === 'profile'}
+					<!-- Banner color preview -->
+					<div class="settings-section">
+						<div class="settings-label">Color del banner</div>
+						<div class="profile-banner-preview" style="background:{profileBannerColor}">
+							<div class="profile-banner-avatar">
+								{#if $user?.avatarUrl}
+									<img src={$user.avatarUrl} alt="" />
+								{:else if $user}
+									<span>{$user.username[0].toUpperCase()}</span>
+								{/if}
+							</div>
+						</div>
+						<div class="profile-color-row">
+							<input type="color" class="profile-color-input" bind:value={profileBannerColor} />
+							<span class="profile-color-hex">{profileBannerColor}</span>
+						</div>
+					</div>
+
+					<div class="settings-sep"></div>
+
+					<!-- Pronouns -->
+					<div class="settings-section">
+						<div class="settings-label">Pronombres</div>
+						<input
+							class="settings-input"
+							bind:value={profilePronouns}
+							placeholder="ej. él/ellos, ella/ellas"
+							maxlength="40"
+						/>
+					</div>
+
+					<!-- Bio -->
+					<div class="settings-section">
+						<div class="settings-label">Biografía</div>
+						<textarea
+							class="settings-textarea"
+							bind:value={profileBio}
+							placeholder="Cuéntanos algo sobre ti…"
+							maxlength="190"
+							rows="4"
+						></textarea>
+						<span class="profile-char-count">{profileBio.length}/190</span>
+					</div>
+
+					<div class="settings-save-row">
+						{#if profileError}<p class="settings-error">{profileError}</p>{/if}
+						<button class="btn-primary" onclick={saveProfile} disabled={profileSaving}>
+							{profileSaving ? 'Guardando…' : profileSaved ? '✓ Guardado' : 'Guardar cambios'}
+						</button>
 					</div>
 
 				{:else if settingsTab === 'voice'}
@@ -842,6 +922,40 @@
 	}
 
 	.settings-error { font-size: 0.72rem; color: var(--error); margin-top: 0.3rem; }
+
+	/* ── Profile tab ── */
+	.profile-banner-preview {
+		height: 80px; border-radius: var(--radius); margin-bottom: 0.5rem;
+		position: relative; overflow: visible;
+	}
+	.profile-banner-avatar {
+		position: absolute; bottom: -16px; left: 1rem;
+		width: 52px; height: 52px; border-radius: 50%;
+		background: var(--bg-surface); border: 3px solid var(--bg-base);
+		display: flex; align-items: center; justify-content: center;
+		font-size: 1.1rem; font-weight: 700; color: var(--accent); overflow: hidden;
+	}
+	.profile-banner-avatar img { width: 100%; height: 100%; object-fit: cover; border-radius: 50%; }
+	.profile-color-row { display: flex; align-items: center; gap: 0.5rem; margin-top: 0.9rem; }
+	.profile-color-input { width: 36px; height: 36px; border: none; border-radius: var(--radius-sm); padding: 2px; background: none; cursor: pointer; }
+	.profile-color-hex { font-family: var(--font-mono); font-size: 0.8rem; color: var(--text-muted); }
+	.settings-textarea {
+		width: 100%; min-height: 80px; resize: vertical;
+		font-size: 0.85rem; padding: 0.45rem 0.5rem; background: var(--bg-elevated);
+		border: 1px solid var(--border-focus); border-radius: var(--radius-sm);
+		color: var(--text-primary); outline: none; font-family: inherit;
+		box-sizing: border-box; line-height: 1.5;
+	}
+	.settings-textarea:focus { border-color: var(--accent); }
+	.profile-char-count { font-size: 0.68rem; color: var(--text-muted); display: block; text-align: right; margin-top: 0.2rem; }
+	.settings-save-row { display: flex; flex-direction: column; align-items: flex-end; gap: 0.3rem; margin-top: 0.5rem; }
+	.btn-primary {
+		padding: 0.45rem 1.1rem; background: var(--accent); color: var(--accent-text);
+		border: none; border-radius: var(--radius-sm); font-size: 0.85rem; font-weight: 700;
+		cursor: pointer; font-family: inherit; transition: filter var(--transition);
+	}
+	.btn-primary:hover:not(:disabled) { filter: brightness(1.1); }
+	.btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
 
 	.settings-status-grid { display: flex; flex-direction: column; gap: 0.15rem; }
 

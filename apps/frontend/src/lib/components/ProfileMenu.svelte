@@ -32,7 +32,7 @@
 	async function saveName() {
 		nameError = '';
 		try {
-			await authStore.updateProfile(nameInput);
+			await authStore.updateProfile({ name: nameInput });
 			editingName = false;
 		} catch (err) {
 			nameError = err instanceof Error ? err.message : 'Error';
