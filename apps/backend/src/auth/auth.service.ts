@@ -24,6 +24,19 @@ export interface PublicUser {
   bannerColor?: string | null;
 }
 
+export interface PrivacySettings {
+  allowDmsFromServerMembers: boolean;
+  allowFriendRequestsFromAll: boolean;
+  showActivityStatus: boolean;
+}
+
+export interface NotifSettings {
+  notifDms: boolean;
+  notifMentions: boolean;
+  notifSounds: boolean;
+  notifEmailDigest: boolean;
+}
+
 const USERNAME_RE = /^[a-zA-Z0-9]+$/;
 
 function jwtSecret(): string {
@@ -204,10 +217,14 @@ export class AuthService {
     return { avatarUrl };
   }
 
-  async getMe(user: PublicUser): Promise<PublicUser & { socketToken: string }> {
+  async getMe(user: PublicUser): Promise<PublicUser & { socketToken: string } & PrivacySettings & NotifSettings> {
     const dbUser = await this.prisma.user.findUnique({
       where: { id: user.id },
-      select: { avatarUrl: true, name: true, bio: true, pronouns: true, bannerColor: true },
+      select: {
+        avatarUrl: true, name: true, bio: true, pronouns: true, bannerColor: true,
+        allowDmsFromServerMembers: true, allowFriendRequestsFromAll: true, showActivityStatus: true,
+        notifDms: true, notifMentions: true, notifSounds: true, notifEmailDigest: true,
+      },
     });
 
     const socketToken = jwt.sign(
@@ -223,8 +240,67 @@ export class AuthService {
       bio: dbUser?.bio,
       pronouns: dbUser?.pronouns,
       bannerColor: dbUser?.bannerColor,
+      allowDmsFromServerMembers: dbUser?.allowDmsFromServerMembers ?? true,
+      allowFriendRequestsFromAll: dbUser?.allowFriendRequestsFromAll ?? false,
+      showActivityStatus: dbUser?.showActivityStatus ?? true,
+      notifDms: dbUser?.notifDms ?? true,
+      notifMentions: dbUser?.notifMentions ?? true,
+      notifSounds: dbUser?.notifSounds ?? true,
+      notifEmailDigest: dbUser?.notifEmailDigest ?? false,
       socketToken,
     };
+  }
+
+  async getPrivacy(userId: string): Promise<PrivacySettings> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { allowDmsFromServerMembers: true, allowFriendRequestsFromAll: true, showActivityStatus: true },
+    });
+    return {
+      allowDmsFromServerMembers: user?.allowDmsFromServerMembers ?? true,
+      allowFriendRequestsFromAll: user?.allowFriendRequestsFromAll ?? false,
+      showActivityStatus: user?.showActivityStatus ?? true,
+    };
+  }
+
+  async updatePrivacy(userId: string, dto: Partial<PrivacySettings>): Promise<PrivacySettings> {
+    const data: Partial<PrivacySettings> = {};
+    if (typeof dto.allowDmsFromServerMembers === 'boolean') data.allowDmsFromServerMembers = dto.allowDmsFromServerMembers;
+    if (typeof dto.allowFriendRequestsFromAll === 'boolean') data.allowFriendRequestsFromAll = dto.allowFriendRequestsFromAll;
+    if (typeof dto.showActivityStatus === 'boolean') data.showActivityStatus = dto.showActivityStatus;
+    const updated = await this.prisma.user.update({
+      where: { id: userId },
+      data,
+      select: { allowDmsFromServerMembers: true, allowFriendRequestsFromAll: true, showActivityStatus: true },
+    });
+    return updated;
+  }
+
+  async getNotifSettings(userId: string): Promise<NotifSettings> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { notifDms: true, notifMentions: true, notifSounds: true, notifEmailDigest: true },
+    });
+    return {
+      notifDms: user?.notifDms ?? true,
+      notifMentions: user?.notifMentions ?? true,
+      notifSounds: user?.notifSounds ?? true,
+      notifEmailDigest: user?.notifEmailDigest ?? false,
+    };
+  }
+
+  async updateNotifSettings(userId: string, dto: Partial<NotifSettings>): Promise<NotifSettings> {
+    const data: Partial<NotifSettings> = {};
+    if (typeof dto.notifDms === 'boolean') data.notifDms = dto.notifDms;
+    if (typeof dto.notifMentions === 'boolean') data.notifMentions = dto.notifMentions;
+    if (typeof dto.notifSounds === 'boolean') data.notifSounds = dto.notifSounds;
+    if (typeof dto.notifEmailDigest === 'boolean') data.notifEmailDigest = dto.notifEmailDigest;
+    const updated = await this.prisma.user.update({
+      where: { id: userId },
+      data,
+      select: { notifDms: true, notifMentions: true, notifSounds: true, notifEmailDigest: true },
+    });
+    return updated;
   }
 
   async updateProfile(

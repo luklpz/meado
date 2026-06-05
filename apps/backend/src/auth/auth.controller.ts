@@ -102,4 +102,30 @@ export class AuthController {
   updateProfile(@Req() req: Request, @Body() body: { name?: string; bio?: string; pronouns?: string; bannerColor?: string }) {
     return this.authService.updateProfile((req as any).user.id, body);
   }
+
+  @UseGuards(JwtAuthGuard)
+  @Get('privacy')
+  getPrivacy(@Req() req: Request) {
+    return this.authService.getPrivacy((req as any).user.id);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Patch('privacy')
+  @HttpCode(200)
+  updatePrivacy(@Req() req: Request, @Body() body: { allowDmsFromServerMembers?: boolean; allowFriendRequestsFromAll?: boolean; showActivityStatus?: boolean }) {
+    return this.authService.updatePrivacy((req as any).user.id, body);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get('notifications')
+  getNotifSettings(@Req() req: Request) {
+    return this.authService.getNotifSettings((req as any).user.id);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Patch('notifications')
+  @HttpCode(200)
+  updateNotifSettings(@Req() req: Request, @Body() body: { notifDms?: boolean; notifMentions?: boolean; notifSounds?: boolean; notifEmailDigest?: boolean }) {
+    return this.authService.updateNotifSettings((req as any).user.id, body);
+  }
 }

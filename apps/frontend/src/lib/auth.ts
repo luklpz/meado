@@ -9,6 +9,13 @@ export interface AuthUser {
 	bio?: string | null;
 	pronouns?: string | null;
 	bannerColor?: string | null;
+	allowDmsFromServerMembers?: boolean;
+	allowFriendRequestsFromAll?: boolean;
+	showActivityStatus?: boolean;
+	notifDms?: boolean;
+	notifMentions?: boolean;
+	notifSounds?: boolean;
+	notifEmailDigest?: boolean;
 }
 
 const API = '/api';
@@ -22,7 +29,7 @@ function createAuthStore() {
 			const res = await fetch(`${API}/auth/me`, { credentials: 'include' });
 			if (!res.ok) { user.set(null); return null; }
 			const data = await res.json();
-			const u: AuthUser = { id: data.id, username: data.username, name: data.name, role: data.role, avatarUrl: data.avatarUrl, bio: data.bio, pronouns: data.pronouns, bannerColor: data.bannerColor };
+			const u: AuthUser = { id: data.id, username: data.username, name: data.name, role: data.role, avatarUrl: data.avatarUrl, bio: data.bio, pronouns: data.pronouns, bannerColor: data.bannerColor, allowDmsFromServerMembers: data.allowDmsFromServerMembers ?? true, allowFriendRequestsFromAll: data.allowFriendRequestsFromAll ?? false, showActivityStatus: data.showActivityStatus ?? true, notifDms: data.notifDms ?? true, notifMentions: data.notifMentions ?? true, notifSounds: data.notifSounds ?? true, notifEmailDigest: data.notifEmailDigest ?? false };
 			user.set(u);
 			_socketToken = data.socketToken ?? null;
 			return u;
@@ -132,7 +139,13 @@ function createAuthStore() {
 		return _socketToken;
 	}
 
-	return { user, init, login, register, logout, getSocketToken, forgotPassword, resetPassword, updateAvatar, updateProfile };
+	function currentUser(): AuthUser | null {
+		let val: AuthUser | null = null;
+		user.subscribe(u => { val = u; })();
+		return val;
+	}
+
+	return { user, init, login, register, logout, getSocketToken, forgotPassword, resetPassword, updateAvatar, updateProfile, currentUser };
 }
 
 export const authStore = createAuthStore();

@@ -45,6 +45,13 @@ model User {
   bio           String?
   pronouns      String?
   bannerColor   String?
+  allowDmsFromServerMembers  Boolean @default(true)
+  allowFriendRequestsFromAll Boolean @default(false)
+  showActivityStatus         Boolean @default(true)
+  notifDms         Boolean @default(true)
+  notifMentions    Boolean @default(true)
+  notifSounds      Boolean @default(true)
+  notifEmailDigest Boolean @default(false)
   createdAt     DateTime          @default(now())
   updatedAt     DateTime          @updatedAt
 
@@ -61,6 +68,8 @@ model User {
   bannedFrom           ServerBan[]                @relation("BannedUser")
   issuedBans           ServerBan[]                @relation("BanIssuer")
   channelReads         ChannelRead[]
+  reportsSent          Report[]                   @relation("ReportsSent")
+  reportsReceived      Report[]                   @relation("ReportsReceived")
 }
 
 // ── Server ───────────────────────────────────────────────────────────────────
@@ -312,4 +321,28 @@ model DirectMessageReaction {
 
   @@id([messageId, userId, emoji])
   @@index([messageId])
+}
+
+// ── Reports ───────────────────────────────────────────────────────────────────
+
+enum ReportStatus {
+  PENDING
+  REVIEWED
+  DISMISSED
+}
+
+model Report {
+  id           String       @id @default(cuid())
+  reporterId   String
+  targetUserId String
+  reason       String
+  details      String?
+  status       ReportStatus @default(PENDING)
+  createdAt    DateTime     @default(now())
+
+  reporter   User @relation("ReportsSent",     fields: [reporterId],   references: [id], onDelete: Cascade)
+  targetUser User @relation("ReportsReceived", fields: [targetUserId], references: [id], onDelete: Cascade)
+
+  @@index([targetUserId])
+  @@index([status])
 }

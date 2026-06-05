@@ -9,6 +9,7 @@
 	import { playPing } from '$lib/ping.js';
 	import { Users, UserPlus, Pencil, Trash2, Download, Send, Paperclip, Film, Music, FileText, FileSpreadsheet, Archive, File as FileIcon, Search, Menu } from 'lucide-svelte';
 	import { uploadFile, goesToCloudinary } from '$lib/upload.js';
+	import ServerProfileCard from '$lib/components/ServerProfileCard.svelte';
 
 	let { data } = $props();
 	const user = $derived(data.user as { id: string; username: string; role: string; avatarUrl?: string | null });
@@ -50,6 +51,15 @@
 	let editingContent = $state('');
 
 	let sidebarOpen = $state(false);
+	let profileCardUserId = $state<string | null>(null);
+
+	function openProfileCard(uid: string) {
+		if (uid === user.id) return;
+		profileCardUserId = uid;
+	}
+
+	const isDm1on1 = $derived(conversation.members.length === 2);
+	const dmOtherUser = $derived(conversation.members.find(m => m.id !== user.id) ?? null);
 	let sidebarSearch = $state('');
 	const filteredConvs = $derived(
 		sidebarSearch.trim()
@@ -413,14 +423,25 @@
 	<div class="chat-area">
 		<div class="chat-header">
 			<button class="hamburger-btn" onclick={() => (sidebarOpen = !sidebarOpen)} title="Menú"><Menu size={18} /></button>
-			<div class="chat-header-avatar">
+			<button
+				class="chat-header-avatar"
+				class:clickable={isDm1on1}
+				onclick={() => isDm1on1 && dmOtherUser && openProfileCard(dmOtherUser.id)}
+				disabled={!isDm1on1}
+				title={isDm1on1 ? 'Ver perfil' : undefined}
+			>
 				{#if convAvatar(conversation)}
 					<img src={convAvatar(conversation)} alt="" />
 				{:else}
 					<span>{convInitial(conversation)}</span>
 				{/if}
-			</div>
-			<span class="chat-header-name">{convName(conversation)}</span>
+			</button>
+			<button
+				class="chat-header-name-btn"
+				class:clickable={isDm1on1}
+				onclick={() => isDm1on1 && dmOtherUser && openProfileCard(dmOtherUser.id)}
+				disabled={!isDm1on1}
+			>{convName(conversation)}</button>
 			{#if conversation.members.length > 2}
 				<span class="member-count">{conversation.members.length} miembros</span>
 			{/if}
@@ -462,15 +483,17 @@
 					>
 						{#if !sameAuthor}
 							<div class="avatar-col">
-								{#if msg.author.avatarUrl}
-									<img src={msg.author.avatarUrl} class="avatar-msg" alt="" />
-								{:else}
-									<div class="avatar-msg avatar-init">{avatarInitial(msg.author.name || msg.author.username)}</div>
-								{/if}
+								<button class="avatar-btn-msg" onclick={() => openProfileCard(msg.author.id)}>
+									{#if msg.author.avatarUrl}
+										<img src={msg.author.avatarUrl} class="avatar-msg" alt="" />
+									{:else}
+										<div class="avatar-msg avatar-init">{avatarInitial(msg.author.name || msg.author.username)}</div>
+									{/if}
+								</button>
 							</div>
 							<div class="msg-body">
 								<div class="msg-header">
-									<span class="msg-author">{msg.author.name || msg.author.username}</span>
+									<button class="msg-author-btn" onclick={() => openProfileCard(msg.author.id)}>{msg.author.name || msg.author.username}</button>
 									<span class="msg-time">{formatTime(msg.createdAt)}</span>
 									{#if msg.editedAt}<span class="msg-edited">(editado)</span>{/if}
 								</div>
@@ -605,6 +628,15 @@
 		</div>
 	</div>
 </div>
+
+{#if profileCardUserId}
+	<ServerProfileCard
+		targetUserId={profileCardUserId}
+		viewerId={user.id}
+		onclose={() => (profileCardUserId = null)}
+		onOpenDm={(uid) => { profileCardUserId = null; if (uid !== (dmOtherUser?.id ?? '')) goto(`/home`); }}
+	/>
+{/if}
 
 {#if showAddMember}
 	<div class="modal-overlay" role="dialog" aria-modal="true">
@@ -799,8 +831,21 @@
 		flex-shrink: 0;
 	}
 
+	.chat-header-avatar {
+		cursor: default;
+		padding: 0;
+		border: none;
+	}
+	.chat-header-avatar.clickable { cursor: pointer; transition: opacity var(--transition); }
+	.chat-header-avatar.clickable:hover { opacity: 0.8; }
 	.chat-header-avatar img { width: 100%; height: 100%; object-fit: cover; }
-	.chat-header-name { font-size: 0.9rem; font-weight: 700; color: var(--text-primary); }
+
+	.chat-header-name-btn {
+		font-size: 0.9rem; font-weight: 700; color: var(--text-primary);
+		background: none; border: none; padding: 0; cursor: default; font-family: inherit;
+	}
+	.chat-header-name-btn.clickable { cursor: pointer; }
+	.chat-header-name-btn.clickable:hover { text-decoration: underline; }
 	.member-count { font-size: 0.75rem; color: var(--text-muted); margin-left: 0.25rem; }
 	.header-actions { margin-left: auto; display: flex; gap: 0.25rem; }
 
@@ -864,7 +909,10 @@
 
 	.msg-body { flex: 1; min-width: 0; }
 	.msg-header { display: flex; align-items: baseline; gap: 0.55rem; margin-bottom: 0.1rem; }
-	.msg-author { font-size: 0.9rem; font-weight: 800; color: var(--text-primary); }
+	.msg-author-btn { font-size: 0.9rem; font-weight: 800; color: var(--text-primary); background: none; border: none; padding: 0; cursor: pointer; font-family: inherit; }
+	.msg-author-btn:hover { text-decoration: underline; }
+	.avatar-btn-msg { background: none; border: none; padding: 0; cursor: pointer; border-radius: 50%; display: block; }
+	.avatar-btn-msg:hover .avatar-msg, .avatar-btn-msg:hover .avatar-init { opacity: 0.8; }
 	.msg-time { font-family: var(--font-mono); font-size: 0.62rem; color: var(--text-muted); }
 	.msg-edited { font-size: 0.62rem; color: var(--text-muted); }
 

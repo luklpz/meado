@@ -49,4 +49,14 @@ export class FriendsController {
   remove(@Req() req: any, @Param('id') id: string) {
     return this.friendsService.remove(req.user.id, id);
   }
+
+  @Post('block/:targetId')
+  block(@Req() req: any, @Param('targetId') targetId: string) {
+    return this.friendsService.block(req.user.id, targetId);
+  }
+
+  @Delete('block/:targetId')
+  unblock(@Req() req: any, @Param('targetId') targetId: string) {
+    return this.friendsService.unblock(req.user.id, targetId);
+  }
 }

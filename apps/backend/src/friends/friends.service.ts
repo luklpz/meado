@@ -119,4 +119,40 @@ export class FriendsService {
     });
     return rows.map(f => (f.senderId === userId ? f.receiverId : f.senderId));
   }
+
+  async block(blockerId: string, targetId: string) {
+    if (blockerId === targetId) throw new BadRequestException('Cannot block yourself');
+    const target = await this.prisma.user.findUnique({ where: { id: targetId }, select: { id: true } });
+    if (!target) throw new NotFoundException('User not found');
+
+    const existing = await this.prisma.friendship.findFirst({
+      where: {
+        OR: [
+          { senderId: blockerId, receiverId: targetId },
+          { senderId: targetId, receiverId: blockerId },
+        ],
+      },
+    });
+
+    if (existing) {
+      if (existing.status === 'BLOCKED' && existing.senderId === blockerId) {
+        return { ok: true };
+      }
+      await this.prisma.friendship.delete({ where: { id: existing.id } });
+    }
+
+    await this.prisma.friendship.create({
+      data: { senderId: blockerId, receiverId: targetId, status: 'BLOCKED' },
+    });
+    return { ok: true };
+  }
+
+  async unblock(blockerId: string, targetId: string) {
+    const friendship = await this.prisma.friendship.findFirst({
+      where: { senderId: blockerId, receiverId: targetId, status: 'BLOCKED' },
+    });
+    if (!friendship) throw new NotFoundException('Block not found');
+    await this.prisma.friendship.delete({ where: { id: friendship.id } });
+    return { ok: true };
+  }
 }

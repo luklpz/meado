@@ -120,18 +120,11 @@
 		nickname?: string | null;
 		role?: { name: string; color?: string | null } | null;
 	}
-	let profileCard = $state<(ProfileCardData & { x: number; y: number }) | null>(null);
+	let profileCard = $state<ProfileCardData | null>(null);
 
 	function openProfileCard(data: ProfileCardData, e: MouseEvent) {
 		e.stopPropagation();
-		const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
-		const cardW = 248;
-		const cardH = 230;
-		const x = r.left + r.width / 2 > window.innerWidth / 2
-			? r.left - cardW - 8
-			: r.right + 8;
-		const y = Math.min(r.top, window.innerHeight - cardH - 8);
-		profileCard = { ...data, x, y };
+		profileCard = data;
 	}
 
 	function memberCardData(m: Member): ProfileCardData {
@@ -274,7 +267,8 @@
 					fetch(`/api/channels/${msg.channelId}/read`, { method: 'PATCH', credentials: 'include' }).catch(() => {});
 				} else {
 					unread = new Map(unread).set(msg.channelId, (unread.get(msg.channelId) ?? 0) + 1);
-					playNotificationSound();
+					const _u = authStore.currentUser();
+					if (_u?.notifSounds !== false) playNotificationSound();
 					if (document.hidden) showBrowserNotification(msg);
 				}
 			});
@@ -1843,10 +1837,12 @@
 	<!-- ── Profile card ───────────────────────────────────────────────────── -->
 	{#if profileCard}
 		<ServerProfileCard
-			card={profileCard}
+			targetUserId={profileCard.userId}
+			viewerId={user.id}
 			serverSlug={server.slug}
-			userId={user.id}
 			{canManage}
+			nickname={profileCard.nickname}
+			role={profileCard.role}
 			onclose={() => (profileCard = null)}
 			onOpenDm={(uid) => { profileCard = null; openDm(uid); }}
 			onKick={(uid, uname) => { profileCard = null; kickMember(uid, uname); }}

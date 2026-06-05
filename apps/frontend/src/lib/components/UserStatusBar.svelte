@@ -27,7 +27,7 @@
 	let showMicFlyout = $state(false);
 	let showOutFlyout = $state(false);
 	let showSettingsModal = $state(false);
-	let settingsTab = $state<'account' | 'profile' | 'voice' | 'appearance'>('account');
+	let settingsTab = $state<'account' | 'profile' | 'privacy' | 'notifications' | 'voice' | 'appearance'>('account');
 
 	// ── Flyout positions ──────────────────────────────────────────────────
 	let micFlyoutLeft = $state(0);
@@ -98,6 +98,78 @@
 			profileBannerColor = $user.bannerColor ?? '#5865f2';
 		}
 	});
+
+	// ── Privacy tab state ─────────────────────────────────────────────────
+	let privacyDms = $state(true);
+	let privacyFriendReqs = $state(false);
+	let privacyActivity = $state(true);
+	let privacyLoading = $state(false);
+	let privacySaved = $state(false);
+
+	$effect(() => {
+		if (settingsTab === 'privacy' && $user) {
+			privacyDms = $user.allowDmsFromServerMembers ?? true;
+			privacyFriendReqs = $user.allowFriendRequestsFromAll ?? false;
+			privacyActivity = $user.showActivityStatus ?? true;
+		}
+	});
+
+	// ── Notifications tab state ───────────────────────────────────────────
+	let notifDms = $state(true);
+	let notifMentions = $state(true);
+	let notifSounds = $state(true);
+	let notifEmailDigest = $state(false);
+	let notifLoading = $state(false);
+	let notifSaved = $state(false);
+
+	$effect(() => {
+		if (settingsTab === 'notifications' && $user) {
+			notifDms = $user.notifDms ?? true;
+			notifMentions = $user.notifMentions ?? true;
+			notifSounds = $user.notifSounds ?? true;
+			notifEmailDigest = $user.notifEmailDigest ?? false;
+		}
+	});
+
+	async function saveNotifSettings() {
+		if (notifLoading) return;
+		notifLoading = true; notifSaved = false;
+		try {
+			const res = await fetch('/api/auth/notifications', {
+				method: 'PATCH',
+				headers: { 'Content-Type': 'application/json' },
+				credentials: 'include',
+				body: JSON.stringify({ notifDms, notifMentions, notifSounds, notifEmailDigest }),
+			});
+			if (res.ok) {
+				authStore.user.update(u => u ? { ...u, notifDms, notifMentions, notifSounds, notifEmailDigest } : u);
+				notifSaved = true;
+				setTimeout(() => { notifSaved = false; }, 2000);
+			}
+		} finally {
+			notifLoading = false;
+		}
+	}
+
+	async function savePrivacy() {
+		if (privacyLoading) return;
+		privacyLoading = true; privacySaved = false;
+		try {
+			const res = await fetch('/api/auth/privacy', {
+				method: 'PATCH',
+				headers: { 'Content-Type': 'application/json' },
+				credentials: 'include',
+				body: JSON.stringify({ allowDmsFromServerMembers: privacyDms, allowFriendRequestsFromAll: privacyFriendReqs, showActivityStatus: privacyActivity }),
+			});
+			if (res.ok) {
+				authStore.user.update(u => u ? { ...u, allowDmsFromServerMembers: privacyDms, allowFriendRequestsFromAll: privacyFriendReqs, showActivityStatus: privacyActivity } : u);
+				privacySaved = true;
+				setTimeout(() => { privacySaved = false; }, 2000);
+			}
+		} finally {
+			privacyLoading = false;
+		}
+	}
 
 	// ── Position helpers ──────────────────────────────────────────────────
 	function clampLeft(left: number, width: number): number {
@@ -306,11 +378,11 @@
 				<button class="settings-nav-item" class:active={settingsTab === 'account'} onclick={() => (settingsTab = 'account')}>Mi cuenta</button>
 				<button class="settings-nav-item" class:active={settingsTab === 'profile'} onclick={() => (settingsTab = 'profile')}>Perfil</button>
 				<!-- TODO: privacidad — DM permissions, friend requests, activity status; requires backend privacy settings -->
-				<button class="settings-nav-item" disabled title="Próximamente">Privacidad</button>
+				<button class="settings-nav-item" class:active={settingsTab === 'privacy'} onclick={() => (settingsTab = 'privacy')}>Privacidad</button>
 				<div class="settings-nav-group-label" style="margin-top:0.5rem">Ajustes de la app</div>
 				<button class="settings-nav-item" class:active={settingsTab === 'appearance'} onclick={() => (settingsTab = 'appearance')}>Apariencia</button>
 				<!-- TODO: notificaciones — per-channel notification preferences; requires backend notification settings -->
-				<button class="settings-nav-item" disabled title="Próximamente">Notificaciones</button>
+				<button class="settings-nav-item" class:active={settingsTab === 'notifications'} onclick={() => (settingsTab = 'notifications')}>Notificaciones</button>
 				<button class="settings-nav-item" class:active={settingsTab === 'voice'} onclick={async () => { settingsTab = 'voice'; await loadVoiceDevices(); }}>Voz y vídeo</button>
 				<div class="settings-nav-sep"></div>
 				<button class="settings-nav-item danger" onclick={handleLogout}><LogOut size={13} /> Cerrar sesión</button>
@@ -320,7 +392,7 @@
 			<div class="settings-body">
 				<div class="settings-title-row">
 					<h2 class="settings-title">
-						{#if settingsTab === 'account'}Mi cuenta{:else if settingsTab === 'profile'}Perfil{:else if settingsTab === 'voice'}Voz y audio{:else}Apariencia{/if}
+						{#if settingsTab === 'account'}Mi cuenta{:else if settingsTab === 'profile'}Perfil{:else if settingsTab === 'privacy'}Privacidad y seguridad{:else if settingsTab === 'notifications'}Notificaciones{:else if settingsTab === 'voice'}Voz y audio{:else}Apariencia{/if}
 					</h2>
 					<button class="settings-close" onclick={() => (showSettingsModal = false)}><X size={18} /></button>
 				</div>
@@ -439,6 +511,96 @@
 						{#if profileError}<p class="settings-error">{profileError}</p>{/if}
 						<button class="btn-primary" onclick={saveProfile} disabled={profileSaving}>
 							{profileSaving ? 'Guardando…' : profileSaved ? '✓ Guardado' : 'Guardar cambios'}
+						</button>
+					</div>
+
+				{:else if settingsTab === 'privacy'}
+					<p class="settings-lead">Tú decides quién puede contactarte.</p>
+					<div class="settings-section privacy-section">
+						<label class="set-toggle">
+							<span>
+								<strong>Permitir DMs de miembros del servidor</strong>
+								<em>Cualquiera de tus servidores puede escribirte</em>
+							</span>
+							<span class="switch">
+								<input type="checkbox" bind:checked={privacyDms} />
+								<span class="switch-track"></span>
+							</span>
+						</label>
+						<label class="set-toggle">
+							<span>
+								<strong>Solicitudes de amistad de todos</strong>
+								<em>Si no, solo amigos de amigos</em>
+							</span>
+							<span class="switch">
+								<input type="checkbox" bind:checked={privacyFriendReqs} />
+								<span class="switch-track"></span>
+							</span>
+						</label>
+						<label class="set-toggle">
+							<span>
+								<strong>Mostrar mi estado de actividad</strong>
+								<em>Otros ven cuando estás conectado</em>
+							</span>
+							<span class="switch">
+								<input type="checkbox" bind:checked={privacyActivity} />
+								<span class="switch-track"></span>
+							</span>
+						</label>
+					</div>
+					<div class="settings-save-row">
+						<button class="btn-primary" onclick={savePrivacy} disabled={privacyLoading}>
+							{privacyLoading ? 'Guardando…' : privacySaved ? '✓ Guardado' : 'Guardar cambios'}
+						</button>
+					</div>
+
+				{:else if settingsTab === 'notifications'}
+					<p class="settings-lead">Decide qué quieres que te avise.</p>
+					<div class="settings-section privacy-section">
+						<label class="set-toggle">
+							<span>
+								<strong>Mensajes directos</strong>
+								<em>Avisos de tus DMs</em>
+							</span>
+							<span class="switch">
+								<input type="checkbox" bind:checked={notifDms} />
+								<span class="switch-track"></span>
+							</span>
+						</label>
+						<label class="set-toggle">
+							<span>
+								<strong>Menciones</strong>
+								<em>Cuando te mencionan con @</em>
+							</span>
+							<span class="switch">
+								<input type="checkbox" bind:checked={notifMentions} />
+								<span class="switch-track"></span>
+							</span>
+						</label>
+						<label class="set-toggle">
+							<span>
+								<strong>Sonidos</strong>
+								<em>Tono al recibir mensajes</em>
+							</span>
+							<span class="switch">
+								<input type="checkbox" bind:checked={notifSounds} />
+								<span class="switch-track"></span>
+							</span>
+						</label>
+						<label class="set-toggle">
+							<span>
+								<strong>Resumen por email</strong>
+								<em>Un correo semanal con lo importante</em>
+							</span>
+							<span class="switch">
+								<input type="checkbox" bind:checked={notifEmailDigest} />
+								<span class="switch-track"></span>
+							</span>
+						</label>
+					</div>
+					<div class="settings-save-row">
+						<button class="btn-primary" onclick={saveNotifSettings} disabled={notifLoading}>
+							{notifLoading ? 'Guardando…' : notifSaved ? '✓ Guardado' : 'Guardar cambios'}
 						</button>
 					</div>
 
@@ -956,6 +1118,25 @@
 	}
 	.btn-primary:hover:not(:disabled) { filter: brightness(1.1); }
 	.btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
+
+	.settings-lead { font-size: 0.84rem; color: var(--text-muted); margin: -0.25rem 0 0.75rem; }
+
+	/* Privacy toggles */
+	.privacy-section { padding: 0; background: none; border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; }
+	.set-toggle {
+		display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+		padding: 0.75rem 1rem; border-bottom: 1px solid var(--border); cursor: pointer;
+	}
+	.set-toggle:last-child { border-bottom: none; }
+	.set-toggle > span:first-child { display: flex; flex-direction: column; gap: 0.15rem; }
+	.set-toggle strong { font-size: 0.86rem; font-weight: 700; color: var(--text-primary); }
+	.set-toggle em { font-style: normal; font-size: 0.76rem; color: var(--text-muted); }
+	.switch { position: relative; flex-shrink: 0; width: 44px; height: 26px; }
+	.switch input { position: absolute; opacity: 0; inset: 0; cursor: pointer; z-index: 1; margin: 0; }
+	.switch-track { position: absolute; inset: 0; background: var(--border-strong); border-radius: var(--radius-pill); transition: background var(--transition); }
+	.switch-track::after { content: ''; position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; background: #fff; border-radius: 50%; transition: transform 0.2s var(--ease-bounce, cubic-bezier(.34,1.56,.64,1)); box-shadow: 0 1px 3px rgba(0,0,0,0.3); }
+	.switch input:checked ~ .switch-track { background: var(--accent); }
+	.switch input:checked ~ .switch-track::after { transform: translateX(18px); }
 
 	.settings-status-grid { display: flex; flex-direction: column; gap: 0.15rem; }
 

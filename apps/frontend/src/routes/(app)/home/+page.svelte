@@ -7,6 +7,7 @@
 	import { dmUnread } from '$lib/dmStore.js';
 	import { conversationsStore, type Conversation } from '$lib/conversationsStore.js';
 	import { Users, MessageSquare, X, Check, Plus, Search, Menu } from 'lucide-svelte';
+	import ServerProfileCard from '$lib/components/ServerProfileCard.svelte';
 
 	let { data } = $props();
 	const user = $derived(data.user as { id: string; username: string; role: string; avatarUrl?: string | null });
@@ -31,6 +32,12 @@
 	let searchResults = $state<{ id: string; username: string; name?: string | null; avatarUrl?: string | null }[]>([]);
 	let searching = $state(false);
 	let searchDone = $state(false);
+	let profileCardUserId = $state<string | null>(null);
+
+	function openProfileCard(uid: string) {
+		if (uid === user.id) return;
+		profileCardUserId = uid;
+	}
 
 	// New DM modal
 	let showNewDm = $state(false);
@@ -261,16 +268,16 @@
 				{:else}
 					{#each onlineFriends as f (f.id)}
 						<div class="friend-row">
-							<div class="friend-avatar">
+							<button class="friend-avatar avatar-btn" title="Ver perfil" onclick={() => openProfileCard(f.user.id)}>
 								{#if f.user.avatarUrl}
 									<img src={f.user.avatarUrl} alt={f.user.username} />
 								{:else}
 									<span>{(f.user.name || f.user.username)[0].toUpperCase()}</span>
 								{/if}
 								<div class="status-dot online"></div>
-							</div>
+							</button>
 							<div class="friend-info">
-								<span class="friend-name">{f.user.name || f.user.username}</span>
+								<button class="friend-name-btn" onclick={() => openProfileCard(f.user.id)}>{f.user.name || f.user.username}</button>
 								<span class="friend-status">En línea</span>
 							</div>
 							<div class="friend-actions">
@@ -287,16 +294,16 @@
 				{:else}
 					{#each friends as f (f.id)}
 						<div class="friend-row">
-							<div class="friend-avatar">
+							<button class="friend-avatar avatar-btn" title="Ver perfil" onclick={() => openProfileCard(f.user.id)}>
 								{#if f.user.avatarUrl}
 									<img src={f.user.avatarUrl} alt={f.user.username} />
 								{:else}
 									<span>{(f.user.name || f.user.username)[0].toUpperCase()}</span>
 								{/if}
 								<div class="status-dot" class:online={f.user.online}></div>
-							</div>
+							</button>
 							<div class="friend-info">
-								<span class="friend-name">{f.user.name || f.user.username}</span>
+								<button class="friend-name-btn" onclick={() => openProfileCard(f.user.id)}>{f.user.name || f.user.username}</button>
 								<span class="friend-status">{f.user.online ? 'En línea' : 'Desconectado'}</span>
 							</div>
 							<div class="friend-actions">
@@ -314,15 +321,15 @@
 						<div class="section-label">ENTRANTES — {incomingPending.length}</div>
 						{#each incomingPending as p (p.id)}
 							<div class="friend-row">
-								<div class="friend-avatar">
+								<button class="friend-avatar avatar-btn" title="Ver perfil" onclick={() => openProfileCard(p.user.id)}>
 									{#if p.user.avatarUrl}
 										<img src={p.user.avatarUrl} alt={p.user.username} />
 									{:else}
 										<span>{(p.user.name || p.user.username)[0].toUpperCase()}</span>
 									{/if}
-								</div>
+								</button>
 								<div class="friend-info">
-									<span class="friend-name">{p.user.name || p.user.username}</span>
+									<button class="friend-name-btn" onclick={() => openProfileCard(p.user.id)}>{p.user.name || p.user.username}</button>
 									<span class="friend-status">Solicitud entrante</span>
 								</div>
 								<div class="friend-actions">
@@ -336,15 +343,15 @@
 						<div class="section-label">ENVIADAS</div>
 						{#each pending.filter(p => p.direction === 'outgoing') as p (p.id)}
 							<div class="friend-row">
-								<div class="friend-avatar">
+								<button class="friend-avatar avatar-btn" title="Ver perfil" onclick={() => openProfileCard(p.user.id)}>
 									{#if p.user.avatarUrl}
 										<img src={p.user.avatarUrl} alt={p.user.username} />
 									{:else}
 										<span>{(p.user.name || p.user.username)[0].toUpperCase()}</span>
 									{/if}
-								</div>
+								</button>
 								<div class="friend-info">
-									<span class="friend-name">{p.user.name || p.user.username}</span>
+									<button class="friend-name-btn" onclick={() => openProfileCard(p.user.id)}>{p.user.name || p.user.username}</button>
 									<span class="friend-status">Solicitud enviada</span>
 								</div>
 								<div class="friend-actions">
@@ -404,6 +411,15 @@
 		</div>
 	</main>
 </div>
+
+{#if profileCardUserId}
+	<ServerProfileCard
+		targetUserId={profileCardUserId}
+		viewerId={user.id}
+		onclose={() => (profileCardUserId = null)}
+		onOpenDm={(uid) => { profileCardUserId = null; openOrCreateDm(uid); }}
+	/>
+{/if}
 
 {#if showNewDm}
 	<div class="modal-overlay" role="dialog" aria-modal="true">
@@ -715,6 +731,14 @@
 		overflow: hidden;
 	}
 
+	.avatar-btn {
+		cursor: pointer;
+		padding: 0;
+		transition: opacity var(--transition);
+	}
+
+	.avatar-btn:hover { opacity: 0.85; }
+
 	.friend-avatar img { width: 100%; height: 100%; object-fit: cover; }
 
 	.status-dot {
@@ -736,7 +760,8 @@
 		min-width: 0;
 	}
 
-	.friend-name { font-size: 0.92rem; font-weight: 800; color: var(--text-primary); }
+	.friend-name-btn { font-size: 0.92rem; font-weight: 800; color: var(--text-primary); background: none; border: none; padding: 0; cursor: pointer; font-family: inherit; text-align: left; }
+	.friend-name-btn:hover { text-decoration: underline; }
 	.friend-status { font-family: var(--font-mono); font-size: 0.68rem; color: var(--text-muted); }
 
 	.friend-actions { display: flex; gap: 0.35rem; opacity: 0.4; transition: opacity var(--transition); }
