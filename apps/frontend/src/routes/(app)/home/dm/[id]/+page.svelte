@@ -77,8 +77,30 @@
 	let addMemberError = $state('');
 
 	let sock: ChatSocket | null = null;
+	let currentConvId = data.conversation.id;
 
-	$effect(() => { conversationsStore.seed(data.conversations); });
+	$effect(() => {
+		conversationsStore.seed(data.conversations);
+	});
+
+	$effect(() => {
+		const newConvId = (data.conversation as Conversation).id;
+		if (newConvId === currentConvId) return;
+		currentConvId = newConvId;
+
+		conversation = data.conversation as Conversation;
+		messages = [...(data.messages as DmMessage[])];
+		hasMore = (data.messages as DmMessage[]).length === 50;
+		msgInput = '';
+		typingUsernames = [];
+		editingId = null;
+		hoveredId = null;
+		profileCardUserId = null;
+
+		clearUnread(newConvId);
+		if (sock) sock.emit('dm:join', { conversationId: newConvId });
+		tick().then(() => scrollToBottom(true));
+	});
 
 	function convName(conv: Conversation) {
 		if (conv.name) return conv.name;
