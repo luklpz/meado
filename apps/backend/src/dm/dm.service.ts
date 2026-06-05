@@ -120,6 +120,9 @@ export class DmService {
   async createGroup(requesterId: string, userIds: string[], name?: string) {
     const allIds = [...new Set([requesterId, ...userIds])].sort();
     if (allIds.length < 2) throw new BadRequestException('Need at least one other user');
+    const friendIds = await this.friendsService.getFriendIds(requesterId);
+    const nonFriends = userIds.filter(id => id !== requesterId && !friendIds.includes(id));
+    if (nonFriends.length) throw new ForbiddenException('Can only add friends to group');
     return this.prisma.directConversation.create({
       data: {
         name: name ?? null,
@@ -180,10 +183,12 @@ export class DmService {
     return { ...msg, reactions: [] };
   }
 
-  async editMessage(messageId: string, userId: string, content: string) {
+  async editMessage(messageId: string, userId: string, content: string, conversationId: string) {
     const msg = await this.prisma.directMessage.findUnique({ where: { id: messageId } });
     if (!msg) throw new NotFoundException('Message not found');
+    if (msg.conversationId !== conversationId) throw new ForbiddenException('Message not in this conversation');
     if (msg.authorId !== userId) throw new ForbiddenException('Not your message');
+    if (!(await this.isMember(conversationId, userId))) throw new ForbiddenException('Not a member');
     if (!content?.trim()) throw new BadRequestException('Content required');
     if (content.length > 4000) throw new BadRequestException('Message too long (max 4000 chars)');
     const updated = await this.prisma.directMessage.update({
@@ -205,16 +210,18 @@ export class DmService {
     if (!msg) throw new NotFoundException('Message not found');
     if (!(await this.isMember(msg.conversationId, userId))) throw new ForbiddenException('Not a member');
 
-    const existing = await this.prisma.directMessageReaction.findUnique({
-      where: { messageId_userId_emoji: { messageId, userId, emoji } },
-    });
-    if (existing) {
-      await this.prisma.directMessageReaction.delete({
+    await this.prisma.$transaction(async (tx) => {
+      const existing = await tx.directMessageReaction.findUnique({
         where: { messageId_userId_emoji: { messageId, userId, emoji } },
       });
-    } else {
-      await this.prisma.directMessageReaction.create({ data: { messageId, userId, emoji } });
-    }
+      if (existing) {
+        await tx.directMessageReaction.delete({
+          where: { messageId_userId_emoji: { messageId, userId, emoji } },
+        });
+      } else {
+        await tx.directMessageReaction.create({ data: { messageId, userId, emoji } });
+      }
+    });
 
     const raw = await this.prisma.directMessageReaction.findMany({
       where: { messageId },
@@ -223,13 +230,15 @@ export class DmService {
     return { messageId, conversationId: msg.conversationId, reactions: formatReactions(raw, userId) };
   }
 
-  async deleteMessage(messageId: string, userId: string) {
+  async deleteMessage(messageId: string, userId: string, conversationId: string) {
     const msg = await this.prisma.directMessage.findUnique({
       where: { id: messageId },
       include: { attachments: { select: { url: true } } },
     });
     if (!msg) throw new NotFoundException('Message not found');
+    if (msg.conversationId !== conversationId) throw new ForbiddenException('Message not in this conversation');
     if (msg.authorId !== userId) throw new ForbiddenException('Not your message');
+    if (!(await this.isMember(conversationId, userId))) throw new ForbiddenException('Not a member');
     const attachmentUrls = msg.attachments.map(a => a.url);
     await this.prisma.directMessage.delete({ where: { id: messageId } });
     if (attachmentUrls.length) await this.storage.deleteManyByUrls(attachmentUrls);

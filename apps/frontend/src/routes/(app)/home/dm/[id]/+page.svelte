@@ -663,7 +663,18 @@
 		targetUserId={profileCardUserId}
 		viewerId={user.id}
 		onclose={() => (profileCardUserId = null)}
-		onOpenDm={(uid) => { profileCardUserId = null; if (uid !== (dmOtherUser?.id ?? '')) goto(`/home`); }}
+		onOpenDm={async (uid) => {
+			profileCardUserId = null;
+			if (uid === (dmOtherUser?.id ?? '')) return;
+			const res = await fetch('/api/dm', {
+				method: 'POST',
+				credentials: 'include',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ userIds: [uid] }),
+			});
+			if (res.ok) { const conv = await res.json(); goto(`/home/dm/${conv.id}`); }
+			else goto('/home');
+		}}
 	/>
 {/if}
 

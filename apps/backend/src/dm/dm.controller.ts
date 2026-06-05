@@ -81,8 +81,8 @@ export class DmController {
     @Param('messageId') messageId: string,
     @Body('content') content: string,
   ) {
-    const message = await this.dmService.editMessage(messageId, req.user.id, content);
-    this.gateway.broadcastDmMessageUpdated(id, message);
+    const message = await this.dmService.editMessage(messageId, req.user.id, content, id);
+    this.gateway.broadcastDmMessageUpdated(message.conversationId, message);
     return message;
   }
 
@@ -92,8 +92,8 @@ export class DmController {
     @Param('id') id: string,
     @Param('messageId') messageId: string,
   ) {
-    const result = await this.dmService.deleteMessage(messageId, req.user.id);
-    this.gateway.broadcastDmMessageDeleted(id, messageId);
+    const result = await this.dmService.deleteMessage(messageId, req.user.id, id);
+    this.gateway.broadcastDmMessageDeleted(result.conversationId, messageId);
     return result;
   }
 }
