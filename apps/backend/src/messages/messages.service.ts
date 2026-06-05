@@ -91,16 +91,18 @@ export class MessagesService {
     const isMember = await this.verifyChannelMember(msg.channelId, userId);
     if (!isMember) throw new ForbiddenException('Not a member');
 
-    const existing = await this.prisma.messageReaction.findUnique({
-      where: { messageId_userId_emoji: { messageId, userId, emoji } },
-    });
-    if (existing) {
-      await this.prisma.messageReaction.delete({
+    await this.prisma.$transaction(async (tx) => {
+      const existing = await tx.messageReaction.findUnique({
         where: { messageId_userId_emoji: { messageId, userId, emoji } },
       });
-    } else {
-      await this.prisma.messageReaction.create({ data: { messageId, userId, emoji } });
-    }
+      if (existing) {
+        await tx.messageReaction.delete({
+          where: { messageId_userId_emoji: { messageId, userId, emoji } },
+        });
+      } else {
+        await tx.messageReaction.create({ data: { messageId, userId, emoji } });
+      }
+    });
 
     const reactions = await this.prisma.messageReaction.findMany({
       where: { messageId },
@@ -109,10 +111,12 @@ export class MessagesService {
     return { messageId, channelId: msg.channelId, reactions: formatReactions(reactions, userId) };
   }
 
-  async editMessage(messageId: string, userId: string, content: string) {
+  async editMessage(messageId: string, userId: string, content: string, channelId: string) {
     const msg = await this.prisma.message.findUnique({ where: { id: messageId } });
     if (!msg) throw new NotFoundException('Message not found');
+    if (msg.channelId !== channelId) throw new ForbiddenException('Message not in this channel');
     if (msg.authorId !== userId) throw new ForbiddenException('Not your message');
+    if (!(await this.verifyChannelMember(channelId, userId))) throw new ForbiddenException('Not a member');
     if (!content?.trim()) throw new BadRequestException('Content required');
     if (content.length > 4000) throw new BadRequestException('Message too long (max 4000 chars)');
     const updated = await this.prisma.message.update({

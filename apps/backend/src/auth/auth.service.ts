@@ -95,16 +95,25 @@ export class AuthService {
     const role = count === 0 ? 'SUPERADMIN' : 'USER';
     const passwordHash = await bcrypt.hash(dto.password, 12);
 
-    const user = await this.prisma.user.create({
-      data: {
-        username: dto.username,
-        name: dto.name?.trim() || null,
-        email: normalizedEmail,
-        passwordHash,
-        role: role as any,
-      },
-      select: { id: true, username: true, email: true },
-    });
+    let user: { id: string; username: string; email: string };
+    try {
+      user = await this.prisma.user.create({
+        data: {
+          username: dto.username,
+          name: dto.name?.trim() || null,
+          email: normalizedEmail,
+          passwordHash,
+          role: role as any,
+        },
+        select: { id: true, username: true, email: true },
+      });
+    } catch (e) {
+      if ((e as any)?.code === 'P2002') {
+        const field = (e as any).meta?.target?.includes('email') ? 'email' : 'username';
+        throw new ConflictException(field === 'email' ? 'El email ya está registrado' : 'El nombre de usuario ya está en uso');
+      }
+      throw e;
+    }
 
     const verifyToken = jwt.sign(
       { sub: user.id, email: user.email, type: 'verify' },
@@ -311,7 +320,12 @@ export class AuthService {
     if ('name' in dto) data.name = dto.name?.trim() || null;
     if ('bio' in dto) data.bio = dto.bio?.trim() || null;
     if ('pronouns' in dto) data.pronouns = dto.pronouns?.trim() || null;
-    if ('bannerColor' in dto) data.bannerColor = dto.bannerColor || null;
+    if ('bannerColor' in dto) {
+      if (dto.bannerColor && !/^#[0-9a-fA-F]{6}$/.test(dto.bannerColor)) {
+        throw new BadRequestException('bannerColor must be a valid hex color (e.g. #5865f2)');
+      }
+      data.bannerColor = dto.bannerColor || null;
+    }
     const updated = await this.prisma.user.update({ where: { id: userId }, data, select: { name: true, bio: true, pronouns: true, bannerColor: true } });
     return updated;
   }

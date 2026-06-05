@@ -298,8 +298,8 @@ export class MessagesGateway implements OnGatewayConnection, OnGatewayDisconnect
         if (room.size === 0) voiceRooms.delete(entry.channelId);
       }
       this.server.to(`voice:${entry.channelId}`).emit('voice:left', { channelId: entry.channelId, userId });
+      client.leave(`voice:${entry.channelId}`);
     }
-    client.leave(`voice:${entry?.channelId ?? payload.channelId}`);
   }
 
   // ── Reactions ─────────────────────────────────────────────────────────

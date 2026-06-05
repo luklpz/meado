@@ -90,8 +90,8 @@ export class MessagesController {
     @Req() req: Request,
   ) {
     const { id } = authUser(req);
-    const message = await this.messagesService.editMessage(messageId, id, content);
-    this.gateway.broadcastMessageUpdated(channelId, message);
+    const message = await this.messagesService.editMessage(messageId, id, content, channelId);
+    this.gateway.broadcastMessageUpdated(message.channelId, message);
     return message;
   }
 
@@ -103,7 +103,7 @@ export class MessagesController {
   ) {
     const { id, role } = authUser(req);
     const result = await this.messagesService.deleteMessage(messageId, id, role);
-    this.gateway.broadcastMessageDeleted(channelId, messageId);
+    this.gateway.broadcastMessageDeleted(result.channelId, messageId);
     return result;
   }
 
