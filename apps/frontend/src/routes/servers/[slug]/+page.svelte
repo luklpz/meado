@@ -425,23 +425,28 @@
 			const res = await fetch(`/api/channels/${channelId}/messages?limit=${MSG_LIMIT}`, { credentials: 'include' });
 			if (res.ok) {
 				const data = await res.json();
+				if (selectedChannel?.id !== channelId) return;
 				messages = data;
 				hasMore = data.length === MSG_LIMIT;
 			}
 		} finally {
-			messagesLoading = false;
-			scrollToBottom();
+			if (selectedChannel?.id === channelId) {
+				messagesLoading = false;
+				scrollToBottom();
+			}
 		}
 	}
 
 	async function loadMoreMessages() {
 		if (!selectedChannel || loadingMore || !hasMore || messages.length === 0) return;
 		loadingMore = true;
+		const channelId = selectedChannel.id;
 		const oldest = messages[0].createdAt;
 		try {
-			const res = await fetch(`/api/channels/${selectedChannel.id}/messages?limit=${MSG_LIMIT}&before=${encodeURIComponent(oldest)}`, { credentials: 'include' });
+			const res = await fetch(`/api/channels/${channelId}/messages?limit=${MSG_LIMIT}&before=${encodeURIComponent(oldest)}`, { credentials: 'include' });
 			if (res.ok) {
 				const older = await res.json();
+				if (selectedChannel?.id !== channelId) return;
 				if (older.length === 0) { hasMore = false; return; }
 				const el = messagesEl;
 				const prevHeight = el?.scrollHeight ?? 0;
