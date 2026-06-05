@@ -231,7 +231,7 @@ export class AuthService {
     userId: string,
     dto: { name?: string; bio?: string; pronouns?: string; bannerColor?: string },
   ): Promise<{ name: string | null; bio: string | null; pronouns: string | null; bannerColor: string | null }> {
-    const data: Record<string, string | null> = {};
+    const data: { name?: string | null; bio?: string | null; pronouns?: string | null; bannerColor?: string | null } = {};
     if ('name' in dto) data.name = dto.name?.trim() || null;
     if ('bio' in dto) data.bio = dto.bio?.trim() || null;
     if ('pronouns' in dto) data.pronouns = dto.pronouns?.trim() || null;

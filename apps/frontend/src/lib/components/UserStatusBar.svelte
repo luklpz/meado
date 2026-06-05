@@ -417,7 +417,7 @@
 						<input
 							class="settings-input"
 							bind:value={profilePronouns}
-							placeholder="ej. él/ellos, ella/ellas"
+							placeholder="él/ella, they/them…"
 							maxlength="40"
 						/>
 					</div>
