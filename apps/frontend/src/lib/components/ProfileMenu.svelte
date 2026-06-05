@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { goto, invalidateAll } from '$app/navigation';
 	import { authStore } from '$lib/auth.js';
-	import { themeStore, THEME_OPTIONS, type Theme } from '$lib/theme.js';
+	import { themeBase, themeAccent, BASE_OPTIONS, ACCENT_OPTIONS } from '$lib/theme.js';
 	import { Check, X, LogOut, UserRound, Pen, Upload, Loader2 } from 'lucide-svelte';
 
 	const { user } = authStore;
@@ -28,7 +28,6 @@
 		goto('/login');
 	}
 
-	function setTheme(t: Theme) { themeStore.set(t); }
 
 	async function saveName() {
 		nameError = '';
@@ -148,19 +147,26 @@
 
 			<!-- Theme -->
 			<div class="section">
-				<span class="section-label">Tema</span>
-				<div class="theme-grid">
-					{#each THEME_OPTIONS as opt}
+				<span class="section-label">Fondo</span>
+				<div class="base-row">
+					{#each BASE_OPTIONS as opt}
 						<button
-							class="theme-btn"
-							class:active={$themeStore === opt.value}
-							onclick={() => setTheme(opt.value)}
+							class="base-btn"
+							class:active={$themeBase === opt.value}
+							onclick={() => themeBase.set(opt.value)}
+						>{opt.label}</button>
+					{/each}
+				</div>
+				<span class="section-label" style="margin-top:0.4rem">Acento</span>
+				<div class="accent-row">
+					{#each ACCENT_OPTIONS as opt}
+						<button
+							class="accent-dot-btn"
+							class:active={$themeAccent === opt.value}
+							style="background:{opt.color}"
 							title={opt.label}
-						>
-							<span class="theme-icon">{opt.icon}</span>
-							<span>{opt.label}</span>
-							{#if $themeStore === opt.value}<Check size={12} class="theme-check" />{/if}
-						</button>
+							onclick={() => themeAccent.set(opt.value)}
+						></button>
 					{/each}
 				</div>
 			</div>
@@ -423,32 +429,23 @@
 		padding: 0 0.3rem 0.1rem;
 	}
 
-	/* ── Theme grid ── */
-	.theme-grid { display: flex; flex-direction: column; gap: 0.05rem; }
-
-	.theme-btn {
-		display: flex;
-		align-items: center;
-		gap: 0.5rem;
-		padding: 0.3rem 0.4rem;
-		background: transparent;
-		border: none;
-		border-radius: var(--radius-sm);
-		color: var(--text-secondary);
-		cursor: pointer;
-		font-size: 0.78rem;
-		width: 100%;
-		transition: background var(--transition), color var(--transition);
-		font-family: inherit;
+	/* ── Theme controls ── */
+	.base-row { display: flex; gap: 0.35rem; margin-top: 0.2rem; }
+	.base-btn {
+		flex: 1; padding: 0.35rem 0.4rem; background: var(--bg-elevated); border: 1.5px solid var(--border);
+		border-radius: var(--radius-sm); color: var(--text-secondary); font-size: 0.76rem; font-weight: 700;
+		cursor: pointer; font-family: inherit; transition: all var(--transition);
 	}
+	.base-btn:hover { border-color: var(--border-strong); color: var(--text-primary); }
+	.base-btn.active { background: var(--accent-dim); border-color: var(--accent); color: var(--accent); }
 
-	.theme-btn:hover { background: var(--bg-elevated); color: var(--text-primary); }
-
-	.theme-btn.active { color: var(--accent); }
-
-	.theme-icon { font-size: 0.75rem; flex-shrink: 0; }
-
-	:global(.theme-check) { margin-left: auto; color: var(--accent); }
+	.accent-row { display: flex; gap: 0.3rem; flex-wrap: wrap; margin-top: 0.2rem; }
+	.accent-dot-btn {
+		width: 22px; height: 22px; border-radius: 50%; border: 2px solid transparent;
+		cursor: pointer; transition: transform var(--transition), border-color var(--transition);
+	}
+	.accent-dot-btn:hover { transform: scale(1.15); }
+	.accent-dot-btn.active { border-color: var(--text-primary); }
 
 	/* ── Action items ── */
 	.action-item {

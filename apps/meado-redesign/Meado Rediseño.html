@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="noche">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Meado — Rediseño de frontend</title>
+	<link rel="preconnect" href="https://fonts.googleapis.com">
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link href="https://fonts.googleapis.com/css2?family=Nunito:ital,wght@0,400;0,600;0,700;0,800;0,900&family=Fira+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+	<link rel="stylesheet" href="tokens.css">
+	<link rel="stylesheet" href="app.css">
+	<link rel="stylesheet" href="server.css">
+	<link rel="stylesheet" href="overlays.css">
+</head>
+<body>
+	<!-- Barra de control del prototipo -->
+	<header class="proto-bar">
+		<div class="proto-brand"><span class="dot"></span> meado</div>
+		<div class="proto-tabs" id="protoTabs"></div>
+		<div class="proto-spacer"></div>
+		<div class="proto-group">
+			<span class="proto-label">Fondo</span>
+			<div class="base-toggle" id="baseToggle"></div>
+		</div>
+		<div class="proto-group">
+			<span class="proto-label">Color</span>
+			<div class="theme-swatches" id="themeSwatches"></div>
+		</div>
+		<div class="proto-group">
+			<div class="device-toggle">
+				<button class="device-btn active" id="devDesktop" title="Escritorio">
+					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="3" rx="2"/><line x1="8" x2="16" y1="21" y2="21"/><line x1="12" x2="12" y1="17" y2="21"/></svg>
+				</button>
+				<button class="device-btn" id="devMobile" title="Móvil">
+					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="20" x="5" y="2" rx="2.5"/><line x1="12" x2="12" y1="18" y2="18"/></svg>
+				</button>
+			</div>
+		</div>
+	</header>
+
+	<!-- Escenario con el frame de la app -->
+	<main class="proto-stage">
+		<div class="app-frame" id="frame"></div>
+	</main>
+
+	<script src="data.js"></script>
+	<script src="overlays.js"></script>
+	<script src="app.js"></script>
+</body>
+</html>

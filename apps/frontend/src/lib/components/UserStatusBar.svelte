@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { goto, invalidateAll } from '$app/navigation';
 	import { authStore } from '$lib/auth.js';
-	import { themeStore, THEME_OPTIONS, type Theme } from '$lib/theme.js';
+	import { themeBase, themeAccent, BASE_OPTIONS, ACCENT_OPTIONS } from '$lib/theme.js';
 	import { micMuted, deafened, userStatus, STATUS_CONFIG, type UserStatus } from '$lib/voicePrefs.js';
 	import { livekitStore } from '$lib/livekit.js';
 	import {
@@ -23,28 +23,53 @@
 
 	// ── Panel / flyout state ──────────────────────────────────────────────
 	let profileOpen = $state(false);
-	let showTheme = $state(false);
-	let showStatus = $state(false);
+	let ppExpand = $state<null | 'status' | 'theme'>(null);
 	let showMicFlyout = $state(false);
 	let showOutFlyout = $state(false);
 	let showSettingsModal = $state(false);
 	let settingsTab = $state<'account' | 'voice' | 'appearance'>('account');
 
 	// ── Flyout positions ──────────────────────────────────────────────────
-	let themeFlyoutTop = $state(0);
-	let themeFlyoutLeft = $state(0);
-	let statusFlyoutTop = $state(0);
-	let statusFlyoutLeft = $state(0);
 	let micFlyoutLeft = $state(0);
 	let outFlyoutLeft = $state(0);
 
 	// ── Element refs ──────────────────────────────────────────────────────
-	let themeBtnEl = $state<HTMLButtonElement>();
-	let statusBtnEl = $state<HTMLButtonElement>();
 	let micChevronEl = $state<HTMLButtonElement | null>(null);
 	let outChevronEl = $state<HTMLButtonElement | null>(null);
 	let fileInput = $state<HTMLInputElement | null>(null);
 	let settingsFileInput = $state<HTMLInputElement | null>(null);
+
+	// ── Camera (voice settings) ───────────────────────────────────────────
+	let videoDevices = $state<MediaDeviceInfo[]>([]);
+	let selectedVideoId = $state('');
+	let videoPreviewEl = $state<HTMLVideoElement | null>(null);
+	let videoStream = $state<MediaStream | null>(null);
+
+	async function loadVideoDevices() {
+		try {
+			const s = await navigator.mediaDevices.getUserMedia({ video: true });
+			s.getTracks().forEach(t => t.stop());
+		} catch { /* denied or unavailable */ }
+		const all = await navigator.mediaDevices.enumerateDevices();
+		videoDevices = all.filter(d => d.kind === 'videoinput');
+		if (videoDevices.length > 0 && !selectedVideoId) selectedVideoId = videoDevices[0].deviceId;
+	}
+
+	async function startVideoPreview(deviceId: string) {
+		if (videoStream) { videoStream.getTracks().forEach(t => t.stop()); videoStream = null; }
+		if (!deviceId) return;
+		try {
+			videoStream = await navigator.mediaDevices.getUserMedia({ video: { deviceId: { exact: deviceId } } });
+		} catch { /* denied */ }
+	}
+
+	$effect(() => {
+		if (videoPreviewEl && videoStream) videoPreviewEl.srcObject = videoStream;
+	});
+
+	$effect(() => {
+		if (!showSettingsModal && videoStream) { videoStream.getTracks().forEach(t => t.stop()); videoStream = null; }
+	});
 
 	// ── Profile panel state ───────────────────────────────────────────────
 	let uploading = $state(false);
@@ -74,8 +99,7 @@
 	// ── Global close ─────────────────────────────────────────────────────
 	function closePopups() {
 		profileOpen = false;
-		showTheme = false;
-		showStatus = false;
+		ppExpand = null;
 		showMicFlyout = false;
 		showOutFlyout = false;
 	}
@@ -92,28 +116,6 @@
 			if (showSettingsModal) { showSettingsModal = false; return; }
 			closePopups();
 		}
-	}
-
-	// ── Theme flyout ──────────────────────────────────────────────────────
-	function openTheme() {
-		const fh = THEME_OPTIONS.length * 36 + 16;
-		const pos = flyoutPos(themeBtnEl!, 180, fh);
-		themeFlyoutTop = pos.top;
-		themeFlyoutLeft = pos.left;
-		showTheme = !showTheme;
-		showStatus = false;
-	}
-
-	function setTheme(t: Theme) { themeStore.set(t); showTheme = false; }
-
-	// ── Status flyout ─────────────────────────────────────────────────────
-	function openStatus() {
-		const fh = Object.keys(STATUS_CONFIG).length * 52 + 16;
-		const pos = flyoutPos(statusBtnEl!, 230, fh);
-		statusFlyoutTop = pos.top;
-		statusFlyoutLeft = pos.left;
-		showStatus = !showStatus;
-		showTheme = false;
 	}
 
 	// ── Audio permission helper ───────────────────────────────────────────
@@ -151,7 +153,7 @@
 
 	async function loadVoiceDevices() {
 		await requestAudioPerm();
-		await livekitStore.enumerateDevices();
+		await Promise.all([livekitStore.enumerateDevices(), loadVideoDevices()]);
 	}
 
 	// ── Profile panel upload/edit ─────────────────────────────────────────
@@ -216,39 +218,6 @@
 <input bind:this={fileInput} type="file" accept="image/jpeg,image/png,image/gif,image/webp" style="display:none" onchange={(e) => handleFileChange(e, false)} />
 <input bind:this={settingsFileInput} type="file" accept="image/jpeg,image/png,image/gif,image/webp" style="display:none" onchange={(e) => handleFileChange(e, true)} />
 
-<!-- ── Theme flyout ─────────────────────────────────────────────────────── -->
-{#if showTheme}
-	<div class="usb-flyout theme-flyout" style="top:{themeFlyoutTop}px; left:{themeFlyoutLeft}px;">
-		{#each THEME_OPTIONS as opt}
-			<button class="flyout-item" class:active={$themeStore === opt.value} onclick={() => setTheme(opt.value)}>
-				<span class="flyout-icon">{opt.icon}</span>
-				<span>{opt.label}</span>
-				{#if $themeStore === opt.value}<Check size={12} class="fl-check" />{/if}
-			</button>
-		{/each}
-	</div>
-{/if}
-
-<!-- ── Status flyout ────────────────────────────────────────────────────── -->
-{#if showStatus}
-	<div class="usb-flyout status-flyout" style="top:{statusFlyoutTop}px; left:{statusFlyoutLeft}px;">
-		{#each Object.entries(STATUS_CONFIG) as [key, cfg]}
-			<button
-				class="flyout-item status-flyout-item"
-				class:active={$userStatus === key}
-				onclick={() => { userStatus.set(key as UserStatus); showStatus = false; }}
-			>
-				<span class="status-bullet" style="background:{cfg.color}"></span>
-				<span class="status-texts">
-					<span class="status-label">{cfg.label}</span>
-					{#if cfg.description}<span class="status-desc">{cfg.description}</span>{/if}
-				</span>
-				{#if $userStatus === key}<Check size={12} class="fl-check" />{/if}
-			</button>
-		{/each}
-	</div>
-{/if}
-
 <!-- ── Mic input flyout ──────────────────────────────────────────────────── -->
 {#if showMicFlyout}
 	<div class="usb-flyout device-flyout" style="bottom:60px; left:{micFlyoutLeft}px;">
@@ -304,10 +273,17 @@
 		<div class="settings-modal">
 			<!-- Sidebar nav -->
 			<nav class="settings-nav">
-				<div class="settings-nav-group-label">Usuario</div>
+				<div class="settings-nav-group-label">Ajustes de usuario</div>
 				<button class="settings-nav-item" class:active={settingsTab === 'account'} onclick={() => (settingsTab = 'account')}>Mi cuenta</button>
-				<button class="settings-nav-item" class:active={settingsTab === 'voice'} onclick={async () => { settingsTab = 'voice'; await loadVoiceDevices(); }}>Voz y audio</button>
+				<!-- TODO: perfil — bio, pronombres, banner color; requires extended user profile fields in backend -->
+				<button class="settings-nav-item" disabled title="Próximamente">Perfil</button>
+				<!-- TODO: privacidad — DM permissions, friend requests, activity status; requires backend privacy settings -->
+				<button class="settings-nav-item" disabled title="Próximamente">Privacidad</button>
+				<div class="settings-nav-group-label" style="margin-top:0.5rem">Ajustes de la app</div>
 				<button class="settings-nav-item" class:active={settingsTab === 'appearance'} onclick={() => (settingsTab = 'appearance')}>Apariencia</button>
+				<!-- TODO: notificaciones — per-channel notification preferences; requires backend notification settings -->
+				<button class="settings-nav-item" disabled title="Próximamente">Notificaciones</button>
+				<button class="settings-nav-item" class:active={settingsTab === 'voice'} onclick={async () => { settingsTab = 'voice'; await loadVoiceDevices(); }}>Voz y vídeo</button>
 				<div class="settings-nav-sep"></div>
 				<button class="settings-nav-item danger" onclick={handleLogout}><LogOut size={13} /> Cerrar sesión</button>
 			</nav>
@@ -425,15 +401,70 @@
 						</div>
 					</div>
 
-				{:else}
+					<div class="settings-sep"></div>
+
 					<div class="settings-section">
-						<div class="settings-label">Tema de la aplicación</div>
-						<div class="settings-theme-list">
-							{#each THEME_OPTIONS as opt}
-								<button class="settings-theme-btn" class:active={$themeStore === opt.value} onclick={() => themeStore.set(opt.value)}>
-									<span class="flyout-icon">{opt.icon}</span>
+						<div class="settings-label">Cámara</div>
+						{#if videoDevices.length === 0}
+							<p class="flyout-empty">No se detectaron cámaras</p>
+						{:else}
+							<select
+								class="settings-select"
+								value={selectedVideoId}
+								onchange={async (e) => { selectedVideoId = (e.target as HTMLSelectElement).value; await startVideoPreview(selectedVideoId); }}
+							>
+								{#each videoDevices as dev (dev.deviceId)}
+									<option value={dev.deviceId}>{dev.label}</option>
+								{/each}
+							</select>
+						{/if}
+						{#if videoStream}
+							<div class="cam-preview-wrap">
+								<!-- svelte-ignore a11y_media_has_caption -->
+								<video bind:this={videoPreviewEl} autoplay muted playsinline class="cam-preview"></video>
+							</div>
+						{:else if videoDevices.length > 0}
+							<button class="cam-preview-start" onclick={() => startVideoPreview(selectedVideoId)}>
+								Ver preview
+							</button>
+						{/if}
+					</div>
+
+				{:else}
+					<!-- Apariencia -->
+					<div class="settings-section">
+						<div class="settings-label">Fondo</div>
+						<div class="settings-base-cards">
+							{#each BASE_OPTIONS as opt}
+								<button
+									class="settings-base-card"
+									class:active={$themeBase === opt.value}
+									onclick={() => themeBase.set(opt.value)}
+								>
+									<span class="sbc-preview {opt.value === 'noche' ? 'sbc-noche' : 'sbc-dia'}">
+										<span class="sbc-bar"></span>
+										<span class="sbc-bar sbc-short"></span>
+									</span>
+									<span class="sbc-label">
+										{opt.label}
+										{#if $themeBase === opt.value}<Check size={13} class="sbc-check" />{/if}
+									</span>
+								</button>
+							{/each}
+						</div>
+					</div>
+					<div class="settings-section">
+						<div class="settings-label">Color de acento</div>
+						<div class="settings-accent-grid">
+							{#each ACCENT_OPTIONS as opt}
+								<button
+									class="settings-accent-chip"
+									class:active={$themeAccent === opt.value}
+									style="--sw:{opt.color}"
+									onclick={() => themeAccent.set(opt.value)}
+								>
+									<span class="accent-dot" style="background:{opt.color}"></span>
 									<span>{opt.label}</span>
-									{#if $themeStore === opt.value}<Check size={13} class="fl-check" />{/if}
 								</button>
 							{/each}
 						</div>
@@ -487,19 +518,65 @@
 
 			<div class="sep"></div>
 
-			<!-- Estado (flyout) -->
-			<button bind:this={statusBtnEl} class="menu-item" onclick={openStatus}>
+			<!-- Estado (inline accordion) -->
+			<button class="pp-row-toggle" class:open={ppExpand === 'status'}
+				onclick={() => ppExpand = ppExpand === 'status' ? null : 'status'}>
 				<span class="status-bullet-sm" style="background:{STATUS_CONFIG[$userStatus].color}"></span>
-				{STATUS_CONFIG[$userStatus].label}
-				<ChevronRight size={13} class="menu-arrow" />
+				<span class="pp-row-label">Estado</span>
+				<span class="pp-row-value">{STATUS_CONFIG[$userStatus].label}</span>
+				<ChevronDown size={13} class="pp-caret" />
 			</button>
+			{#if ppExpand === 'status'}
+				<div class="pp-collapse pp-status-row">
+					{#each Object.entries(STATUS_CONFIG) as [key, cfg]}
+						<button
+							class="pp-status-btn"
+							class:active={$userStatus === key}
+							onclick={() => { userStatus.set(key as UserStatus); ppExpand = null; }}
+						>
+							<span class="status-bullet" style="background:{cfg.color}"></span>
+							<span class="status-texts">
+								<span class="status-label">{cfg.label}</span>
+								{#if cfg.description}<span class="status-desc">{cfg.description}</span>{/if}
+							</span>
+							{#if $userStatus === key}<Check size={12} class="fl-check" />{/if}
+						</button>
+					{/each}
+				</div>
+			{/if}
 
-			<!-- Tema (flyout) -->
-			<button bind:this={themeBtnEl} class="menu-item" onclick={openTheme}>
-				<span class="menu-item-icon">{THEME_OPTIONS.find(o => o.value === $themeStore)?.icon ?? '◐'}</span>
-				Tema — {THEME_OPTIONS.find(o => o.value === $themeStore)?.label}
-				<ChevronRight size={13} class="menu-arrow" />
+			<!-- Tema (inline accordion) -->
+			<button class="pp-row-toggle" class:open={ppExpand === 'theme'}
+				onclick={() => ppExpand = ppExpand === 'theme' ? null : 'theme'}>
+				<span class="pp-swatch-mini" style="--sw:{ACCENT_OPTIONS.find(o => o.value === $themeAccent)?.color}"></span>
+				<span class="pp-row-label">Tema</span>
+				<span class="pp-row-value">{BASE_OPTIONS.find(o => o.value === $themeBase)?.label} · {ACCENT_OPTIONS.find(o => o.value === $themeAccent)?.label}</span>
+				<ChevronDown size={13} class="pp-caret" />
 			</button>
+			{#if ppExpand === 'theme'}
+				<div class="pp-collapse">
+					<div class="pp-base-row">
+						{#each BASE_OPTIONS as opt}
+							<button
+								class="pp-base-btn"
+								class:active={$themeBase === opt.value}
+								onclick={() => themeBase.set(opt.value)}
+							>{opt.label}</button>
+						{/each}
+					</div>
+					<div class="pp-theme-row">
+						{#each ACCENT_OPTIONS as opt}
+							<button
+								class="pp-theme-sw"
+								class:active={$themeAccent === opt.value}
+								style="--sw:{opt.color}"
+								title={opt.label}
+								onclick={() => themeAccent.set(opt.value)}
+							></button>
+						{/each}
+					</div>
+				</div>
+			{/if}
 
 			<!-- Ajustes (modal) -->
 			<button class="menu-item" onclick={() => openSettingsModal('account')}>
@@ -519,7 +596,7 @@
 
 	<!-- Status bar -->
 	<div class="status-bar">
-		<button class="user-identity" onclick={() => { profileOpen = !profileOpen; showTheme = false; showStatus = false; }} title="Perfil">
+		<button class="user-identity" onclick={() => { profileOpen = !profileOpen; ppExpand = null; }} title="Perfil">
 			<div class="sb-avatar">
 				{#if $user?.avatarUrl}
 					<img src={$user.avatarUrl} alt={$user?.username} />
@@ -575,17 +652,26 @@
 	/* ── Fixed wrapper ── */
 	.usb-wrap {
 		position: fixed; bottom: 0; left: 0;
-		width: calc(56px + 240px); z-index: 9999;
-		font-family: var(--font-mono);
+		width: calc(72px + 264px); z-index: 9999;
+		font-family: var(--font-ui);
+	}
+
+	@media (max-width: 768px) {
+		.usb-wrap { width: 100%; }
+		.status-bar { border-top-right-radius: 0; }
+		.profile-panel { left: 0; width: calc(100% - 72px); }
 	}
 
 	/* ── Profile panel ── */
 	.profile-panel {
-		position: absolute; bottom: 100%; left: 56px; width: 260px; margin-bottom: 4px;
-		background: var(--bg-surface); border: 1px solid var(--border);
+		position: absolute; bottom: 100%; left: 72px; width: 270px; margin-bottom: 4px;
+		background: var(--bg-surface); border: 1px solid var(--border-strong);
 		border-radius: var(--radius-lg); overflow: hidden; display: flex; flex-direction: column;
-		box-shadow: 0 16px 48px rgba(0,0,0,0.55), 0 2px 8px rgba(0,0,0,0.3);
+		box-shadow: var(--shadow-pop);
+		animation: pop 0.16s ease;
 	}
+
+	@keyframes pop { from { opacity: 0; transform: translateY(8px) scale(0.96); } to { opacity: 1; transform: none; } }
 
 	/* ── Generic flyout ── */
 	:global(.usb-flyout) {
@@ -595,8 +681,6 @@
 		overflow: hidden; font-family: var(--font-mono);
 	}
 
-	:global(.theme-flyout) { width: 180px; padding: 0.2rem 0; }
-	:global(.status-flyout) { width: 230px; padding: 0.2rem 0; }
 	:global(.device-flyout) { width: 260px; padding: 0.5rem 0; }
 
 	.flyout-section-label {
@@ -635,25 +719,21 @@
 	.status-label { font-size: 0.82rem; color: var(--text-primary); }
 	.status-desc { font-size: 0.65rem; color: var(--text-muted); }
 
-	/* ── Settings modal ── */
+	/* ── Settings overlay (full-screen) ── */
 	.settings-overlay {
 		position: fixed; inset: 0; z-index: 10001;
-		background: rgba(0,0,0,0.7);
-		display: flex; align-items: center; justify-content: center;
+		background: var(--bg-base);
+		display: flex;
 	}
 
 	.settings-modal {
 		display: flex;
-		width: min(600px, 95vw);
-		height: min(520px, 90vh);
-		background: var(--bg-base);
-		border-radius: var(--radius-lg);
-		overflow: hidden;
-		box-shadow: 0 24px 64px rgba(0,0,0,0.6);
+		width: 100%;
+		height: 100%;
 	}
 
 	.settings-nav {
-		width: 180px;
+		width: 240px;
 		flex-shrink: 0;
 		background: var(--bg-elevated);
 		border-right: 1px solid var(--border);
@@ -679,9 +759,10 @@
 		text-align: left;
 	}
 
-	.settings-nav-item:hover { background: var(--bg-hover); color: var(--text-primary); }
-	.settings-nav-item.active { background: var(--bg-hover); color: var(--text-primary); font-weight: 600; }
+	.settings-nav-item:hover:not(:disabled) { background: var(--bg-hover); color: var(--text-primary); }
+	.settings-nav-item.active { background: var(--accent-dim); color: var(--accent); font-weight: 600; }
 	.settings-nav-item.danger:hover { background: var(--error-surface); color: var(--error); }
+	.settings-nav-item:disabled { opacity: 0.35; cursor: not-allowed; }
 
 	.settings-nav-sep { height: 1px; background: var(--border); margin: 0.4rem 0; }
 
@@ -775,18 +856,42 @@
 	.settings-status-btn.active { background: var(--bg-elevated); }
 	.settings-status-texts { display: flex; flex-direction: column; flex: 1; }
 
-	.settings-theme-list { display: flex; flex-direction: column; gap: 0.15rem; }
+	/* Settings appearance: base cards */
+	.settings-base-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 0.8rem; }
 
-	.settings-theme-btn {
-		display: flex; align-items: center; gap: 0.6rem; width: 100%;
-		padding: 0.45rem 0.6rem; border: none; border-radius: var(--radius-sm);
-		background: transparent; color: var(--text-secondary); cursor: pointer;
-		font-size: 0.85rem; font-family: inherit;
-		transition: background var(--transition), color var(--transition);
+	.settings-base-card {
+		display: flex; flex-direction: column; gap: 0.6rem; padding: 0.7rem;
+		background: var(--bg-surface); border: 2px solid var(--border); border-radius: var(--radius-lg);
+		transition: all var(--transition); text-align: left; cursor: pointer;
+		font-family: var(--font-ui);
 	}
+	.settings-base-card:hover { border-color: var(--border-strong); }
+	.settings-base-card.active { border-color: var(--accent); }
 
-	.settings-theme-btn:hover { background: var(--bg-elevated); color: var(--text-primary); }
-	.settings-theme-btn.active { color: var(--accent); background: var(--bg-elevated); }
+	.sbc-preview { height: 48px; border-radius: var(--radius); display: flex; flex-direction: column; justify-content: center; gap: 5px; padding: 0 10px; border: 1px solid var(--border); }
+	.sbc-noche { background: #1d1a25; }
+	.sbc-dia   { background: #f3efe8; }
+	.sbc-bar   { height: 6px; width: 70%; border-radius: 4px; background: var(--accent); }
+	.sbc-short { width: 45%; background: rgba(128,128,128,0.3); }
+	.sbc-noche .sbc-short { background: rgba(255,255,255,0.2); }
+	.sbc-dia   .sbc-short { background: rgba(0,0,0,0.15); }
+
+	.sbc-label { display: flex; align-items: center; gap: 0.35rem; font-size: 0.82rem; font-weight: 700; color: var(--text-primary); }
+	:global(.sbc-check) { margin-left: auto; color: var(--accent); }
+
+	/* Settings appearance: accent chips */
+	.settings-accent-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 0.55rem; }
+
+	.settings-accent-chip {
+		display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 0.7rem;
+		background: var(--bg-surface); border: 2px solid var(--border); border-radius: var(--radius);
+		font-size: 0.82rem; font-weight: 700; color: var(--text-secondary);
+		transition: all var(--transition); cursor: pointer; font-family: var(--font-ui);
+	}
+	.settings-accent-chip:hover { border-color: var(--border-strong); }
+	.settings-accent-chip.active { border-color: var(--sw, var(--accent)); color: var(--text-primary); }
+
+	.accent-dot { width: 18px; height: 18px; border-radius: 50%; flex-shrink: 0; box-shadow: 0 0 0 3px color-mix(in oklab, var(--sw, var(--accent)) 22%, transparent); }
 
 	.settings-select {
 		width: 100%; font-size: 0.8rem; padding: 0.4rem 0.5rem;
@@ -795,18 +900,26 @@
 		font-family: var(--font-mono); outline: none; cursor: pointer;
 	}
 
+	.cam-preview-wrap {
+		margin-top: 0.6rem; border-radius: var(--radius); overflow: hidden;
+		background: #000; aspect-ratio: 16/9;
+	}
+	.cam-preview { width: 100%; height: 100%; object-fit: cover; display: block; }
+	.cam-preview-start {
+		margin-top: 0.5rem; padding: 0.4rem 0.8rem; background: var(--bg-elevated);
+		border: 1px solid var(--border); border-radius: var(--radius-sm);
+		color: var(--text-secondary); font-size: 0.78rem; font-family: inherit;
+		cursor: pointer; transition: border-color var(--transition), color var(--transition);
+	}
+	.cam-preview-start:hover { border-color: var(--accent); color: var(--accent); }
+
 	/* ── Banner + avatar (profile panel) ── */
 	.card-header { position: relative; }
 
 	.banner {
 		height: 64px;
-		background: linear-gradient(135deg, var(--accent-dim) 0%, var(--bg-elevated) 100%);
+		background: linear-gradient(120deg, var(--accent), var(--accent-strong));
 		position: relative; overflow: hidden;
-	}
-
-	.banner::after {
-		content: ''; position: absolute; inset: 0;
-		background: repeating-linear-gradient(45deg, transparent, transparent 12px, rgba(255,255,255,0.015) 12px, rgba(255,255,255,0.015) 13px);
 	}
 
 	.header-bottom {
@@ -886,8 +999,12 @@
 
 	/* ── Status bar ── */
 	.status-bar {
-		display: flex; align-items: center; padding: 0 0.4rem;
-		height: 52px; background: var(--bg-elevated); border-top: 1px solid var(--border); gap: 0.1rem;
+		display: flex; align-items: center; padding: 0.5rem;
+		height: 60px;
+		background: color-mix(in oklab, var(--bg-elevated) 92%, #000 8%);
+		border-top: 1px solid var(--border);
+		border-top-right-radius: var(--radius-lg);
+		gap: 0.1rem;
 	}
 
 	.user-identity {
@@ -900,7 +1017,7 @@
 	.user-identity:hover { background: var(--bg-hover); }
 
 	.sb-avatar {
-		position: relative; width: 32px; height: 32px; border-radius: 50%;
+		position: relative; width: 38px; height: 38px; border-radius: 50%;
 		background: var(--bg-surface); border: 1px solid var(--border);
 		display: flex; align-items: center; justify-content: center; flex-shrink: 0; overflow: visible;
 	}
@@ -908,7 +1025,7 @@
 	.sb-avatar img { width: 100%; height: 100%; object-fit: cover; border-radius: 50%; }
 
 	.sb-initial {
-		font-size: 0.82rem; font-weight: 700; color: var(--accent);
+		font-size: 0.95rem; font-weight: 700; color: var(--accent);
 		width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; border-radius: 50%;
 	}
 
@@ -918,15 +1035,15 @@
 	}
 
 	.sb-info { display: flex; flex-direction: column; gap: 0.05rem; min-width: 0; overflow: hidden; }
-	.sb-name { font-size: 0.78rem; font-weight: 600; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-	.sb-sub { font-size: 0.62rem; color: var(--text-muted); white-space: nowrap; }
+	.sb-name { font-size: 0.85rem; font-weight: 800; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+	.sb-sub { font-family: var(--font-mono); font-size: 0.62rem; color: var(--text-muted); white-space: nowrap; }
 	.sb-sub.voice-label { color: var(--success); }
 
 	.sb-controls { display: flex; align-items: center; gap: 0.15rem; flex-shrink: 0; }
 	.ctrl-group { display: flex; align-items: center; }
 
 	.sb-btn {
-		width: 28px; height: 28px; border-radius: var(--radius-sm); border: none;
+		width: 36px; height: 36px; border-radius: var(--radius-sm); border: none;
 		background: transparent; cursor: pointer; display: flex; align-items: center;
 		justify-content: center; color: var(--text-secondary);
 		transition: background var(--transition), color var(--transition);
@@ -936,9 +1053,10 @@
 	.sb-btn.off { color: var(--error); }
 	.sb-btn.off:hover { background: var(--error-surface); }
 	.sb-btn.active { color: var(--accent); background: var(--accent-dim); }
+	:global(.sb-btn svg) { width: 18px; height: 18px; }
 
 	.sb-chevron {
-		width: 16px; height: 28px; border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+		width: 16px; height: 36px; border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
 		border: none; background: transparent; cursor: pointer;
 		display: flex; align-items: center; justify-content: center; color: var(--text-muted);
 		transition: background var(--transition), color var(--transition); margin-right: 2px;
@@ -946,4 +1064,61 @@
 
 	.sb-chevron:hover { background: var(--bg-hover); color: var(--text-primary); }
 	.sb-chevron.active { color: var(--accent); background: var(--accent-dim); }
+
+	/* ── Profile panel inline accordion ── */
+	.pp-row-toggle {
+		display: flex; align-items: center; gap: 0.6rem;
+		width: calc(100% - 0.8rem); margin: 0.1rem 0.4rem;
+		padding: 0.5rem 0.6rem; background: transparent; border: none;
+		border-radius: var(--radius); color: var(--text-secondary);
+		font-size: 0.82rem; cursor: pointer; font-family: inherit;
+		transition: background var(--transition), color var(--transition);
+	}
+	.pp-row-toggle:hover { background: var(--bg-hover); color: var(--text-primary); }
+	.pp-row-toggle.open { background: var(--bg-hover); color: var(--text-primary); }
+	.pp-row-label { font-weight: 700; }
+	.pp-row-value { margin-left: auto; font-size: 0.76rem; color: var(--text-muted); font-weight: 600; white-space: nowrap; margin-right: 0.25rem; }
+	:global(.pp-caret) { opacity: 0.55; transition: transform var(--transition); flex-shrink: 0; }
+	.pp-row-toggle.open :global(.pp-caret) { transform: rotate(180deg); }
+
+	.pp-swatch-mini {
+		width: 13px; height: 13px; border-radius: 50%; flex-shrink: 0;
+		border: 1.5px solid var(--border-strong);
+		background: linear-gradient(135deg, var(--sw) 0 50%, var(--swatch-base) 50% 100%);
+	}
+
+	@keyframes ppslide { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+	.pp-collapse { animation: ppslide 0.18s var(--ease-bounce); padding-top: 0.1rem; }
+
+	.pp-status-row { display: flex; flex-direction: column; gap: 0.05rem; padding: 0.1rem 0.4rem 0.3rem; }
+	.pp-status-btn {
+		display: flex; align-items: center; gap: 0.6rem; width: 100%;
+		padding: 0.45rem 0.6rem; background: transparent; border: none;
+		border-radius: var(--radius); color: var(--text-secondary);
+		font-size: 0.8rem; font-weight: 600; cursor: pointer; font-family: inherit;
+		transition: background var(--transition), color var(--transition);
+	}
+	.pp-status-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+	.pp-status-btn.active { background: var(--accent-dim); color: var(--accent); }
+
+	.pp-base-row { display: flex; gap: 0.4rem; padding: 0.1rem 0.75rem 0.4rem; }
+	.pp-base-btn {
+		flex: 1; padding: 0.4rem 0.5rem;
+		background: var(--bg-elevated); border: 1.5px solid var(--border);
+		border-radius: var(--radius); color: var(--text-secondary);
+		font-size: 0.78rem; font-weight: 700; cursor: pointer; font-family: inherit;
+		transition: all var(--transition);
+	}
+	.pp-base-btn:hover { border-color: var(--border-strong); color: var(--text-primary); }
+	.pp-base-btn.active { background: var(--accent-dim); border-color: var(--accent); color: var(--accent); }
+
+	.pp-theme-row { display: flex; gap: 0.4rem; padding: 0.3rem 0.75rem 0.7rem; flex-wrap: wrap; }
+	.pp-theme-sw {
+		width: 30px; height: 30px; border-radius: 50%; cursor: pointer;
+		border: 2px solid var(--border-strong);
+		background: linear-gradient(135deg, var(--sw) 0 50%, var(--swatch-base) 50% 100%);
+		transition: transform var(--transition) var(--ease-bounce), border-color var(--transition);
+	}
+	.pp-theme-sw:hover { transform: scale(1.12); }
+	.pp-theme-sw.active { border-color: var(--accent); }
 </style>

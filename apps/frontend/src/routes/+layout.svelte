@@ -16,7 +16,7 @@
 	import { activeVoice } from '$lib/voiceStore.js';
 	import { livekitStore } from '$lib/livekit.js';
 	import { get } from 'svelte/store';
-	import { X, Check, MessageSquare, Map, Globe, Lock, ClipboardList, PhoneOff, Volume2 } from 'lucide-svelte';
+	import { X, Check, MessageSquare, Map, Globe, Lock, ClipboardList, PhoneOff, Volume2, Search, Users } from 'lucide-svelte';
 
 	let { data, children } = $props();
 
@@ -130,6 +130,20 @@
 	// ── Server modal ──────────────────────────────────────────────────────────
 	let showServerModal = $state(false);
 	let modalTab = $state<'explore' | 'create'>('explore');
+	let discoverSearch = $state('');
+
+	const filteredServers = $derived(
+		discoverSearch.trim()
+			? otherServers.filter((s: any) =>
+				(s.name + ' ' + (s.description ?? '')).toLowerCase().includes(discoverSearch.toLowerCase()))
+			: otherServers
+	);
+
+	function srvBannerColor(srv: any): string {
+		let h = 0;
+		for (let i = 0; i < srv.name.length; i++) h = (h * 31 + srv.name.charCodeAt(i)) % 360;
+		return `linear-gradient(125deg, oklch(0.62 0.13 ${h}), oklch(0.52 0.14 ${(h + 18) % 360}))`;
+	}
 
 	// Join
 	let joinPasswordFor = $state('');
@@ -152,6 +166,7 @@
 	function closeModal() {
 		showServerModal = false;
 		modalTab = 'explore';
+		discoverSearch = '';
 		joinPasswordFor = '';
 		joinPassword = '';
 		joinError = '';
@@ -230,28 +245,30 @@
 		<nav class="rail" aria-label="Servidores">
 			<a
 				href="/home"
-				class="rail-btn home-btn"
+				class="rail-btn rail-home"
 				class:active={isHome}
 				title="Inicio"
 				aria-label="Inicio"
 			>
-				<span class="home-icon">M</span>
+				<span class="rail-pip"></span>
+				<span class="home-icon">m</span>
 				{#if totalDmUnread > 0}
 					<span class="rail-badge">{totalDmUnread > 9 ? '9+' : totalDmUnread}</span>
 				{/if}
 			</a>
 
-			<div class="rail-separator"></div>
+			<div class="rail-sep"></div>
 
 			{#each myServers as srv (srv.id)}
 				{@const srvUnread = $serverUnread.get(srv.id) ?? 0}
 				<a
 					href="/servers/{srv.slug}"
-					class="rail-btn server-btn"
+					class="rail-btn"
 					class:active={isActiveServer(srv.slug)}
 					title={srv.name}
 					aria-label={srv.name}
 				>
+					<span class="rail-pip"></span>
 					<div class="server-icon-clip">
 						{#if srv.iconUrl}
 							<img src={srv.iconUrl} alt={srv.name} class="server-icon-img" />
@@ -259,7 +276,6 @@
 							<span class="server-initial">{srv.name[0].toUpperCase()}</span>
 						{/if}
 					</div>
-					<div class="active-indicator"></div>
 					{#if srvUnread > 0 && !isActiveServer(srv.slug)}
 						<span class="rail-badge">{srvUnread > 9 ? '9+' : srvUnread}</span>
 					{/if}
@@ -267,12 +283,12 @@
 			{/each}
 
 			<button
-				class="rail-btn add-btn"
-				class:add-btn-highlight={myServers.length === 0}
+				class="rail-btn rail-add"
 				title="Añadir o crear servidor"
 				aria-label="Añadir servidor"
 				onclick={() => { showServerModal = true; modalTab = isAdmin ? 'create' : 'explore'; }}
 			>
+				<span class="rail-pip"></span>
 				<span class="add-icon">+</span>
 			</button>
 
@@ -346,7 +362,7 @@
 				</div>
 
 				{#if modalTab === 'explore'}
-					<div class="modal-body">
+					<div class="modal-body discover-body">
 						{#if joinPasswordFor}
 							<div class="password-prompt">
 								<h4>Contraseña para <strong>{joinPasswordFor}</strong></h4>
@@ -360,36 +376,49 @@
 									</button>
 								</div>
 							</div>
-						{:else if otherServers.length === 0}
-							<p class="empty-modal">{myServers.length === 0 ? 'No hay servidores disponibles. Pide a un administrador que cree uno.' : 'Ya eres miembro de todos los servidores disponibles.'}</p>
 						{:else}
-							{#if joinError}<p class="error">{joinError}</p>{/if}
-							<div class="server-list">
-								{#each otherServers as srv (srv.id)}
-									{@const AccessIcon = ACCESS_ICON[srv.accessType]}
-									<div class="server-row">
-										<div class="srv-icon">
-											{#if srv.iconUrl}
-												<img src={srv.iconUrl} alt={srv.name} />
-											{:else}
-												<span>{srv.name[0].toUpperCase()}</span>
-											{/if}
-										</div>
-										<div class="srv-info">
-											<div class="srv-name">{srv.name}</div>
-											{#if srv.description}<div class="srv-desc">{srv.description}</div>{/if}
-											<div class="srv-meta"><AccessIcon size={11} /> · {srv._count?.members ?? 0} miembros</div>
-										</div>
-										<button
-											class="btn-primary btn-sm"
-											disabled={joinLoading}
-											onclick={() => handleJoin(srv.slug, srv.accessType)}
-										>
-											Entrar
-										</button>
-									</div>
-								{/each}
+							<div class="discover-hero">
+								<h3>Encuentra tu sitio</h3>
+								<p>Comunidades con cariño. Entra a curiosear.</p>
+								<div class="discover-search">
+									<Search size={17} />
+									<input bind:value={discoverSearch} placeholder="Busca un servidor…" />
+								</div>
 							</div>
+							{#if joinError}<p class="error">{joinError}</p>{/if}
+							{#if filteredServers.length === 0}
+								<p class="empty-modal">{otherServers.length === 0 ? (myServers.length === 0 ? 'No hay servidores disponibles. Pide a un administrador que cree uno.' : 'Ya eres miembro de todos los servidores disponibles.') : 'Sin resultados para esa búsqueda.'}</p>
+							{:else}
+								<div class="discover-grid">
+									{#each filteredServers as srv (srv.id)}
+										{@const AccessIcon = ACCESS_ICON[srv.accessType]}
+										<div class="disc-card">
+											<div class="disc-banner" style="background:{srvBannerColor(srv)}"></div>
+											<div class="disc-icon-wrap">
+												{#if srv.iconUrl}
+													<img src={srv.iconUrl} alt={srv.name} class="disc-icon-img" />
+												{:else}
+													<span class="disc-icon" style="background:{srvBannerColor(srv)}">{srv.name[0].toUpperCase()}</span>
+												{/if}
+											</div>
+											<div class="disc-body">
+												<div class="disc-name">{srv.name}</div>
+												<div class="disc-desc">{srv.description ?? ''}</div>
+												<div class="disc-foot">
+													<span class="disc-meta"><Users size={11} /> {srv._count?.members ?? 0} miembros</span>
+													<button
+														class="btn-primary btn-sm"
+														disabled={joinLoading}
+														onclick={() => handleJoin(srv.slug, srv.accessType)}
+													>
+														<AccessIcon size={11} /> Entrar
+													</button>
+												</div>
+											</div>
+										</div>
+									{/each}
+								</div>
+							{/if}
 						{/if}
 					</div>
 				{:else}
@@ -465,15 +494,15 @@
 
 	/* ── Rail ── */
 	.rail {
-		width: 56px;
+		width: 72px;
 		flex-shrink: 0;
 		background: var(--bg-elevated);
 		border-right: 1px solid var(--border);
 		display: flex;
 		flex-direction: column;
 		align-items: center;
-		padding: 0.75rem 0 56px;
-		gap: 0.25rem;
+		padding: 0.85rem 0 60px;
+		gap: 0.5rem;
 		overflow-y: auto;
 		overflow-x: hidden;
 		scrollbar-width: none;
@@ -481,48 +510,85 @@
 
 	.rail::-webkit-scrollbar { display: none; }
 
-	.rail-separator {
-		width: 24px;
-		height: 1px;
+	.rail-sep {
+		width: 30px;
+		height: 2px;
 		background: var(--border);
-		margin: 0.25rem 0;
+		border-radius: 2px;
 		flex-shrink: 0;
 	}
 
 	.rail-btn {
 		position: relative;
-		width: 36px;
-		height: 36px;
-		border-radius: 50%;
+		width: 46px;
+		height: 46px;
+		border-radius: var(--radius-lg);
 		display: flex;
 		align-items: center;
 		justify-content: center;
 		cursor: pointer;
-		transition: border-radius 0.15s ease, background 0.15s ease;
 		flex-shrink: 0;
 		text-decoration: none;
 		border: none;
-		background: var(--bg-surface);
+		background: transparent;
 		color: var(--text-secondary);
 		font-family: inherit;
 		overflow: visible;
+		transition:
+			border-radius var(--transition) var(--ease-bounce),
+			background var(--transition),
+			color var(--transition),
+			transform var(--transition);
 	}
 
 	.rail-btn:hover {
-		border-radius: var(--radius-lg);
+		transform: translateY(-2px);
 		background: var(--accent);
 		color: var(--accent-text);
+		border-radius: var(--radius);
 	}
 
 	.rail-btn.active {
-		border-radius: var(--radius-lg);
 		background: var(--accent);
 		color: var(--accent-text);
 	}
 
-	/* clip overflow for icons inside */
-	.server-btn { overflow: visible; }
+	/* Rail active pip indicator */
+	.rail-pip {
+		position: absolute;
+		left: -10px;
+		top: 50%;
+		transform: translateY(-50%) scaleY(0);
+		width: 5px;
+		height: 22px;
+		border-radius: 0 var(--radius-pill) var(--radius-pill) 0;
+		background: var(--text-primary);
+		transition: transform var(--transition) var(--ease-bounce);
+		pointer-events: none;
+	}
 
+	.rail-btn:hover .rail-pip { transform: translateY(-50%) scaleY(0.5); }
+	.rail-btn.active .rail-pip { transform: translateY(-50%) scaleY(1); }
+
+	/* Home button */
+	.rail-home {
+		background: linear-gradient(145deg, var(--accent), var(--accent-strong));
+		color: var(--accent-text);
+		font-family: var(--font-mono);
+		font-weight: 800;
+		font-size: 1.4rem;
+	}
+
+	.rail-home:hover { background: linear-gradient(145deg, var(--accent), var(--accent-strong)); }
+
+	.home-icon {
+		font-family: var(--font-mono);
+		font-size: 1.4rem;
+		font-weight: 800;
+		transform: translateY(-1px);
+	}
+
+	/* Server icon inside button */
 	.server-icon-clip {
 		width: 100%;
 		height: 100%;
@@ -534,61 +600,7 @@
 		flex-shrink: 0;
 	}
 
-	.active-indicator {
-		position: absolute;
-		left: -4px;
-		top: 50%;
-		transform: translateY(-50%) scaleY(0);
-		width: 4px;
-		height: 8px;
-		border-radius: 0 2px 2px 0;
-		background: var(--text-primary);
-		transition: transform 0.15s ease, height 0.15s ease;
-	}
-
-	.rail-btn.active .active-indicator {
-		transform: translateY(-50%) scaleY(1);
-		height: 40px;
-	}
-
-	.home-btn {
-		background: var(--accent);
-		color: var(--accent-text);
-		overflow: visible;
-	}
-
-	.home-btn:hover { border-radius: var(--radius-lg); }
-
-	.home-icon {
-		font-size: 1.3rem;
-		font-weight: 900;
-		letter-spacing: -0.05em;
-	}
-
-	.rail-badge {
-		position: absolute;
-		bottom: -2px;
-		right: -2px;
-		background: var(--error);
-		color: #fff;
-		font-size: 0.58rem;
-		font-weight: 700;
-		min-width: 16px;
-		height: 16px;
-		border-radius: 999px;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		padding: 0 3px;
-		border: 2px solid var(--bg-elevated);
-		pointer-events: none;
-	}
-
-	.server-icon-img {
-		width: 100%;
-		height: 100%;
-		object-fit: cover;
-	}
+	.server-icon-img { width: 100%; height: 100%; object-fit: cover; }
 
 	.server-initial {
 		font-size: 1.1rem;
@@ -596,32 +608,43 @@
 		color: var(--text-secondary);
 	}
 
-	.add-btn {
-		background: var(--bg-surface);
-		border: 2px dashed var(--border-strong);
-	}
-
-	.add-btn:hover {
-		background: var(--accent);
-		border-color: var(--accent);
-		color: var(--accent-text);
-	}
-
-	.add-btn-highlight {
+	/* Add server button */
+	.rail-add {
 		background: var(--accent-dim);
-		border-color: var(--accent);
+		border: 2px dashed var(--accent);
 		color: var(--accent);
+		font-size: 1.5rem;
+		font-weight: 300;
 	}
 
-	.add-btn-highlight:hover {
+	.rail-add:hover {
 		background: var(--accent);
 		color: var(--accent-text);
+		border-style: solid;
 	}
 
 	.add-icon {
-		font-size: 1.4rem;
+		font-size: 1.5rem;
 		font-weight: 300;
 		line-height: 1;
+	}
+
+	.rail-badge {
+		position: absolute;
+		bottom: -3px;
+		right: -3px;
+		min-width: 20px;
+		height: 20px;
+		background: var(--error);
+		color: #fff;
+		font-size: 0.6rem;
+		font-weight: 800;
+		border-radius: var(--radius-pill);
+		display: grid;
+		place-items: center;
+		padding: 0 5px;
+		border: 3px solid var(--bg-elevated);
+		pointer-events: none;
 	}
 
 	.app-content {
@@ -635,112 +658,117 @@
 	.modal-overlay {
 		position: fixed;
 		inset: 0;
-		background: rgba(0, 0, 0, 0.65);
+		background: rgba(0, 0, 0, 0.55);
 		display: flex;
 		align-items: center;
 		justify-content: center;
 		z-index: 500;
+		padding: 1rem;
 	}
 
 	.server-modal {
 		background: var(--bg-surface);
 		border: 1px solid var(--border-strong);
-		border-radius: var(--radius-lg);
-		width: 520px;
-		max-width: calc(100vw - 2rem);
-		max-height: 80vh;
+		border-radius: var(--radius-xl);
+		width: 720px;
+		max-width: 100%;
+		max-height: min(88vh, 640px);
 		display: flex;
 		flex-direction: column;
 		overflow: hidden;
+		box-shadow: var(--shadow-pop);
 	}
 
 	.modal-header {
 		display: flex;
 		align-items: center;
-		padding: 0.75rem 1rem 0;
+		padding: 1rem 1.1rem 0.7rem;
 		border-bottom: 1px solid var(--border);
 		gap: 0.5rem;
 		flex-shrink: 0;
 	}
 
-	.modal-tabs { display: flex; gap: 0.25rem; flex: 1; }
+	.modal-tabs { display: flex; gap: 0.3rem; flex: 1; }
 
 	.modal-tab {
-		padding: 0.4rem 0.75rem;
+		padding: 0.4rem 0.8rem;
 		background: transparent;
 		border: none;
-		border-bottom: 2px solid transparent;
+		border-radius: var(--radius-pill);
 		color: var(--text-muted);
-		font-size: 0.85rem;
-		font-weight: 600;
+		font-size: 0.82rem;
+		font-weight: 700;
 		cursor: pointer;
 		font-family: inherit;
-		transition: color var(--transition), border-color var(--transition);
-		margin-bottom: -1px;
-	}
-
-	.modal-tab:hover { color: var(--text-secondary); }
-	.modal-tab.active { color: var(--text-primary); border-bottom-color: var(--accent); }
-
-	.close-btn {
-		background: none;
-		border: none;
-		color: var(--text-muted);
-		cursor: pointer;
-		font-size: 0.9rem;
-		padding: 0.25rem 0.35rem;
-		border-radius: var(--radius-sm);
-		line-height: 1;
 		transition: color var(--transition), background var(--transition);
 	}
 
-	.close-btn:hover { color: var(--text-primary); background: var(--bg-elevated); }
+	.modal-tab:hover { color: var(--text-secondary); }
+	.modal-tab.active { background: var(--accent-dim); color: var(--accent); }
+
+	.close-btn {
+		width: 32px;
+		height: 32px;
+		border-radius: 50%;
+		border: none;
+		background: var(--bg-elevated);
+		color: var(--text-muted);
+		cursor: pointer;
+		display: grid;
+		place-items: center;
+		transition: background var(--transition), color var(--transition);
+		flex-shrink: 0;
+	}
+
+	.close-btn:hover { background: var(--error-surface); color: var(--error); }
 
 	.modal-body {
-		padding: 1rem;
+		padding: 1.1rem;
 		overflow-y: auto;
 		flex: 1;
 	}
 
 	.empty-modal { font-size: 0.85rem; color: var(--text-muted); text-align: center; padding: 2rem 0; }
 
-	/* ── Server list ── */
-	.server-list { display: flex; flex-direction: column; gap: 0.4rem; }
-
-	.server-row {
-		display: flex;
-		align-items: center;
-		gap: 0.75rem;
-		padding: 0.65rem 0.75rem;
-		background: var(--bg-elevated);
-		border-radius: var(--radius-lg);
-		border: 1px solid var(--border);
-		transition: border-color var(--transition);
+	/* ── Discover (explore tab) ── */
+	.discover-body { display: flex; flex-direction: column; gap: 1rem; }
+	.discover-hero { padding: 0.3rem 0.2rem 0; }
+	.discover-hero h3 { font-size: 1.5rem; font-weight: 800; color: var(--text-primary); }
+	.discover-hero p { font-size: 0.84rem; color: var(--text-muted); margin: 0.2rem 0 0.9rem; }
+	.discover-search {
+		display: flex; align-items: center; gap: 0.6rem;
+		padding: 0.7rem 1rem; background: var(--bg-elevated);
+		border: 1.5px solid var(--border); border-radius: var(--radius-pill);
 	}
-
-	.server-row:hover { border-color: var(--border-strong); }
-
-	.srv-icon {
-		width: 44px;
-		height: 44px;
-		border-radius: var(--radius-lg);
-		background: var(--bg-base);
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		font-size: 1.2rem;
-		font-weight: 700;
-		color: var(--text-muted);
-		flex-shrink: 0;
-		overflow: hidden;
+	.discover-search :global(svg) { color: var(--text-muted); flex-shrink: 0; }
+	.discover-search input {
+		flex: 1; background: transparent; border: none; outline: none;
+		font-size: 0.88rem; color: var(--text-primary); font-family: inherit;
 	}
-
-	.srv-icon img { width: 100%; height: 100%; object-fit: cover; }
-
-	.srv-info { flex: 1; display: flex; flex-direction: column; gap: 0.15rem; }
-	.srv-name { font-size: 0.88rem; font-weight: 600; color: var(--text-primary); }
-	.srv-desc { font-size: 0.72rem; color: var(--text-secondary); }
-	.srv-meta { display: flex; align-items: center; gap: 0.3rem; font-size: 0.68rem; color: var(--text-muted); }
+	.discover-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.9rem; }
+	.disc-card {
+		background: var(--bg-base); border: 1px solid var(--border);
+		border-radius: var(--radius-lg); overflow: hidden;
+		transition: border-color var(--transition), transform var(--transition);
+		position: relative;
+	}
+	.disc-card:hover { border-color: var(--accent); transform: translateY(-2px); }
+	.disc-banner { height: 64px; }
+	.disc-icon-wrap { margin: -26px 0 0 0.9rem; position: relative; z-index: 1; display: inline-block; }
+	.disc-icon {
+		width: 48px; height: 48px; border-radius: var(--radius); display: grid; place-items: center;
+		color: #fff; font-family: var(--font-mono); font-weight: 800; font-size: 1.3rem;
+		border: 3px solid var(--bg-base);
+	}
+	.disc-icon-img {
+		width: 48px; height: 48px; border-radius: var(--radius); object-fit: cover;
+		border: 3px solid var(--bg-base); display: block;
+	}
+	.disc-body { padding: 0.4rem 0.9rem 0.9rem; }
+	.disc-name { font-size: 0.95rem; font-weight: 800; color: var(--text-primary); }
+	.disc-desc { font-size: 0.76rem; color: var(--text-muted); line-height: 1.4; margin: 0.15rem 0 0.7rem; min-height: 2.1em; }
+	.disc-foot { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
+	.disc-meta { display: flex; align-items: center; gap: 0.35rem; font-family: var(--font-mono); font-size: 0.66rem; color: var(--text-secondary); }
 
 	/* ── Create form ── */
 	.create-form { display: flex; flex-direction: column; gap: 0.75rem; }
@@ -750,8 +778,11 @@
 	label {
 		display: flex;
 		flex-direction: column;
-		gap: 0.28rem;
-		font-size: 0.72rem;
+		gap: 0.3rem;
+		font-family: var(--font-mono);
+		font-size: 0.66rem;
+		text-transform: uppercase;
+		letter-spacing: 0.08em;
 		color: var(--text-secondary);
 		flex: 1;
 		min-width: 140px;
@@ -760,18 +791,24 @@
 	label.full { flex: 1 1 100%; }
 
 	input, select {
-		font-size: 0.82rem;
-		padding: 0.38rem 0.5rem;
+		font-size: 0.9rem;
+		padding: 0.7rem 0.85rem;
 		background: var(--bg-elevated);
-		border: 1px solid var(--border);
+		border: 1.5px solid var(--border);
 		border-radius: var(--radius);
 		color: var(--text-primary);
 		outline: none;
-		transition: border-color var(--transition);
-		font-family: inherit;
+		transition: border-color var(--transition), box-shadow var(--transition);
+		font-family: var(--font-ui);
+		text-transform: none;
+		letter-spacing: normal;
 	}
 
-	input:focus, select:focus { border-color: var(--border-focus); }
+	input::placeholder { color: var(--text-muted); }
+	input:focus, select:focus {
+		border-color: var(--accent);
+		box-shadow: 0 0 0 4px var(--accent-dim);
+	}
 
 	.type-options { display: flex; gap: 0.5rem; }
 
@@ -780,66 +817,71 @@
 		display: flex;
 		align-items: center;
 		gap: 0.4rem;
-		padding: 0.5rem 0.75rem;
+		padding: 0.55rem 0.75rem;
 		background: var(--bg-elevated);
-		border: 1px solid var(--border);
-		border-radius: var(--radius-lg);
+		border: 1.5px solid var(--border);
+		border-radius: var(--radius);
 		cursor: pointer;
-		font-family: inherit;
-		font-size: 0.82rem;
-		font-weight: 600;
+		font-family: var(--font-ui);
+		font-size: 0.85rem;
+		font-weight: 700;
 		color: var(--text-secondary);
 		transition: border-color var(--transition), background var(--transition), color var(--transition);
-		position: relative;
 	}
 
 	.type-opt:hover { border-color: var(--border-strong); color: var(--text-primary); }
-	.type-opt.selected { border-color: var(--accent); background: rgba(99,102,241,0.08); color: var(--text-primary); }
+	.type-opt.selected { border-color: var(--accent); background: var(--accent-dim); color: var(--text-primary); }
 
-/* ── Password prompt ── */
+	/* ── Password prompt ── */
 	.password-prompt { display: flex; flex-direction: column; gap: 0.75rem; }
-	.password-prompt h4 { font-size: 0.9rem; color: var(--text-primary); }
+	.password-prompt h4 { font-size: 0.9rem; color: var(--text-primary); font-family: var(--font-ui); }
 	.password-prompt h4 strong { color: var(--accent); }
 	.prompt-actions { display: flex; gap: 0.5rem; justify-content: flex-end; }
 
-	/* ── Shared ── */
+	/* ── Shared buttons ── */
 	.btn-primary {
-		font-size: 0.8rem;
-		padding: 0.38rem 0.9rem;
+		font-size: 0.88rem;
+		font-weight: 800;
+		padding: 0.75rem 1rem;
 		background: var(--accent);
 		color: var(--accent-text);
 		border: none;
 		border-radius: var(--radius);
 		cursor: pointer;
-		font-weight: 700;
-		transition: opacity var(--transition);
-		font-family: inherit;
+		font-family: var(--font-ui);
 		white-space: nowrap;
+		transition: transform var(--transition) var(--ease-bounce), filter var(--transition);
+		display: inline-flex;
+		align-items: center;
+		gap: 0.4rem;
 	}
 
-	.btn-primary:hover:not(:disabled) { opacity: 0.85; }
-	.btn-primary:disabled { opacity: 0.45; cursor: not-allowed; }
-	.btn-sm { padding: 0.28rem 0.65rem; font-size: 0.75rem; }
+	.btn-primary:hover:not(:disabled) { filter: brightness(1.05); transform: translateY(-1px); }
+	.btn-primary:active { transform: translateY(0) scale(0.98); }
+	.btn-primary:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
+	.btn-sm { padding: 0.4rem 0.85rem; font-size: 0.76rem; border-radius: var(--radius-pill); }
 
 	.btn-ghost {
-		font-size: 0.8rem;
-		padding: 0.38rem 0.75rem;
+		font-size: 0.88rem;
+		font-weight: 700;
+		padding: 0.75rem 1rem;
 		background: transparent;
-		border: 1px solid var(--border-strong);
+		border: 1.5px solid var(--border-strong);
 		border-radius: var(--radius);
-		color: var(--text-muted);
+		color: var(--text-secondary);
 		cursor: pointer;
-		font-family: inherit;
+		font-family: var(--font-ui);
+		transition: border-color var(--transition), color var(--transition);
 	}
 
 	.btn-ghost:hover { border-color: var(--accent); color: var(--accent); }
 
-	.error { font-size: 0.75rem; color: var(--error); }
+	.error { font-size: 0.78rem; color: var(--error); }
 
 	/* ── Global voice HUD ── */
 	.voice-hud {
 		position: fixed;
-		bottom: 56px;
+		bottom: 60px;
 		left: 4px;
 		z-index: 590;
 		display: flex;
@@ -849,12 +891,12 @@
 		border: 1px solid var(--border-strong);
 		border-radius: var(--radius-lg);
 		padding: 0.4rem 0.6rem;
-		box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+		box-shadow: var(--shadow-sm);
 		min-width: 180px;
-		max-width: 220px;
+		max-width: 240px;
 	}
 
-	.voice-hud-icon { color: var(--success, #22c55e); display: flex; align-items: center; flex-shrink: 0; }
+	.voice-hud-icon { color: var(--success); display: flex; align-items: center; flex-shrink: 0; }
 
 	.voice-hud-info {
 		flex: 1;
@@ -893,7 +935,7 @@
 	.voice-hud-leave {
 		background: none;
 		border: none;
-		color: var(--error, #ef4444);
+		color: var(--error);
 		cursor: pointer;
 		display: flex;
 		align-items: center;
@@ -903,7 +945,7 @@
 		transition: background var(--transition);
 	}
 
-	.voice-hud-leave:hover { background: var(--error-surface, rgba(239,68,68,0.12)); }
+	.voice-hud-leave:hover { background: var(--error-surface); }
 
 	/* ── Global upload tray ── */
 	.upload-tray {
@@ -923,7 +965,7 @@
 		border: 1px solid var(--border-strong);
 		border-radius: var(--radius-lg);
 		padding: 0.65rem 0.75rem;
-		box-shadow: 0 4px 16px rgba(0,0,0,0.35);
+		box-shadow: var(--shadow-card);
 		pointer-events: all;
 		transition: border-color 0.2s;
 	}
@@ -990,6 +1032,9 @@
 		font-size: 0.75rem;
 		color: var(--success);
 		margin: 0;
+		display: flex;
+		align-items: center;
+		gap: 0.3rem;
 	}
 
 	.upload-status-err {

@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html lang="es" data-base="noche" data-accent="naranja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>meado · Documentación de traspaso</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Nunito:ital,wght@0,400;0,600;0,700;0,800;0,900;1,600&family=Fira+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="tokens.css">
+<style>
+	body { font-family: var(--font-ui); background: var(--bg-base); color: var(--text-primary); line-height: 1.6; -webkit-font-smoothing: antialiased; }
+	.layout { display: grid; grid-template-columns: 280px 1fr; max-width: 1500px; margin: 0 auto; }
+
+	/* ── Sidebar TOC ── */
+	.toc { position: sticky; top: 0; align-self: start; height: 100vh; overflow-y: auto; padding: 2rem 1.2rem; border-right: 1px solid var(--border); background: var(--bg-surface); }
+	.toc-brand { display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.4rem; }
+	.toc-mark { width: 38px; height: 38px; border-radius: 11px; background: var(--accent); color: var(--accent-text); display: grid; place-items: center; font-weight: 900; font-size: 1.3rem; box-shadow: 0 0 24px var(--accent-dim); }
+	.toc-brand-name { font-weight: 900; font-size: 1.25rem; letter-spacing: 0.18em; }
+	.toc-sub { font-family: var(--font-mono); font-size: 0.66rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.12em; margin-bottom: 1.5rem; }
+	.toc-group { font-family: var(--font-mono); font-size: 0.6rem; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--text-muted); margin: 1.2rem 0 0.4rem; }
+	.toc a { display: block; padding: 0.34rem 0.7rem; border-radius: var(--radius-sm); color: var(--text-secondary); text-decoration: none; font-size: 0.86rem; font-weight: 600; transition: all var(--transition); }
+	.toc a:hover { background: var(--bg-hover); color: var(--text-primary); }
+	.toc a .n { font-family: var(--font-mono); font-size: 0.72rem; color: var(--text-muted); margin-right: 0.5rem; }
+
+	/* ── Content ── */
+	.content { padding: 3rem 3.5rem 6rem; min-width: 0; }
+	.doc-hero { margin-bottom: 3rem; padding-bottom: 2rem; border-bottom: 1px solid var(--border); }
+	.doc-hero h1 { font-size: 2.6rem; font-weight: 900; letter-spacing: -0.02em; margin-bottom: 0.6rem; }
+	.doc-hero p { font-size: 1.05rem; color: var(--text-secondary); max-width: 64ch; text-wrap: pretty; }
+	.hero-meta { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 1.3rem; }
+	.hero-meta span { font-family: var(--font-mono); font-size: 0.72rem; padding: 0.35rem 0.7rem; background: var(--bg-elevated); border: 1px solid var(--border); border-radius: var(--radius-pill); color: var(--text-secondary); }
+
+	section { margin-bottom: 3.5rem; scroll-margin-top: 1.5rem; }
+	h2.sec { font-size: 1.7rem; font-weight: 800; letter-spacing: -0.01em; margin-bottom: 0.4rem; display: flex; align-items: baseline; gap: 0.8rem; }
+	h2.sec .sec-n { font-family: var(--font-mono); font-size: 1rem; color: var(--accent); font-weight: 700; }
+	.sec-lead { color: var(--text-secondary); margin-bottom: 1.6rem; max-width: 70ch; text-wrap: pretty; }
+	h3.sub { font-size: 1.15rem; font-weight: 800; margin: 2rem 0 0.8rem; padding-top: 1rem; border-top: 1px dashed var(--border); }
+	h4 { font-size: 0.98rem; font-weight: 800; margin: 1.4rem 0 0.6rem; }
+	p { max-width: 74ch; text-wrap: pretty; }
+	p + p { margin-top: 0.7rem; }
+
+	/* ── Cards ── */
+	.card { background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 1.3rem 1.5rem; margin: 1rem 0; }
+	.card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 1rem; margin: 1rem 0; }
+	.mini { background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1rem 1.1rem; }
+	.mini h5 { font-size: 0.92rem; font-weight: 800; margin-bottom: 0.3rem; display: flex; align-items: center; gap: 0.5rem; }
+	.mini p { font-size: 0.84rem; color: var(--text-secondary); margin: 0; }
+
+	/* ── Badges ── */
+	.b { display: inline-flex; align-items: center; gap: 0.3rem; font-family: var(--font-mono); font-size: 0.62rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; padding: 0.2rem 0.5rem; border-radius: var(--radius-pill); white-space: nowrap; vertical-align: middle; }
+	.b-new { background: var(--accent-dim); color: var(--accent); border: 1px solid var(--accent); }
+	.b-backend { background: rgba(224,86,143,0.14); color: #e0568f; border: 1px solid rgba(224,86,143,0.4); }
+	.b-mock { background: var(--bg-elevated); color: var(--text-muted); border: 1px solid var(--border-strong); }
+	.b-done { background: var(--success-surface); color: var(--success); border: 1px solid var(--success-border); }
+
+	/* ── Tables ── */
+	table { width: 100%; border-collapse: collapse; margin: 1rem 0; font-size: 0.86rem; }
+	th { text-align: left; font-family: var(--font-mono); font-size: 0.66rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-muted); padding: 0.6rem 0.8rem; border-bottom: 2px solid var(--border-strong); }
+	td { padding: 0.6rem 0.8rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+	td:first-child { white-space: nowrap; }
+	tr:last-child td { border-bottom: none; }
+	code, .mono { font-family: var(--font-mono); font-size: 0.84em; background: var(--bg-elevated); padding: 0.1rem 0.4rem; border-radius: 6px; color: var(--accent); }
+	td code { font-size: 0.8rem; }
+	.swatch { display: inline-block; width: 14px; height: 14px; border-radius: 4px; vertical-align: middle; margin-right: 0.4rem; border: 1px solid var(--border-strong); }
+
+	/* ── Callouts ── */
+	.callout { display: flex; gap: 0.9rem; padding: 1rem 1.2rem; border-radius: var(--radius); margin: 1.2rem 0; border: 1px solid; font-size: 0.9rem; }
+	.callout .ico { font-size: 1.1rem; flex-shrink: 0; line-height: 1.4; }
+	.callout.note { background: var(--accent-dim); border-color: var(--accent); }
+	.callout.warn { background: rgba(224,86,143,0.1); border-color: rgba(224,86,143,0.4); }
+	.callout.ok { background: var(--success-surface); border-color: var(--success-border); }
+	.callout p { margin: 0; max-width: none; }
+	.callout strong { font-weight: 800; }
+
+	ul.clean { list-style: none; margin: 0.6rem 0; }
+	ul.clean li { padding: 0.32rem 0 0.32rem 1.4rem; position: relative; font-size: 0.9rem; color: var(--text-secondary); }
+	ul.clean li::before { content: '▸'; position: absolute; left: 0.2rem; color: var(--accent); }
+	ul.clean li strong { color: var(--text-primary); font-weight: 700; }
+
+	.kv { display: grid; grid-template-columns: max-content 1fr; gap: 0.4rem 1.2rem; margin: 0.8rem 0; font-size: 0.88rem; }
+	.kv dt { font-family: var(--font-mono); font-size: 0.8rem; color: var(--accent); }
+	.kv dd { color: var(--text-secondary); }
+
+	.flow { display: flex; align-items: center; flex-wrap: wrap; gap: 0.5rem; margin: 1rem 0; font-size: 0.84rem; }
+	.flow .step { background: var(--bg-elevated); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 0.4rem 0.7rem; font-weight: 600; }
+	.flow .arr { color: var(--accent); font-weight: 800; }
+
+	a.inl { color: var(--accent); font-weight: 700; text-decoration: none; }
+	a.inl:hover { text-decoration: underline; }
+	.tag-row { display: flex; gap: 0.4rem; flex-wrap: wrap; margin-top: 0.5rem; }
+
+	@media (max-width: 920px) {
+		.layout { grid-template-columns: 1fr; }
+		.toc { position: static; height: auto; border-right: none; border-bottom: 1px solid var(--border); }
+		.content { padding: 2rem 1.3rem 4rem; }
+		.doc-hero h1 { font-size: 2rem; }
+	}
+</style>
+</head>
+<body>
+<div class="layout">
+	<!-- ════════════ TOC ════════════ -->
+	<nav class="toc">
+		<div class="toc-brand"><div class="toc-mark">m</div><div class="toc-brand-name">meado</div></div>
+		<div class="toc-sub">Documentación de traspaso</div>
+
+		<div class="toc-group">Base</div>
+		<a href="#resumen"><span class="n">01</span>Resumen y arquitectura</a>
+		<a href="#temas"><span class="n">02</span>Sistema de temas</a>
+		<a href="#estado"><span class="n">03</span>Estado global</a>
+
+		<div class="toc-group">Pantallas</div>
+		<a href="#acceso"><span class="n">04</span>Acceso y registro</a>
+		<a href="#inicio"><span class="n">05</span>Inicio · Amigos</a>
+		<a href="#dm"><span class="n">06</span>Mensajes directos</a>
+		<a href="#texto"><span class="n">07</span>Canal de texto</a>
+		<a href="#voz"><span class="n">08</span>Canal de voz</a>
+
+		<div class="toc-group">Overlays</div>
+		<a href="#tarjeta"><span class="n">09</span>Tarjeta de usuario</a>
+		<a href="#perfil"><span class="n">10</span>Perfil de usuario</a>
+		<a href="#ajustes-user"><span class="n">11</span>Ajustes de usuario</a>
+		<a href="#servidor-menu"><span class="n">12</span>Menú del servidor</a>
+		<a href="#ajustes-srv"><span class="n">13</span>Ajustes del servidor</a>
+		<a href="#modal"><span class="n">14</span>Explorar / Crear servidor</a>
+
+		<div class="toc-group">Referencia</div>
+		<a href="#componentes"><span class="n">15</span>Componentes base</a>
+		<a href="#datos"><span class="n">16</span>Modelos de datos</a>
+		<a href="#acciones"><span class="n">17</span>Catálogo de acciones</a>
+		<a href="#backend"><span class="n">18</span>Funciones a implementar</a>
+		<a href="#pendiente"><span class="n">19</span>Pendiente: Mapas</a>
+	</nav>
+
+	<!-- ════════════ CONTENT ════════════ -->
+	<main class="content">
+		<header class="doc-hero">
+			<h1>Documentación de traspaso</h1>
+			<p>Especificación completa del rediseño de <strong>meado</strong>: cada pantalla, componente, estado e interacción del prototipo, con indicación explícita de qué funciones son <strong>nuevas</strong> y requieren implementación en la app real (SvelteKit + backend).</p>
+			<div class="hero-meta">
+				<span>Prototipo: HTML + JS vanilla</span>
+				<span>Destino: SvelteKit</span>
+				<span>4 archivos JS · 4 archivos CSS</span>
+				<span>2 ejes de tema · 6 acentos</span>
+			</div>
+			<div class="tag-row">
+				<span class="b b-new">Nuevo</span> <span style="font-size:.82rem;color:var(--text-muted)">función nueva a construir</span>
+				<span class="b b-backend">Backend</span> <span style="font-size:.82rem;color:var(--text-muted)">necesita API/persistencia</span>
+				<span class="b b-mock">Mock</span> <span style="font-size:.82rem;color:var(--text-muted)">solo visual en el prototipo</span>
+				<span class="b b-done">Existe</span> <span style="font-size:.82rem;color:var(--text-muted)">ya estaba en la app</span>
+			</div>
+		</header>
+
+		<!-- 01 RESUMEN -->
+		<section id="resumen">
+			<h2 class="sec"><span class="sec-n">01</span>Resumen y arquitectura</h2>
+			<p class="sec-lead">meado es una app de comunidades por voz y texto (estilo Discord) con identidad cálida y acogedora. El prototipo es un mock visual de alta fidelidad que define el diseño, los estados y las interacciones de UI; la lógica de datos se conecta en la app real.</p>
+
+			<h3 class="sub">Estructura de archivos del prototipo</h3>
+			<table>
+				<tr><th>Archivo</th><th>Contenido</th></tr>
+				<tr><td><code>tokens.css</code></td><td>Variables de diseño: el sistema de temas de 2 ejes (base × acento), radios, sombras, tipografías, colores de estado y reset.</td></tr>
+				<tr><td><code>app.css</code></td><td>Carcasa del prototipo (barra de herramientas superior, marco de dispositivo), rail de servidores, barra de estado, tarjeta de usuario, Inicio/Amigos.</td></tr>
+				<tr><td><code>server.css</code></td><td>Vista de servidor: lista de canales, mensajes, composer, sala de voz, miembros, y reglas responsive (móvil).</td></tr>
+				<tr><td><code>overlays.css</code></td><td>Acceso/registro, perfil popout, ajustes (usuario y servidor), modal explorar/crear, toasts.</td></tr>
+				<tr><td><code>data.js</code></td><td>Iconos SVG inline, helpers de avatar, y todos los datos de ejemplo (usuarios, DMs, servidores, roles, canales, temas).</td></tr>
+				<tr><td><code>app.js</code></td><td>Objeto <code>state</code>, render de pantallas, barra de herramientas, navegación, y todos los manejadores de eventos.</td></tr>
+				<tr><td><code>overlays.js</code></td><td>Render de todos los overlays y modales, más helpers de markup (toggle, slider, infoRow…).</td></tr>
+			</table>
+
+			<div class="callout note"><span class="ico">●</span><p>La <strong>barra de herramientas superior</strong> (Acceso/Inicio/Canal… + Fondo/Color + escritorio/móvil) es <strong>andamiaje del prototipo</strong> para navegar y probar temas. <strong>No forma parte del producto</strong> y no debe portarse.</p></div>
+
+			<h3 class="sub">Patrón de render</h3>
+			<p>El prototipo usa un patrón simple de <em>estado → render completo</em>: cada cambio en <code>state</code> llama a <code>render()</code>, que regenera el HTML del marco. En SvelteKit esto se traduce naturalmente a componentes reactivos con <code>$state</code>/stores. La estructura de cada función <code>render*()</code> mapea 1:1 a un componente Svelte.</p>
+		</section>
+
+		<!-- 02 TEMAS -->
+		<section id="temas">
+			<h2 class="sec"><span class="sec-n">02</span>Sistema de temas <span class="b b-new">Nuevo</span></h2>
+			<p class="sec-lead">El cambio más importante respecto a la app actual: el tema se compone de <strong>dos ejes independientes</strong>. Se aplican como atributos en <code>&lt;html&gt;</code>: <code>data-base</code> y <code>data-accent</code>. El acento <strong>nunca</strong> altera el fondo; solo cambia color principal, enlaces, estados activos, anillos y brillos.</p>
+
+			<div class="card-grid">
+				<div class="mini"><h5>Eje 1 · Fondo <span class="mono" style="color:var(--text-muted)">data-base</span></h5><p><strong>noche</strong> (oscuro violáceo) · <strong>día</strong> (claro cálido crema). Define fondos, bordes, textos y sombras.</p></div>
+				<div class="mini"><h5>Eje 2 · Acento <span class="mono" style="color:var(--text-muted)">data-accent</span></h5><p><strong>azul, naranja, verde, morado, rosa, turquesa</strong>. Define solo el color principal y derivados.</p></div>
+			</div>
+
+			<div class="callout note"><span class="ico">★</span><p><strong>Concepto de producto:</strong> cada usuario elige su propio acento y fondo. En una misma sala, cada persona ve la interfaz con su tema — "cada uno con su tema y todos en la misma sala". Esto es preferencia local del usuario, debe persistir por cuenta/dispositivo.</p></div>
+
+			<h3 class="sub">Tokens de fondo (por base)</h3>
+			<table>
+				<tr><th>Variable</th><th>Noche</th><th>Día</th><th>Uso</th></tr>
+				<tr><td><code>--bg-base</code></td><td><span class="swatch" style="background:#15131b"></span>#15131b</td><td><span class="swatch" style="background:#e8e4dd"></span>#e8e4dd</td><td>Fondo raíz de la app</td></tr>
+				<tr><td><code>--bg-surface</code></td><td><span class="swatch" style="background:#1d1a25"></span>#1d1a25</td><td><span class="swatch" style="background:#f3efe8"></span>#f3efe8</td><td>Paneles, tarjetas</td></tr>
+				<tr><td><code>--bg-elevated</code></td><td><span class="swatch" style="background:#262230"></span>#262230</td><td><span class="swatch" style="background:#ded9d0"></span>#ded9d0</td><td>Inputs, chips, botones suaves</td></tr>
+				<tr><td><code>--bg-hover</code></td><td><span class="swatch" style="background:#322d3e"></span>#322d3e</td><td><span class="swatch" style="background:#d4cec3"></span>#d4cec3</td><td>Hover de filas/botones</td></tr>
+				<tr><td><code>--border</code></td><td><span class="swatch" style="background:#322d3c"></span>#322d3c</td><td><span class="swatch" style="background:#d8d2c8"></span>#d8d2c8</td><td>Bordes y separadores</td></tr>
+				<tr><td><code>--text-primary</code></td><td><span class="swatch" style="background:#f5f1f9"></span>#f5f1f9</td><td><span class="swatch" style="background:#2c2a25"></span>#2c2a25</td><td>Texto principal</td></tr>
+				<tr><td><code>--text-secondary</code></td><td><span class="swatch" style="background:#b7afc4"></span>#b7afc4</td><td><span class="swatch" style="background:#5f5a51"></span>#5f5a51</td><td>Texto secundario</td></tr>
+				<tr><td><code>--text-muted</code></td><td><span class="swatch" style="background:#756d82"></span>#756d82</td><td><span class="swatch" style="background:#948e82"></span>#948e82</td><td>Etiquetas, metadatos</td></tr>
+				<tr><td><code>--swatch-base</code></td><td>= bg-base</td><td>= bg-surface</td><td>Mitad "fondo" del icono de tema partido</td></tr>
+			</table>
+			<p style="font-size:.84rem;color:var(--text-muted)">Cada base también define <code>--error*</code>, <code>--success*</code>, las tres <code>--shadow-*</code> y <code>color-scheme</code>.</p>
+
+			<h3 class="sub">Tokens de acento (por acento)</h3>
+			<p>Cada acento define el mismo contrato de 7 variables. Ejemplo (naranja):</p>
+			<table>
+				<tr><th>Variable</th><th>Uso</th></tr>
+				<tr><td><code>--accent</code></td><td>Color principal (botones, activos, enlaces)</td></tr>
+				<tr><td><code>--accent-strong</code> / <code>--accent-hover</code></td><td>Variante intensa / hover</td></tr>
+				<tr><td><code>--accent-dim</code></td><td>Fondo translúcido (chips activos, selección)</td></tr>
+				<tr><td><code>--accent-text</code></td><td>Texto sobre acento (#fff)</td></tr>
+				<tr><td><code>--border-focus</code></td><td>Borde de foco en inputs</td></tr>
+				<tr><td><code>--auth-glow</code></td><td>Resplandor radial de la pantalla de acceso</td></tr>
+			</table>
+			<h4>Los 6 acentos</h4>
+			<div class="flow">
+				<span class="step"><span class="swatch" style="background:#3b82f6"></span>azul #3b82f6</span>
+				<span class="step"><span class="swatch" style="background:#e8833f"></span>naranja #e8833f</span>
+				<span class="step"><span class="swatch" style="background:#2fa86a"></span>verde #2fa86a</span>
+				<span class="step"><span class="swatch" style="background:#8b5cf6"></span>morado #8b5cf6</span>
+				<span class="step"><span class="swatch" style="background:#e0568f"></span>rosa #e0568f</span>
+				<span class="step"><span class="swatch" style="background:#16a89f"></span>turquesa #16a89f</span>
+			</div>
+
+			<h3 class="sub">Colores de estado (globales)</h3>
+			<table>
+				<tr><th>Variable</th><th>Color</th><th>Significado</th></tr>
+				<tr><td><code>--st-online</code></td><td><span class="swatch" style="background:#2fb574"></span>#2fb574</td><td>En línea</td></tr>
+				<tr><td><code>--st-away</code></td><td><span class="swatch" style="background:#f0b232"></span>#f0b232</td><td>Ausente</td></tr>
+				<tr><td><code>--st-dnd</code></td><td><span class="swatch" style="background:#ef5d63"></span>#ef5d63</td><td>No molestar</td></tr>
+				<tr><td><code>--st-invisible</code></td><td><span class="swatch" style="background:#8b8696"></span>#8b8696</td><td>Invisible / desconectado</td></tr>
+			</table>
+
+			<h3 class="sub">Otros tokens</h3>
+			<div class="kv">
+				<dt>--font-ui</dt><dd>Nunito (interfaz)</dd>
+				<dt>--font-mono</dt><dd>Fira Mono (etiquetas, metadatos, tags)</dd>
+				<dt>--radius-sm/md/lg/xl</dt><dd>8 / 12 / 18 / 26 px · <code>--radius-pill</code> 999px</dd>
+				<dt>--transition</dt><dd>0.16s ease</dd>
+				<dt>--ease-bounce</dt><dd>cubic-bezier(.34,1.56,.64,1) — micro-rebote en swatches, toggles, toasts</dd>
+				<dt>--shadow-sm/card/pop</dt><dd>elevaciones (botón, tarjeta, popover/modal)</dd>
+			</div>
+
+			<div class="callout warn"><span class="ico">⚙</span><p><span class="b b-backend">Backend</span> El acento y el fondo elegidos deben <strong>persistir por usuario</strong>. En el prototipo se guardan en <code>localStorage</code> (<code>meado-proto-base</code>, <code>meado-proto-accent</code>); en producción guárdalos en las preferencias de la cuenta para que sigan al usuario entre dispositivos.</p></div>
+		</section>
+
+		<!-- 03 ESTADO -->
+		<section id="estado">
+			<h2 class="sec"><span class="sec-n">03</span>Estado global</h2>
+			<p class="sec-lead">El objeto <code>state</code> (en <code>app.js</code>) centraliza toda la UI. Cada clave mapea a un trozo de estado reactivo en Svelte. Las marcadas como <span class="b b-new">Nuevo</span> no existían en la app.</p>
+			<table>
+				<tr><th>Clave</th><th>Valores</th><th>Descripción</th></tr>
+				<tr><td><code>screen</code></td><td>login · register · home · text · voice</td><td>Pantalla activa <span class="b b-mock">Mock</span> (en real lo lleva el router)</td></tr>
+				<tr><td><code>base</code></td><td>noche · dia</td><td>Eje de fondo del tema <span class="b b-new">Nuevo</span></td></tr>
+				<tr><td><code>accent</code></td><td>azul · naranja · …</td><td>Eje de acento del tema <span class="b b-new">Nuevo</span></td></tr>
+				<tr><td><code>device</code></td><td>desktop · mobile</td><td>Vista previa responsive <span class="b b-mock">Mock</span></td></tr>
+				<tr><td><code>friendTab</code></td><td>online · all · pending · add</td><td>Pestaña activa en Amigos</td></tr>
+				<tr><td><code>dmOpen</code></td><td>null · índice</td><td>null = lista de amigos; nº = DM abierto <span class="b b-new">Nuevo</span></td></tr>
+				<tr><td><code>profileOpen</code></td><td>bool</td><td>Tarjeta de usuario (popover de la barra de estado)</td></tr>
+				<tr><td><code>ppExpand</code></td><td>null · estado · tema</td><td>Sección desplegable abierta en la tarjeta <span class="b b-new">Nuevo</span></td></tr>
+				<tr><td><code>modalOpen</code></td><td>bool</td><td>Modal Explorar/Crear servidor</td></tr>
+				<tr><td><code>modalTab</code></td><td>explore · create</td><td>Pestaña del modal</td></tr>
+				<tr><td><code>mobileNav</code></td><td>bool</td><td>Drawer lateral abierto en móvil <span class="b b-new">Nuevo</span></td></tr>
+				<tr><td><code>micOff</code></td><td>bool</td><td>Micrófono silenciado</td></tr>
+				<tr><td><code>deafened</code></td><td>bool</td><td>Ensordecido (al activar, fuerza micOff)</td></tr>
+				<tr><td><code>inVoice</code></td><td>bool</td><td>Conectado a una sala de voz</td></tr>
+				<tr><td><code>serverMenuOpen</code></td><td>bool</td><td>Desplegable del encabezado del servidor</td></tr>
+				<tr><td><code>overlay</code></td><td>null · {type:'profile',name} · userSettings · serverSettings</td><td>Overlay a pantalla completa activo</td></tr>
+				<tr><td><code>settingsSection</code></td><td>cuenta · perfil · privacidad · apariencia · notif · voz</td><td>Sección de ajustes de usuario</td></tr>
+				<tr><td><code>srvSection</code></td><td>info · roles · channels · invite</td><td>Sección de ajustes del servidor</td></tr>
+				<tr><td><code>relations</code></td><td>{ nombre: 'friend'·'none'·'blocked' }</td><td>Override de relación por persona <span class="b b-new">Nuevo</span> <span class="b b-backend">Backend</span></td></tr>
+				<tr><td><code>bannerColor</code></td><td>id de acento</td><td>Color del banner del perfil, <strong>independiente del tema</strong> <span class="b b-new">Nuevo</span></td></tr>
+				<tr><td><code>reportToast</code></td><td>null · nombre</td><td>Toast de confirmación de denuncia <span class="b b-new">Nuevo</span></td></tr>
+			</table>
+		</section>
+
+		<!-- 04 ACCESO -->
+		<section id="acceso">
+			<h2 class="sec"><span class="sec-n">04</span>Acceso y registro</h2>
+			<p class="sec-lead">Dos pantallas de autenticación centradas, con el resplandor de acento (<code>--auth-glow</code>) detrás de la tarjeta. <code>renderLogin()</code> y <code>renderRegister()</code>.</p>
+
+			<h3 class="sub">Acceso <span class="b b-done">Existe</span></h3>
+			<ul class="clean">
+				<li>Logo + claim "Tu espacio para estar cerca, aunque estéis lejos."</li>
+				<li>Campos: <strong>Email</strong>, <strong>Contraseña</strong>; botón <strong>Entrar</strong>.</li>
+				<li>Enlaces: <strong>¿Olvidaste tu contraseña?</strong> <span class="b b-backend">Backend</span> y <strong>Crear cuenta</strong> → pantalla de registro.</li>
+			</ul>
+
+			<h3 class="sub">Registro <span class="b b-new">Nuevo</span></h3>
+			<p>Tarjeta más ancha (<code>.auth-card-wide</code>). Campos definidos:</p>
+			<ul class="clean">
+				<li><strong>Nombre para mostrar</strong> — editable, visible para otros.</li>
+				<li><strong>Usuario</strong> (@tag) — <span class="b b-backend">Backend</span> debe validarse único y, una vez creado, <strong>es permanente</strong> (ver Ajustes › Mi cuenta).</li>
+				<li><strong>Email</strong> y <strong>Contraseña</strong>.</li>
+				<li>Checkbox de aceptación de <strong>términos</strong> y <strong>privacidad</strong>.</li>
+				<li>Pie: "¿Ya tienes cuenta? <strong>Inicia sesión</strong>" → vuelve a Acceso.</li>
+			</ul>
+			<div class="callout warn"><span class="ico">⚙</span><p><span class="b b-backend">Backend</span> Validación de unicidad de usuario en tiempo real, fuerza de contraseña, verificación de email y creación de cuenta. En el prototipo "Entrar" y "Crear cuenta" simplemente navegan a Inicio.</p></div>
+		</section>
+
+		<!-- 05 INICIO -->
+		<section id="inicio">
+			<h2 class="sec"><span class="sec-n">05</span>Inicio · Amigos</h2>
+			<p class="sec-lead"><code>renderHome()</code> divide en dos: panel lateral de DMs y zona principal que muestra <strong>Amigos</strong> o una <strong>conversación</strong> (según <code>dmOpen</code>).</p>
+
+			<h3 class="sub">Panel lateral (DMs)</h3>
+			<ul class="clean">
+				<li>Buscador <span class="b b-mock">Mock</span>.</li>
+				<li>Botón <strong>Amigos</strong> (activo cuando <code>dmOpen === null</code>) con contador de solicitudes.</li>
+				<li>Lista de <strong>Mensajes directos</strong>: avatar + anillo de estado, nombre, último mensaje, hora y burbuja de no leídos.</li>
+			</ul>
+
+			<h3 class="sub">Vista de Amigos <span class="b b-done">Existe</span> <span class="b b-new">+ retoques</span></h3>
+			<p>Barra superior con segmentos: <strong>En línea</strong>, <strong>Todos</strong>, <strong>Pendiente</strong> (con badge), <strong>Añadir amigo</strong> (CTA).</p>
+			<table>
+				<tr><th>Pestaña</th><th>Contenido</th></tr>
+				<tr><td>En línea</td><td>Amigos con estado ≠ invisible. Cada fila: avatar, nombre, actividad, y <strong>solo</strong> botón de Mensaje.</td></tr>
+				<tr><td>Todos</td><td>Todos los amigos. Igual que arriba.</td></tr>
+				<tr><td>Pendiente</td><td>Solicitudes entrantes con botones <strong>aceptar</strong> (✓) y <strong>rechazar</strong> (✕). <span class="b b-backend">Backend</span></td></tr>
+				<tr><td>Añadir amigo</td><td>Campo para buscar por username exacto y enviar solicitud. <span class="b b-backend">Backend</span></td></tr>
+			</table>
+			<div class="callout ok"><span class="ico">✓</span><p><strong>Cambio aplicado:</strong> se quitó el botón de <em>eliminar amigo</em> (✕) de "En línea" y "Todos" — solo queda el de Mensaje. La ✕ de aceptar/rechazar permanece donde tiene sentido: en "Pendiente".</p></div>
+
+			<h3 class="sub">Responsive móvil <span class="b b-new">Nuevo</span></h3>
+			<p>El panel lateral se convierte en <strong>drawer</strong> anclado tras el rail de servidores, controlado por <code>mobileNav</code> y el botón ☰. La barra de pestañas hace scroll horizontal y oculta el título "Amigos" para que quepan todas.</p>
+		</section>
+
+		<!-- 06 DM -->
+		<section id="dm">
+			<h2 class="sec"><span class="sec-n">06</span>Mensajes directos <span class="b b-new">Nuevo</span></h2>
+			<p class="sec-lead">Funcionalidad nueva completa: <code>renderDMConversation(dm)</code>. Soporta conversaciones <strong>1-a-1</strong> y de <strong>grupo</strong> (n-a-n).</p>
+			<ul class="clean">
+				<li><strong>Cabecera:</strong> avatar + nombre (clicables → abren el perfil, salvo en grupos), subtítulo (estado o "N miembros"), y acciones de <strong>llamada de voz</strong> y <strong>videollamada</strong>. <span class="b b-backend">Backend</span></li>
+				<li><strong>Historial:</strong> bloque de inicio + mensajes con autor, hora, texto y reacciones.</li>
+				<li><strong>Composer</strong> propio con placeholder "Mensaje a {nombre}".</li>
+				<li>Abrir un DM: clic en la lista, o el botón Mensaje de un amigo / del perfil. Si el amigo aún no tiene DM, se crea uno vacío.</li>
+				<li>En móvil, botón <strong>volver</strong> (chevron) que regresa a la lista.</li>
+			</ul>
+			<h4>Modelo de conversación</h4>
+			<p>Cada DM lleva un array <code>conv[]</code> de mensajes <code>{ author, time, text, compact?, reactions? }</code>. Los grupos añaden <code>group:true</code> y <code>members:N</code>.</p>
+			<div class="callout warn"><span class="ico">⚙</span><p><span class="b b-backend">Backend</span> Mensajería en tiempo real (envío, recepción, historial paginado, estados de entrega/lectura), reacciones persistentes, y llamadas de voz/vídeo 1-1. El prototipo solo añade mensajes al DOM localmente.</p></div>
+		</section>
+
+		<!-- 07 TEXTO -->
+		<section id="texto">
+			<h2 class="sec"><span class="sec-n">07</span>Canal de texto <span class="b b-done">Existe</span></h2>
+			<p class="sec-lead"><code>renderServer('text')</code> → lista de canales + <code>renderTextChannel()</code> + panel de miembros.</p>
+			<ul class="clean">
+				<li><strong>Lista de canales:</strong> categorías <em>Texto</em> (# ) y <em>Voz</em> (🔊). Cada canal de voz lista debajo sus miembros conectados con mini-avatar e indicadores de hablando/silencio.</li>
+				<li><strong>Encabezado del canal:</strong> # nombre + tema. Clic en el nombre del servidor abre el <a class="inl" href="#servidor-menu">menú del servidor</a>.</li>
+				<li><strong>Mensajes:</strong> <code>renderMsg()</code> — avatar (clicable → perfil), autor (en color de avatar), hora, texto y reacciones. Mensajes consecutivos del mismo autor se compactan (<code>compact:true</code>, sin avatar/cabecera).</li>
+				<li><strong>Reacciones:</strong> chip con emoji + contador; la propia se resalta (<code>.me</code>).</li>
+				<li><strong>Indicador "escribiendo…"</strong> con puntos animados. <span class="b b-backend">Backend</span></li>
+				<li><strong>Composer:</strong> adjuntar (+), texto, emoji, enviar. Auto-crece con el texto.</li>
+			</ul>
+			<h4>Panel de miembros</h4>
+			<p><code>renderMembers()</code> agrupa <strong>En línea</strong> / <strong>Desconectados</strong>, cada miembro con su rol y anillo de estado. Se oculta en móvil.</p>
+			<div class="callout ok"><span class="ico">✓</span><p><strong>Envío de mensajes:</strong> funciona con <strong>Enter</strong> y con clic en el <strong>botón de enviar</strong> (✈). Shift+Enter hace salto de línea. (En la app real, esto va al backend.)</p></div>
+		</section>
+
+		<!-- 08 VOZ -->
+		<section id="voz">
+			<h2 class="sec"><span class="sec-n">08</span>Canal de voz <span class="b b-done">Existe</span> <span class="b b-new">+ rediseño</span></h2>
+			<p class="sec-lead"><code>renderVoiceChannel()</code> — <strong>sala de voz estándar</strong> tipo Discord. Rejilla de participantes + barra de controles.</p>
+			<ul class="clean">
+				<li><strong>Fichas de participante:</strong> avatar grande (clicable → perfil), nombre, "(tú)" para el usuario. Anillo verde pulsante si está <strong>hablando</strong>; insignia roja de <strong>silencio</strong>. La ficha propia se resalta con borde de acento.</li>
+				<li><strong>Controles:</strong> estado de conexión, micro (con medidor de nivel en vivo), ensordecer, vídeo, compartir pantalla, y colgar (rojo).</li>
+			</ul>
+			<div class="callout warn"><span class="ico">★</span><p><strong>Importante — sin proximidad aquí.</strong> Los canales de voz del servidor son salas normales (todos se oyen por igual). El <strong>audio por proximidad</strong> NO va en estos canales: está reservado para los <a class="inl" href="#pendiente">Mapas</a> (sección por construir).</p></div>
+			<div class="callout warn"><span class="ico">⚙</span><p><span class="b b-backend">Backend</span> Conexión WebRTC real, detección de voz (VAD) para el anillo "hablando", niveles de micro, mute/deafen sincronizados, vídeo y screenshare.</p></div>
+		</section>
+
+		<!-- 09 TARJETA -->
+		<section id="tarjeta">
+			<h2 class="sec"><span class="sec-n">09</span>Tarjeta de usuario <span class="b b-new">Rediseño</span></h2>
+			<p class="sec-lead">Popover que sale de la barra de estado (abajo a la izquierda) al pulsar tu identidad. <code>renderProfilePop()</code>. Rediseñada para ser compacta mediante <strong>secciones desplegables</strong>.</p>
+			<ul class="clean">
+				<li>Cabecera con banner, avatar, nombre y @tag → clic abre tu <a class="inl" href="#perfil">perfil completo</a>.</li>
+				<li><strong>Estado</strong> <span class="b b-new">Nuevo</span> — fila desplegable (<code>ppExpand</code>). Muestra el estado actual; al abrir, las 4 opciones: En línea, Ausente, No molestar, Invisible.</li>
+				<li><strong>Tema</strong> <span class="b b-new">Nuevo</span> — fila desplegable. Muestra "Fondo · Acento" actuales; al abrir: selector de fondo (Noche/Día) + swatches de acento + enlace a "Más sobre apariencia".</li>
+				<li>Acciones: <strong>Editar perfil</strong>, <strong>Ajustes</strong>, <strong>Cerrar sesión</strong>.</li>
+			</ul>
+			<div class="callout note"><span class="ico">●</span><p>Solo una sección (Estado o Tema) se abre a la vez. El cambio de estado/tema se aplica al instante y la tarjeta permanece abierta. El swatch de tema es un círculo partido: mitad acento, mitad fondo del tema.</p></div>
+		</section>
+
+		<!-- 10 PERFIL -->
+		<section id="perfil">
+			<h2 class="sec"><span class="sec-n">10</span>Perfil de usuario <span class="b b-new">Rediseño</span></h2>
+			<p class="sec-lead"><code>renderUserProfileCard(name)</code> — panel grande (560px) que se abre al pulsar cualquier nombre/avatar (en mensajes, miembros, cabecera de DM, sala de voz). Distingue tu propio perfil del de otros.</p>
+
+			<h3 class="sub">Contenido común</h3>
+			<ul class="clean">
+				<li>Banner (color de acento) + avatar grande + nombre, @tag y pronombres + chip de estado.</li>
+				<li><strong>Sobre mí</strong> (bio), <strong>Roles</strong> (chips de color), <strong>Miembro desde</strong>.</li>
+			</ul>
+
+			<h3 class="sub">Tu propio perfil</h3>
+			<p>Solo muestra el botón <strong>Editar perfil</strong> (→ ajustes). Sin acciones sociales ni secciones "en común".</p>
+
+			<h3 class="sub">Perfil de otra persona <span class="b b-new">Nuevo</span></h3>
+			<p>Fila de acciones + dos secciones "en común" + composer rápido.</p>
+			<table>
+				<tr><th>Acción</th><th>Comportamiento</th><th>Estado</th></tr>
+				<tr><td><strong>Mensaje</strong></td><td>Abre el DM con esa persona (lo crea si no existe).</td><td><span class="b b-new">Nuevo</span></td></tr>
+				<tr><td><strong>Añadir / Quitar amigo</strong></td><td>Alterna según <code>relations[name]</code>. El botón cambia de etiqueta.</td><td><span class="b b-new">Nuevo</span> <span class="b b-backend">Backend</span></td></tr>
+				<tr><td><strong>Bloquear / Desbloquear</strong></td><td>Al bloquear: botón en rojo + aviso "Has bloqueado a X. No recibirás sus mensajes."</td><td><span class="b b-new">Nuevo</span> <span class="b b-backend">Backend</span></td></tr>
+				<tr><td><strong>Denunciar</strong></td><td>Muestra un toast de confirmación temporal (2,6s).</td><td><span class="b b-new">Nuevo</span> <span class="b b-backend">Backend</span></td></tr>
+			</table>
+			<h4>Secciones "en común" <span class="b b-new">Nuevo</span></h4>
+			<ul class="clean">
+				<li><strong>Amigos en común</strong> — lista con avatares; cada uno es clicable y abre su propio perfil.</li>
+				<li><strong>Servidores en común</strong> — insignias + nombres.</li>
+			</ul>
+			<div class="callout warn"><span class="ico">⚙</span><p><span class="b b-backend">Backend</span> Cálculo real de amigos/servidores en común, y persistencia de amistad/bloqueo/denuncia. En el prototipo, "en común" usa datos de ejemplo y la relación vive en <code>state.relations</code>.</p></div>
+		</section>
+
+		<!-- 11 AJUSTES USUARIO -->
+		<section id="ajustes-user">
+			<h2 class="sec"><span class="sec-n">11</span>Ajustes de usuario <span class="b b-new">Rediseño</span></h2>
+			<p class="sec-lead">Overlay a pantalla completa con navegación lateral. <code>renderUserSettings()</code> + <code>userSection(sec)</code>. Se cierra con la ✕ o <strong>Esc</strong>.</p>
+			<table>
+				<tr><th>Sección</th><th>Contenido</th><th>Notas</th></tr>
+				<tr><td><strong>Mi cuenta</strong></td><td>Tarjeta de identidad + filas de Nombre para mostrar, Nombre de usuario, Email, Teléfono.</td><td>Username <strong>no editable</strong> <span class="b b-new">Nuevo</span></td></tr>
+				<tr><td><strong>Perfil</strong></td><td>Editar nombre, pronombres, bio, avatar y <strong>color del banner</strong>, con vista previa en vivo.</td><td>Banner independiente <span class="b b-new">Nuevo</span></td></tr>
+				<tr><td><strong>Privacidad y seguridad</strong></td><td>Toggles: DMs de miembros, solicitudes de amistad, mostrar actividad.</td><td>Sin "eliminar cuenta" <span class="b b-new">Nuevo</span></td></tr>
+				<tr><td><strong>Apariencia</strong></td><td>Controles de tema (fondo + acento) + opciones de mensajes (compacto, avatares).</td><td><span class="b b-new">Nuevo</span></td></tr>
+				<tr><td><strong>Notificaciones</strong></td><td>Toggles: DMs, menciones, sonidos, resumen por email.</td><td><span class="b b-backend">Backend</span></td></tr>
+				<tr><td><strong>Voz y vídeo</strong></td><td>Dispositivos in/out, sliders de volumen y sensibilidad, cámara, resolución, vista previa.</td><td>Ampliado <span class="b b-new">Nuevo</span></td></tr>
+			</table>
+			<div class="callout ok"><span class="ico">✓</span><p><strong>Cambios aplicados:</strong> (1) el <strong>nombre de usuario</strong> muestra "🔒 No editable" con nota explicativa — es único y permanente. (2) Se eliminó "Eliminar mi cuenta" de Privacidad. (3) <strong>Voz y vídeo</strong> ahora tiene <strong>selector de cámara</strong>, <strong>resolución</strong>, y sliders independientes de <strong>volumen de entrada</strong>, <strong>salida</strong> y <strong>sensibilidad del micro</strong> (antes era un valor fijo). (4) El <strong>color del banner</strong> ya no cambia el tema global — usa <code>state.bannerColor</code>, aislado del acento.</p></div>
+			<div class="callout warn"><span class="ico">⚙</span><p><span class="b b-backend">Backend</span> Persistir todos los campos editables, subida de avatar/banner, enumeración real de dispositivos (getUserMedia / enumerateDevices) y preferencias de notificación.</p></div>
+		</section>
+
+		<!-- 12 MENU SERVIDOR -->
+		<section id="servidor-menu">
+			<h2 class="sec"><span class="sec-n">12</span>Menú del servidor <span class="b b-done">Existe</span></h2>
+			<p class="sec-lead">Desplegable que sale al pulsar el encabezado del servidor (nombre + chevron). <code>renderServerMenu()</code>. Se cierra al clicar fuera o Esc.</p>
+			<ul class="clean">
+				<li>Banner con nivel de boost y nº de miembros.</li>
+				<li><strong>Invitar gente</strong> → ajustes › invitaciones.</li>
+				<li><strong>Ajustes del servidor</strong>, <strong>Crear canal</strong>, <strong>Crear categoría</strong>.</li>
+				<li><strong>Notificaciones</strong>, <strong>Privacidad</strong>.</li>
+				<li><strong>Salir del servidor</strong> (rojo). <span class="b b-backend">Backend</span></li>
+			</ul>
+			<div class="callout note"><span class="ico">●</span><p>Varias entradas (Crear categoría, Notificaciones, Privacidad) son <span class="b b-mock">Mock</span> de navegación en el prototipo y solo cierran el menú; defínelas al implementar.</p></div>
+		</section>
+
+		<!-- 13 AJUSTES SERVIDOR -->
+		<section id="ajustes-srv">
+			<h2 class="sec"><span class="sec-n">13</span>Ajustes del servidor <span class="b b-done">Existe</span></h2>
+			<p class="sec-lead">Overlay con navegación lateral. <code>renderServerSettings()</code> + <code>srvSection(sec)</code>.</p>
+			<table>
+				<tr><th>Sección</th><th>Contenido</th></tr>
+				<tr><td><strong>Información</strong></td><td>Icono + nombre (editable), descripción, y estadísticas (miembros, en línea, nivel boost, creado).</td></tr>
+				<tr><td><strong>Roles</strong></td><td>Crear rol + lista de roles con color, nombre y nº de miembros. <span class="b b-backend">Backend</span></td></tr>
+				<tr><td><strong>Canales</strong></td><td>Listas de canales de Texto y Voz, reordenables. <span class="b b-backend">Backend</span></td></tr>
+				<tr><td><strong>Invitaciones</strong></td><td>Enlace de invitación con botón <strong>Copiar</strong> (funcional), caducidad, usos máximos y toggle de invitación temporal. <span class="b b-backend">Backend</span></td></tr>
+			</table>
+			<p style="font-size:.84rem;color:var(--text-muted)">"Eliminar servidor" (rojo) en el pie de la navegación. <span class="b b-backend">Backend</span></p>
+		</section>
+
+		<!-- 14 MODAL -->
+		<section id="modal">
+			<h2 class="sec"><span class="sec-n">14</span>Explorar / Crear servidor <span class="b b-new">Rediseño</span></h2>
+			<p class="sec-lead">Modal de dos pestañas que se abre con el botón "+" del rail. <code>renderServerModal()</code> con <code>modalTab</code>.</p>
+
+			<h3 class="sub">Explorar</h3>
+			<ul class="clean">
+				<li>Hero "Encuentra tu sitio" con buscador por tema.</li>
+				<li>Chips de categorías (Para ti, Arte, Música, Juegos, Tecnología, Bienestar, Comida).</li>
+				<li>Rejilla de <strong>tarjetas de descubrimiento</strong>: banner con color generado por <code>hue</code> (oklch), icono, nombre, descripción, nº de miembros y botón <strong>Entrar</strong>.</li>
+			</ul>
+
+			<h3 class="sub">Crear servidor</h3>
+			<ul class="clean">
+				<li>Subida de icono (circular), nombre del servidor, región de voz.</li>
+				<li>Plantillas rápidas: Amigos, Comunidad, Estudio, Música.</li>
+				<li>CTA <strong>Crear servidor</strong> + enlace "¿Tienes una invitación? Únete a uno" (cambia a Explorar).</li>
+			</ul>
+			<div class="callout warn"><span class="ico">⚙</span><p><span class="b b-backend">Backend</span> Directorio real de servidores públicos con búsqueda/filtros, unirse por descubrimiento o invitación, y creación de servidor con plantillas de canales.</p></div>
+		</section>
+
+		<!-- 15 COMPONENTES -->
+		<section id="componentes">
+			<h2 class="sec"><span class="sec-n">15</span>Componentes base</h2>
+			<p class="sec-lead">Piezas reutilizables que aparecen en varias pantallas. Convertir cada una en un componente Svelte reutilizable.</p>
+			<table>
+				<tr><th>Componente</th><th>Origen</th><th>Descripción</th></tr>
+				<tr><td><strong>Avatar</strong></td><td><code>avatarHTML()</code></td><td>Círculo con inicial sobre color derivado del nombre (hash → paleta cálida). Opciones: tamaño, <code>status</code> (anillo), <code>profile</code> (clicable), <code>sq</code> (cuadrado).</td></tr>
+				<tr><td><strong>Anillo de estado</strong></td><td><code>.status-ring.st-*</code></td><td>Punto de color de estado en la esquina del avatar. Variante <code>.sm</code>.</td></tr>
+				<tr><td><strong>Mensaje</strong></td><td><code>renderMsg()</code></td><td>Avatar + autor + hora + texto + reacciones. Modo <code>compact</code> para mensajes consecutivos.</td></tr>
+				<tr><td><strong>Reacción</strong></td><td><code>.reaction</code></td><td>Chip emoji + contador; <code>.me</code> resalta la propia.</td></tr>
+				<tr><td><strong>Composer</strong></td><td><code>.composer-box</code></td><td>Adjuntar + textarea auto-crece + emoji + enviar. Enter envía, Shift+Enter salta línea.</td></tr>
+				<tr><td><strong>Chip de rol</strong></td><td><code>roleChips()</code></td><td>Punto de color del rol + nombre.</td></tr>
+				<tr><td><strong>Toggle</strong></td><td><code>toggle()</code></td><td>Switch con título + subtítulo. Usado en todos los ajustes.</td></tr>
+				<tr><td><strong>Slider</strong></td><td><code>sliderRow()</code> <span class="b b-new">Nuevo</span></td><td>Range estilizado con valor en vivo (%). Volúmenes y sensibilidad.</td></tr>
+				<tr><td><strong>Selector falso</strong></td><td><code>.set-select</code></td><td>Caja con icono + texto + chevron (dropdown visual). <span class="b b-backend">Backend</span></td></tr>
+				<tr><td><strong>Fila info</strong></td><td><code>infoRow()</code></td><td>Etiqueta + valor + botón Editar, o "🔒 No editable" si <code>editable=false</code>.</td></tr>
+				<tr><td><strong>Segmentos / pestañas</strong></td><td><code>.seg</code>, <code>.modal-tabs</code></td><td>Grupos de botones con estado activo.</td></tr>
+				<tr><td><strong>Toast</strong></td><td><code>.toast</code> <span class="b b-new">Nuevo</span></td><td>Notificación flotante temporal (p. ej. denuncia enviada).</td></tr>
+				<tr><td><strong>Rail de servidores</strong></td><td><code>renderRail()</code></td><td>Columna de iconos de servidor con pip activo, badges de no leídos y botón "+".</td></tr>
+				<tr><td><strong>Barra de estado</strong></td><td><code>renderStatusbar()</code></td><td>Identidad (→ tarjeta), micro, ensordecer, ajustes.</td></tr>
+			</table>
+		</section>
+
+		<!-- 16 DATOS -->
+		<section id="datos">
+			<h2 class="sec"><span class="sec-n">16</span>Modelos de datos</h2>
+			<p class="sec-lead">Estructuras de ejemplo en <code>data.js</code>. Definen la forma que deben tener las entidades reales del backend.</p>
+			<table>
+				<tr><th>Modelo</th><th>Campos</th></tr>
+				<tr><td><code>ME</code> / usuario</td><td>name, tag, status, pronouns, bio, memberSince, email, phone, roles[]</td></tr>
+				<tr><td><code>FRIENDS[]</code></td><td>name, status, activity</td></tr>
+				<tr><td><code>DMS[]</code></td><td>name, last, time, unread, status, group?, members?, conv[]</td></tr>
+				<tr><td>mensaje (conv / MESSAGES)</td><td>author, time, text, compact?, reactions[]{ e, c, me }</td></tr>
+				<tr><td><code>SERVERS[]</code> / rail</td><td>initial, name, active?, unread?</td></tr>
+				<tr><td><code>SERVER_INFO</code></td><td>name, initial, description, members, online, boost, invite, created</td></tr>
+				<tr><td><code>ROLES[]</code></td><td>name, color, members</td></tr>
+				<tr><td><code>TEXT_CHANNELS[]</code> / <code>VOICE_CHANNELS[]</code></td><td>name, active?, members[] (voz)</td></tr>
+				<tr><td><code>VOICE_PARTICIPANTS[]</code></td><td>name, you, speaking, muted</td></tr>
+				<tr><td><code>MEMBERS_ONLINE/OFFLINE[]</code></td><td>name, role, status</td></tr>
+				<tr><td><code>DISCOVER[]</code></td><td>initial, name, desc, cat, members, hue</td></tr>
+				<tr><td><code>BASES[]</code> / <code>ACCENTS[]</code></td><td>id, label (+ c color en acentos)</td></tr>
+				<tr><td><code>STATUS_LABEL</code></td><td>online·away·dnd·invisible → etiqueta ES</td></tr>
+			</table>
+			<div class="callout note"><span class="ico">●</span><p><strong>Avatares:</strong> el prototipo genera color e inicial desde el nombre (<code>avatarColor()</code>, hash → paleta cálida de 8). En producción, si hay foto, úsala; si no, este fallback es un buen sistema de placeholders consistentes.</p></div>
+		</section>
+
+		<!-- 17 ACCIONES -->
+		<section id="acciones">
+			<h2 class="sec"><span class="sec-n">17</span>Catálogo de acciones</h2>
+			<p class="sec-lead">Todos los <code>data-action</code> del prototipo y su efecto. Delegación de eventos por clic en <code>app.js</code>.</p>
+			<table>
+				<tr><th>Acción</th><th>Efecto</th></tr>
+				<tr><td><code>toggle-profile</code></td><td>Abre/cierra la tarjeta de usuario</td></tr>
+				<tr><td><code>pp-expand-estado</code> / <code>pp-expand-tema</code></td><td>Despliega sección de la tarjeta</td></tr>
+				<tr><td><code>toggle-mic</code> / <code>toggle-deaf</code></td><td>Silenciar micro / ensordecer</td></tr>
+				<tr><td><code>toggle-nav</code> / <code>show-dms</code> / <code>show-friends</code></td><td>Drawer móvil / volver a DMs / ir a Amigos</td></tr>
+				<tr><td><code>open-modal</code> / <code>close-modal</code> / <code>set-explore</code></td><td>Modal explorar/crear servidor</td></tr>
+				<tr><td><code>toggle-server-menu</code> / <code>close-menu</code></td><td>Desplegable del servidor</td></tr>
+				<tr><td><code>open-server-settings</code> / <code>open-invite</code> / <code>srv-channels</code></td><td>Abren ajustes del servidor en una sección</td></tr>
+				<tr><td><code>open-user-settings</code> / <code>close-overlay</code></td><td>Ajustes de usuario / cerrar overlay</td></tr>
+				<tr><td><code>send-dm-profile</code></td><td>Abre el DM con una persona desde su perfil</td></tr>
+				<tr><td><code>add-friend</code> / <code>remove-friend</code></td><td>Cambia <code>relations[name]</code></td></tr>
+				<tr><td><code>block-user</code> / <code>unblock-user</code></td><td>Bloquea/desbloquea</td></tr>
+				<tr><td><code>report-user</code></td><td>Lanza el toast de denuncia</td></tr>
+				<tr><td><code>copy-invite</code></td><td>Copia el enlace (feedback "Copiado")</td></tr>
+				<tr><td><code>leave-voice</code></td><td>Sale de la sala de voz</td></tr>
+				<tr><td><code>logout</code></td><td>Vuelve a la pantalla de Acceso</td></tr>
+			</table>
+			<p style="font-size:.84rem;color:var(--text-muted)">Otros selectores de datos: <code>data-screen</code> (navegación), <code>data-base</code>/<code>data-accent</code>/<code>data-banner</code> (tema/banner), <code>data-status</code> (estado), <code>data-tab</code>/<code>data-modaltab</code> (pestañas), <code>data-dm</code>/<code>data-dm-friend</code> (abrir DM), <code>data-profile</code>/<code>data-uname</code> (perfil/persona), <code>data-settings</code>/<code>data-srvsettings</code> (secciones de ajustes).</p>
+		</section>
+
+		<!-- 18 BACKEND -->
+		<section id="backend">
+			<h2 class="sec"><span class="sec-n">18</span>Funciones nuevas a implementar</h2>
+			<p class="sec-lead">Resumen consolidado de todo lo que el prototipo define a nivel de UI pero que necesita lógica/persistencia/tiempo real en la app. Prioriza por aquí.</p>
+			<div class="card-grid">
+				<div class="mini"><h5>Temas por usuario <span class="b b-backend">Backend</span></h5><p>Persistir fondo + acento en la cuenta. Aplicar <code>data-base</code>/<code>data-accent</code> al cargar.</p></div>
+				<div class="mini"><h5>Mensajes directos <span class="b b-new">Nuevo</span></h5><p>DMs 1-1 y de grupo: envío/recepción en tiempo real, historial, reacciones, no leídos.</p></div>
+				<div class="mini"><h5>Sistema de amistad <span class="b b-backend">Backend</span></h5><p>Solicitudes (enviar/aceptar/rechazar), añadir/quitar amigo, lista de pendientes.</p></div>
+				<div class="mini"><h5>Bloqueo y denuncia <span class="b b-new">Nuevo</span></h5><p>Bloquear/desbloquear usuarios (oculta sus mensajes) y flujo de denuncia con moderación.</p></div>
+				<div class="mini"><h5>En común <span class="b b-backend">Backend</span></h5><p>Calcular amigos y servidores compartidos para el perfil.</p></div>
+				<div class="mini"><h5>Voz/vídeo real <span class="b b-backend">Backend</span></h5><p>WebRTC, detección de voz, mute/deafen sincronizado, screenshare, llamadas en DM.</p></div>
+				<div class="mini"><h5>Dispositivos <span class="b b-new">Nuevo</span></h5><p>Enumerar cámara/micro/altavoz reales y aplicar volúmenes y sensibilidad.</p></div>
+				<div class="mini"><h5>Edición de perfil <span class="b b-backend">Backend</span></h5><p>Guardar nombre, pronombres, bio; subir avatar y banner. Username inmutable.</p></div>
+				<div class="mini"><h5>Gestión de servidor <span class="b b-backend">Backend</span></h5><p>Roles, canales (crear/reordenar), invitaciones, info, salir/eliminar.</p></div>
+				<div class="mini"><h5>Descubrir / crear <span class="b b-new">Nuevo</span></h5><p>Directorio público, búsqueda, unirse, crear con plantillas.</p></div>
+				<div class="mini"><h5>Indicador "escribiendo" <span class="b b-backend">Backend</span></h5><p>Señal en tiempo real por canal/DM.</p></div>
+				<div class="mini"><h5>Notificaciones <span class="b b-backend">Backend</span></h5><p>Preferencias + entrega (push/email/sonido).</p></div>
+			</div>
+		</section>
+
+		<!-- 19 PENDIENTE -->
+		<section id="pendiente">
+			<h2 class="sec"><span class="sec-n">19</span>Pendiente: Mapas <span class="b b-new">Por construir</span></h2>
+			<p class="sec-lead">La pieza que aún no se ha diseñado. Es donde vive el concepto de <strong>audio por proximidad</strong> de meado.</p>
+			<div class="callout note"><span class="ico">🗺</span><p>Los <strong>Mapas</strong> son espacios 2D donde los usuarios se mueven con un avatar y el <strong>volumen de voz sube cuanto más cerca están</strong> entre ellos — a diferencia de los canales de voz del servidor, que son salas normales. Se abordará como una sección nueva cuando la base esté programada. El icono <code>map</code> ya está disponible en el set.</p></div>
+			<p>Cuando lleguemos a esa fase, definiremos: el lienzo del mapa, el movimiento del avatar, el cálculo de proximidad → volumen, zonas/salas dentro del mapa, y los indicadores visuales de quién te oye.</p>
+		</section>
+
+		<footer style="margin-top:4rem;padding-top:2rem;border-top:1px solid var(--border);color:var(--text-muted);font-size:.84rem;">
+			<p style="max-width:none">Documento generado a partir del prototipo de rediseño de meado. Para ver cualquier pantalla en vivo, abre <code>Meado Rediseño.html</code> y usa la barra superior para navegar y probar temas.</p>
+		</footer>
+	</main>
+</div>
+</body>
+</html>
+
+
+

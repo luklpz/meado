@@ -6,7 +6,7 @@
 	import type { ChatSocket } from '$lib/socket.js';
 	import { dmUnread } from '$lib/dmStore.js';
 	import { conversationsStore, type Conversation } from '$lib/conversationsStore.js';
-	import { Users, MessageSquare, X, Check, Plus } from 'lucide-svelte';
+	import { Users, MessageSquare, X, Check, Plus, Search, Menu } from 'lucide-svelte';
 
 	let { data } = $props();
 	const user = $derived(data.user as { id: string; username: string; role: string; avatarUrl?: string | null });
@@ -19,6 +19,7 @@
 	// svelte-ignore state_referenced_locally
 	let pending = $state<Pending[]>([...data.pending]);
 
+	let sidebarOpen = $state(false);
 	let activeTab = $state<'online' | 'all' | 'pending' | 'add'>('online');
 	let addIdentifier = $state('');
 	let addError = $state('');
@@ -176,14 +177,19 @@
 
 <svelte:head><title>Meado — Inicio</title></svelte:head>
 
-<div class="home-layout">
+<div class="home-layout" class:sidebar-open={sidebarOpen}>
 	<!-- DM/Friends sidebar -->
+	<!-- svelte-ignore a11y_no_static_element_interactions -->
+	<div class="sidebar-overlay" onclick={() => (sidebarOpen = false)} onkeydown={() => {}}></div>
 	<aside class="home-sidebar">
 		<div class="search-bar">
-			<input type="text" bind:value={searchQuery} placeholder="Buscar" oninput={() => {}} />
+			<div class="home-search">
+				<Search size={13} />
+				<input type="text" bind:value={searchQuery} placeholder="Buscar" />
+			</div>
 		</div>
 
-		<button class="sidebar-nav-btn" onclick={() => (activeTab = 'online')}>
+		<button class="sidebar-nav-btn active" onclick={() => (activeTab = 'online')}>
 			<span class="nav-icon"><Users size={16} /></span>
 			Amigos
 			{#if incomingPending.length > 0}
@@ -227,6 +233,7 @@
 	<!-- Main content -->
 	<main class="home-main">
 		<div class="friends-header">
+			<button class="hamburger-btn" onclick={() => (sidebarOpen = !sidebarOpen)} title="Menú"><Menu size={18} /></button>
 			<span class="friends-title"><Users size={16} /> Amigos</span>
 			<div class="tabs">
 				<button class="tab" class:active={activeTab === 'online'} onclick={() => (activeTab = 'online')}>
@@ -268,7 +275,6 @@
 							</div>
 							<div class="friend-actions">
 								<button class="icon-action" title="Mensaje" onclick={() => openOrCreateDm(f.user.id)}><MessageSquare size={14} /></button>
-								<button class="icon-action danger" title="Eliminar" onclick={() => removeFriend(f.id)}><X size={14} /></button>
 							</div>
 						</div>
 					{/each}
@@ -295,7 +301,6 @@
 							</div>
 							<div class="friend-actions">
 								<button class="icon-action" title="Mensaje" onclick={() => openOrCreateDm(f.user.id)}><MessageSquare size={14} /></button>
-								<button class="icon-action danger" title="Eliminar" onclick={() => removeFriend(f.id)}><X size={14} /></button>
 							</div>
 						</div>
 					{/each}
@@ -442,7 +447,7 @@
 	}
 
 	.home-sidebar {
-		width: 240px;
+		width: 264px;
 		flex-shrink: 0;
 		background: var(--bg-surface);
 		border-right: 1px solid var(--border);
@@ -455,34 +460,41 @@
 		flex: 1;
 		overflow-y: auto;
 		min-height: 0;
-		padding-bottom: 56px;
+		padding-bottom: 60px;
 	}
 
 	.search-bar {
-		padding: 0.6rem 0.5rem;
-		border-bottom: 1px solid var(--border);
+		padding: 0.75rem 0.75rem 0.5rem;
 	}
 
-	.search-bar input {
-		width: 100%;
-		padding: 0.3rem 0.6rem;
+	.home-search {
+		display: flex;
+		align-items: center;
+		gap: 0.4rem;
 		background: var(--bg-elevated);
+		border-radius: var(--radius-pill);
+		padding: 0.3rem 0.75rem;
+		color: var(--text-muted);
+	}
+
+	.home-search input {
+		flex: 1;
+		background: transparent;
 		border: none;
-		border-radius: var(--radius);
+		outline: none;
 		color: var(--text-primary);
 		font-size: 0.78rem;
 		font-family: inherit;
-		outline: none;
-		box-sizing: border-box;
+		min-width: 0;
 	}
 
-	.search-bar input::placeholder { color: var(--text-muted); }
+	.home-search input::placeholder { color: var(--text-muted); }
 
 	.sidebar-nav-btn {
 		display: flex;
 		align-items: center;
-		gap: 0.5rem;
-		padding: 0.5rem 0.75rem;
+		gap: 0.6rem;
+		padding: 0.6rem 0.7rem;
 		background: transparent;
 		border: none;
 		border-radius: var(--radius);
@@ -491,12 +503,13 @@
 		font-weight: 600;
 		cursor: pointer;
 		font-family: inherit;
-		margin: 0.25rem 0.5rem;
-		width: calc(100% - 1rem);
+		margin: 0.25rem 0.6rem 0.4rem;
+		width: calc(100% - 1.2rem);
 		transition: background var(--transition), color var(--transition);
 	}
 
-	.sidebar-nav-btn:hover { background: var(--bg-elevated); color: var(--text-primary); }
+	.sidebar-nav-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+	.sidebar-nav-btn.active { background: var(--accent-dim); color: var(--accent); }
 
 	.nav-icon { font-size: 1rem; }
 
@@ -516,10 +529,11 @@
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
-		padding: 0.5rem 0.75rem 0.25rem;
-		font-size: 0.65rem;
+		padding: 0.5rem 1rem 0.3rem;
+		font-family: var(--font-mono);
+		font-size: 0.62rem;
 		font-weight: 700;
-		letter-spacing: 0.08em;
+		letter-spacing: 0.1em;
 		text-transform: uppercase;
 		color: var(--text-muted);
 	}
@@ -537,11 +551,11 @@
 		overflow: hidden;
 	}
 
-	.dm-item:hover { background: var(--bg-elevated); color: var(--text-primary); }
+	.dm-item:hover { background: var(--bg-hover); color: var(--text-primary); }
 
 	.dm-avatar {
-		width: 32px;
-		height: 32px;
+		width: 38px;
+		height: 38px;
 		border-radius: 50%;
 		background: var(--bg-elevated);
 		border: 1px solid var(--border);
@@ -560,8 +574,8 @@
 	.dm-info { flex: 1; overflow: hidden; }
 
 	.dm-name {
-		font-size: 0.82rem;
-		font-weight: 600;
+		font-size: 0.85rem;
+		font-weight: 700;
 		color: var(--text-primary);
 		white-space: nowrap;
 		overflow: hidden;
@@ -569,7 +583,7 @@
 	}
 
 	.dm-last {
-		font-size: 0.7rem;
+		font-size: 0.72rem;
 		color: var(--text-muted);
 		white-space: nowrap;
 		overflow: hidden;
@@ -591,7 +605,7 @@
 		align-items: center;
 		gap: 1rem;
 		padding: 0 1rem;
-		height: 48px;
+		height: 56px;
 		border-bottom: 1px solid var(--border);
 		background: var(--bg-base);
 		flex-shrink: 0;
@@ -674,28 +688,29 @@
 	.friend-row {
 		display: flex;
 		align-items: center;
-		gap: 0.75rem;
-		padding: 0.75rem 0.5rem;
+		gap: 0.85rem;
+		padding: 0.7rem 0.6rem;
 		border-radius: var(--radius);
-		border-bottom: 1px solid var(--border);
 		transition: background var(--transition);
+		cursor: pointer;
 	}
 
 	.friend-row:hover { background: var(--bg-surface); }
+	.friend-row:hover .friend-actions { opacity: 1; }
 
 	.friend-avatar {
 		position: relative;
-		width: 40px;
-		height: 40px;
+		width: 42px;
+		height: 42px;
 		border-radius: 50%;
-		background: var(--bg-surface);
+		background: var(--bg-elevated);
 		border: 1px solid var(--border);
 		display: flex;
 		align-items: center;
 		justify-content: center;
 		font-size: 1rem;
-		font-weight: 700;
-		color: var(--text-muted);
+		font-weight: 800;
+		color: var(--text-secondary);
 		flex-shrink: 0;
 		overflow: hidden;
 	}
@@ -704,47 +719,44 @@
 
 	.status-dot {
 		position: absolute;
-		bottom: 0;
-		right: 0;
-		width: 10px;
-		height: 10px;
+		bottom: -2px; right: -2px;
+		width: 14px; height: 14px;
 		border-radius: 50%;
-		border: 2px solid var(--bg-base);
-		background: var(--text-muted);
+		border: 3px solid var(--bg-surface);
+		background: var(--st-invisible);
 	}
 
-	.status-dot.online { background: #3ba55d; }
+	.status-dot.online { background: var(--st-online); }
 
 	.friend-info {
 		flex: 1;
 		display: flex;
 		flex-direction: column;
-		gap: 0.1rem;
+		gap: 0.05rem;
+		min-width: 0;
 	}
 
-	.friend-name { font-size: 0.88rem; font-weight: 600; color: var(--text-primary); }
-	.friend-status { font-size: 0.72rem; color: var(--text-muted); }
+	.friend-name { font-size: 0.92rem; font-weight: 800; color: var(--text-primary); }
+	.friend-status { font-family: var(--font-mono); font-size: 0.68rem; color: var(--text-muted); }
 
-	.friend-actions { display: flex; gap: 0.35rem; }
+	.friend-actions { display: flex; gap: 0.35rem; opacity: 0.4; transition: opacity var(--transition); }
 
 	.icon-action {
-		width: 34px;
-		height: 34px;
+		width: 38px;
+		height: 38px;
 		border-radius: 50%;
 		border: none;
 		background: var(--bg-elevated);
 		color: var(--text-secondary);
 		cursor: pointer;
-		font-size: 0.8rem;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		transition: background var(--transition), color var(--transition);
+		display: grid;
+		place-items: center;
+		transition: background var(--transition), color var(--transition), transform var(--transition);
 	}
 
-	.icon-action:hover { background: var(--bg-surface); color: var(--text-primary); }
+	.icon-action:hover { background: var(--bg-hover); color: var(--text-primary); transform: scale(1.08); }
 	.icon-action.danger:hover { background: var(--error-surface); color: var(--error); }
-	.icon-action.success:hover { background: rgba(59,165,93,0.15); color: #3ba55d; }
+	.icon-action.success:hover { background: var(--success-surface); color: var(--success); }
 
 	.add-friend-panel {
 		max-width: 480px;
@@ -798,21 +810,21 @@
 
 	/* ── DM unread badge ── */
 	.dm-unread-badge {
-		background: var(--error);
-		color: #fff;
-		font-size: 0.6rem;
-		font-weight: 700;
-		min-width: 16px;
-		height: 16px;
-		border-radius: 999px;
+		background: var(--accent);
+		color: var(--accent-text);
+		font-size: 0.62rem;
+		font-weight: 800;
+		min-width: 18px;
+		height: 18px;
+		border-radius: var(--radius-pill);
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		padding: 0 3px;
+		padding: 0 5px;
 		flex-shrink: 0;
 	}
 
-	.dm-last-unread { color: var(--text-secondary); font-weight: 600; }
+	.dm-last-unread { color: var(--text-secondary); font-weight: 700; }
 
 	/* ── New DM modal ── */
 	.modal-overlay {
@@ -944,4 +956,40 @@
 	.btn-sm { font-size: 0.72rem; padding: 0.25rem 0.6rem; }
 	.avatar-sm { width: 28px; height: 28px; border-radius: 50%; object-fit: cover; flex-shrink: 0; }
 	.avatar-init { display: flex; align-items: center; justify-content: center; background: var(--bg-elevated); border: 1px solid var(--border); font-weight: 700; font-size: 0.7rem; color: var(--accent); border-radius: 50%; }
+
+	/* ── Hamburger ── */
+	.hamburger-btn {
+		display: none; background: transparent; border: none; cursor: pointer;
+		color: var(--text-muted); padding: 0.2rem; border-radius: var(--radius-sm);
+		align-items: center; justify-content: center;
+		transition: color var(--transition), background var(--transition);
+		flex-shrink: 0;
+	}
+	.hamburger-btn:hover { color: var(--text-primary); background: var(--bg-elevated); }
+
+	.sidebar-overlay {
+		display: none; position: fixed; inset: 0; z-index: 89;
+		background: rgba(0,0,0,0.5);
+	}
+
+	/* ── Mobile ── */
+	@media (max-width: 768px) {
+		.home-layout { position: relative; }
+
+		.home-sidebar {
+			position: fixed; top: 0; left: 72px; bottom: 0; z-index: 90;
+			transform: translateX(calc(-100% - 72px));
+			transition: transform 0.28s var(--ease-bounce);
+			box-shadow: var(--shadow-pop);
+		}
+
+		.home-layout.sidebar-open .home-sidebar { transform: none; }
+		.home-layout.sidebar-open .sidebar-overlay { display: block; }
+
+		.hamburger-btn { display: flex; }
+
+		.home-main { padding-bottom: 60px; }
+
+		.friends-header { gap: 0.4rem; }
+	}
 </style>
