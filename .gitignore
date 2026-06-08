@@ -1,1 +1,10 @@
 .claude/
+CLAUDE.md
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# Logs
+*.log

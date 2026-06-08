@@ -56,10 +56,15 @@ export function createGameScene(Phaser: PhaserType, socket: GameSocket, cfg: Sce
 		constructor() { super({ key: 'GameScene' }); }
 
 		preload() {
-			this.load.spritesheet('player', '/assets/character_walk.png', {
-				frameWidth: FRAME_W,
-				frameHeight: FRAME_H,
-			});
+			// Placeholder: 20-frame spritesheet (5 dirs × 4 frames) drawn as colored rectangles.
+			// Replace with a real spritesheet when available.
+			const g = this.make.graphics({ x: 0, y: 0, add: false });
+			g.fillStyle(0x5b8dd9, 1);
+			for (let i = 0; i < 20; i++) {
+				g.fillRoundedRect(i * FRAME_W + 1, 1, FRAME_W - 2, FRAME_H - 2, 2);
+			}
+			g.generateTexture('player', FRAME_W * 20, FRAME_H);
+			g.destroy();
 		}
 
 		create() {
