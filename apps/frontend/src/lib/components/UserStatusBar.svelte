@@ -105,6 +105,7 @@
 	let privacyActivity = $state(true);
 	let privacyLoading = $state(false);
 	let privacySaved = $state(false);
+	let privacyError = $state('');
 
 	$effect(() => {
 		if (settingsTab === 'privacy' && $user) {
@@ -121,6 +122,7 @@
 	let notifEmailDigest = $state(false);
 	let notifLoading = $state(false);
 	let notifSaved = $state(false);
+	let notifError = $state('');
 
 	$effect(() => {
 		if (settingsTab === 'notifications' && $user) {
@@ -133,7 +135,7 @@
 
 	async function saveNotifSettings() {
 		if (notifLoading) return;
-		notifLoading = true; notifSaved = false;
+		notifLoading = true; notifSaved = false; notifError = '';
 		try {
 			const res = await fetch('/api/auth/notifications', {
 				method: 'PATCH',
@@ -145,6 +147,8 @@
 				authStore.user.update(u => u ? { ...u, notifDms, notifMentions, notifSounds, notifEmailDigest } : u);
 				notifSaved = true;
 				setTimeout(() => { notifSaved = false; }, 2000);
+			} else {
+				notifError = 'Error al guardar. Inténtalo de nuevo.';
 			}
 		} finally {
 			notifLoading = false;
@@ -153,7 +157,7 @@
 
 	async function savePrivacy() {
 		if (privacyLoading) return;
-		privacyLoading = true; privacySaved = false;
+		privacyLoading = true; privacySaved = false; privacyError = '';
 		try {
 			const res = await fetch('/api/auth/privacy', {
 				method: 'PATCH',
@@ -165,6 +169,8 @@
 				authStore.user.update(u => u ? { ...u, allowDmsFromServerMembers: privacyDms, allowFriendRequestsFromAll: privacyFriendReqs, showActivityStatus: privacyActivity } : u);
 				privacySaved = true;
 				setTimeout(() => { privacySaved = false; }, 2000);
+			} else {
+				privacyError = 'Error al guardar. Inténtalo de nuevo.';
 			}
 		} finally {
 			privacyLoading = false;
@@ -552,6 +558,7 @@
 						<button class="btn-primary" onclick={savePrivacy} disabled={privacyLoading}>
 							{privacyLoading ? 'Guardando…' : privacySaved ? '✓ Guardado' : 'Guardar cambios'}
 						</button>
+						{#if privacyError}<p class="save-error">{privacyError}</p>{/if}
 					</div>
 
 				{:else if settingsTab === 'notifications'}
@@ -602,6 +609,7 @@
 						<button class="btn-primary" onclick={saveNotifSettings} disabled={notifLoading}>
 							{notifLoading ? 'Guardando…' : notifSaved ? '✓ Guardado' : 'Guardar cambios'}
 						</button>
+						{#if notifError}<p class="save-error">{notifError}</p>{/if}
 					</div>
 
 				{:else if settingsTab === 'voice'}
@@ -1111,6 +1119,7 @@
 	.settings-textarea:focus { border-color: var(--accent); }
 	.profile-char-count { font-size: 0.68rem; color: var(--text-muted); display: block; text-align: right; margin-top: 0.2rem; }
 	.settings-save-row { display: flex; flex-direction: column; align-items: flex-end; gap: 0.3rem; margin-top: 0.5rem; }
+	.save-error { font-size: 0.72rem; color: var(--error); margin: 0; }
 	.btn-primary {
 		padding: 0.45rem 1.1rem; background: var(--accent); color: var(--accent-text);
 		border: none; border-radius: var(--radius-sm); font-size: 0.85rem; font-weight: 700;

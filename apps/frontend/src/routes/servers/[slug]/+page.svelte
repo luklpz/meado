@@ -11,7 +11,7 @@
 	import { PERMISSION_LABELS, PERMISSION_CATEGORIES } from '$lib/permissions.js';
 	import PhaserGame from '$lib/game/PhaserGame.svelte';
 	import ServerProfileCard from '$lib/components/ServerProfileCard.svelte';
-	import { uploadFile, goesToCloudinary } from '$lib/upload.js';
+	import { uploadFile, goesToCloudinary, rejectFile } from '$lib/upload.js';
 	import {
 		Mic, MicOff, Monitor, MonitorOff, PhoneOff,
 		LayoutGrid, Focus, PanelRight,
@@ -403,12 +403,11 @@
 			method: 'DELETE',
 			credentials: 'include',
 		});
-		if (res.ok) {
-			channels = channels.filter((c) => c.id !== ch.id);
-			if (selectedChannel?.id === ch.id) {
-				const next = textChannels.find((c) => c.id !== ch.id);
-				if (next) selectChannel(next); else selectedChannel = null;
-			}
+		if (!res.ok) { showToast('Error al eliminar el canal'); return; }
+		channels = channels.filter((c) => c.id !== ch.id);
+		if (selectedChannel?.id === ch.id) {
+			const next = textChannels.find((c) => c.id !== ch.id);
+			if (next) selectChannel(next); else selectedChannel = null;
 		}
 	}
 
@@ -498,9 +497,10 @@
 				const r = await uploadFile(file);
 				({ url, name, size, mimeType } = r);
 			} else {
-				throw new Error('El archivo supera el límite de 25 MB.');
+				rejectFile(file.name, 'El archivo supera el límite de 25 MB.');
+				return;
 			}
-		} catch { return; } // upload tray already shows the error
+		} catch { return; } // upload tray shows the error from uploadFile
 
 		try {
 			const msgRes = await fetch(`/api/channels/${channelId}/messages`, {
@@ -532,6 +532,7 @@
 			body: JSON.stringify({ content }),
 		});
 		if (res.ok) cancelEdit();
+		else showToast('Error al editar el mensaje');
 	}
 
 	async function deleteMsg(msg: MessagePayload) {
@@ -604,7 +605,7 @@
 			credentials: 'include',
 			body: JSON.stringify({ userIds: [userId] }),
 		});
-		if (!res.ok) return;
+		if (!res.ok) { showToast('Error al abrir la conversación'); return; }
 		const conv = await res.json();
 		goto(`/home/dm/${conv.id}`);
 	}
@@ -615,6 +616,7 @@
 			method: 'DELETE', credentials: 'include',
 		});
 		if (res.ok) members = members.filter((m) => m.user.id !== userId);
+		else showToast('Error al expulsar al miembro');
 	}
 
 	// ── Voice ─────────────────────────────────────────────────────────────
@@ -749,12 +751,14 @@
 		if (!confirm('¿Salir del servidor?')) return;
 		const res = await fetch(`/api/servers/${server.slug}/leave`, { method: 'POST', credentials: 'include' });
 		if (res.ok) goto('/servers');
+		else showToast('Error al salir del servidor');
 	}
 
 	async function deleteServer() {
 		if (!confirm(`¿Eliminar permanentemente "${server.name}"? Esto no se puede deshacer.`)) return;
 		const res = await fetch(`/api/servers/${server.slug}`, { method: 'DELETE', credentials: 'include' });
 		if (res.ok) goto('/servers');
+		else showToast('Error al eliminar el servidor');
 	}
 
 	// ── Role editing ──────────────────────────────────────────────────────
@@ -797,12 +801,13 @@
 		if (res.ok) {
 			members = members.filter(m => m.user.id !== userId);
 			showToast(`${username} baneado.`);
-		}
+		} else showToast('Error al banear al usuario');
 	}
 
 	async function unbanUser(userId: string) {
 		const res = await fetch(`/api/servers/${server.slug}/bans/${userId}`, { method: 'DELETE', credentials: 'include' });
 		if (res.ok) bans = bans.filter(b => b.userId !== userId);
+		else showToast('Error al desbanear al usuario');
 	}
 
 	// ── Whitelist ─────────────────────────────────────────────────────────
@@ -870,6 +875,7 @@
 			method: 'DELETE', credentials: 'include',
 		});
 		if (res.ok) roles = roles.filter((r) => r.id !== roleId);
+		else showToast('Error al eliminar el rol');
 	}
 
 	// ── Role assignment ───────────────────────────────────────────────────
@@ -885,7 +891,7 @@
 			members = members.map((m) =>
 				m.user.id === userId ? { ...m, role: role ? { id: role.id, name: role.name, color: role.color ?? null } : null } : m
 			);
-		}
+		} else showToast('Error al asignar el rol');
 	}
 
 	// ── Helpers ───────────────────────────────────────────────────────────

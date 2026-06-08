@@ -39,7 +39,7 @@ const voiceJoinLastTime = new Map<string, number>();
 
 @SkipThrottle()
 @WebSocketGateway({
-  cors: { origin: process.env.CORS_ORIGIN?.split(',') ?? '*', credentials: true },
+  cors: { origin: process.env.CORS_ORIGIN?.split(',').map(s => s.trim()) ?? '*', credentials: true },
 })
 export class MessagesGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer() server: Server;

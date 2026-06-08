@@ -140,7 +140,7 @@
 
 	async function removeFriend(friendshipId: string) {
 		const res = await fetch(`/api/friends/${friendshipId}`, { method: 'DELETE', credentials: 'include' });
-		if (!res.ok) return;
+		if (!res.ok) { addError = 'Error al eliminar. Inténtalo de nuevo.'; return; }
 		friends = friends.filter(f => f.id !== friendshipId);
 		pending = pending.filter(p => p.id !== friendshipId);
 	}

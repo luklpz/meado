@@ -13,6 +13,13 @@ export function goesToCloudinary(file: File): boolean {
   return file.size <= MAX_CLOUDINARY;
 }
 
+export function rejectFile(filename: string, message: string): void {
+  const id = crypto.randomUUID();
+  uploadStore.add(id, filename);
+  uploadStore.update(id, { error: message, done: true });
+  setTimeout(() => uploadStore.remove(id), 5000);
+}
+
 export async function uploadFile(file: File): Promise<UploadResult> {
   const uploadId = crypto.randomUUID();
   uploadStore.add(uploadId, file.name);

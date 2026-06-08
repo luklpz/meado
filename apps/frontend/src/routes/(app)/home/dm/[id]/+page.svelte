@@ -8,7 +8,7 @@
 	import { conversationsStore } from '$lib/conversationsStore.js';
 	import { playPing } from '$lib/ping.js';
 	import { Users, UserPlus, Pencil, Trash2, Download, Send, Paperclip, Film, Music, FileText, FileSpreadsheet, Archive, File as FileIcon, Search, Menu } from 'lucide-svelte';
-	import { uploadFile, goesToCloudinary } from '$lib/upload.js';
+	import { uploadFile, goesToCloudinary, rejectFile } from '$lib/upload.js';
 	import ServerProfileCard from '$lib/components/ServerProfileCard.svelte';
 
 	let { data } = $props();
@@ -52,6 +52,10 @@
 
 	let sidebarOpen = $state(false);
 	let profileCardUserId = $state<string | null>(null);
+
+	let toast = $state('');
+	let toastTimer: ReturnType<typeof setTimeout>;
+	function showToast(msg: string) { toast = msg; clearTimeout(toastTimer); toastTimer = setTimeout(() => (toast = ''), 2500); }
 
 	function openProfileCard(uid: string) {
 		if (uid === user.id) return;
@@ -267,16 +271,18 @@
 				const r = await uploadFile(file);
 				({ url, name, size, mimeType } = r);
 			} else {
-				throw new Error('El archivo supera el límite de 25 MB.');
+				rejectFile(file.name, 'El archivo supera el límite de 25 MB.');
+				return;
 			}
-		} catch { return; } // upload tray already shows the error
+		} catch { return; } // upload tray shows the error from uploadFile
 
-		await fetch(`/api/dm/${convId}/messages`, {
+		const msgRes = await fetch(`/api/dm/${convId}/messages`, {
 			method: 'POST',
 			credentials: 'include',
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify({ content: content || undefined, attachmentUrl: url, attachmentName: name, attachmentSize: size, attachmentMimeType: mimeType }),
-		}).catch(() => {});
+		}).catch(() => null);
+		if (!msgRes?.ok) showToast('Error al enviar el archivo');
 	}
 
 	function onFileChange(e: Event) {
@@ -322,13 +328,18 @@
 	async function openAddMember() {
 		showAddMember = true;
 		addMemberLoading = true;
+		addMemberError = '';
 		try {
 			const res = await fetch('/api/friends', { credentials: 'include' });
 			if (res.ok) {
 				const all = await res.json();
 				const memberIds = new Set(conversation.members.map(m => m.id));
 				addMemberFriends = all.filter((f: any) => !memberIds.has(f.user.id));
+			} else {
+				addMemberError = 'Error al cargar amigos.';
 			}
+		} catch {
+			addMemberError = 'Error de red.';
 		} finally {
 			addMemberLoading = false;
 		}
@@ -370,12 +381,14 @@
 			body: JSON.stringify({ content }),
 		});
 		if (res.ok) cancelEdit();
+		else showToast('Error al editar el mensaje');
 	}
 
 	async function deleteMsg(msg: DmMessage) {
-		await fetch(`/api/dm/${conversation.id}/messages/${msg.id}`, {
+		const res = await fetch(`/api/dm/${conversation.id}/messages/${msg.id}`, {
 			method: 'DELETE', credentials: 'include',
-		});
+		}).catch(() => null);
+		if (!res?.ok) showToast('Error al borrar el mensaje');
 	}
 
 	function onEditKeydown(e: KeyboardEvent, msg: DmMessage) {
@@ -403,6 +416,8 @@
 </script>
 
 <svelte:head><title>Meado — {convName(conversation)}</title></svelte:head>
+
+{#if toast}<div class="toast-msg">{toast}</div>{/if}
 
 <div class="dm-layout" class:sidebar-open={sidebarOpen}>
 	<!-- Sidebar -->
@@ -712,6 +727,21 @@
 {/if}
 
 <style>
+	.toast-msg {
+		position: fixed;
+		bottom: 1.5rem;
+		left: 50%;
+		transform: translateX(-50%);
+		background: var(--bg-elevated);
+		border: 1px solid var(--border-strong);
+		color: var(--text-primary);
+		font-size: 0.82rem;
+		padding: 0.5rem 1.1rem;
+		border-radius: var(--radius-pill);
+		z-index: 1000;
+		pointer-events: none;
+	}
+
 	.dm-layout {
 		display: flex;
 		height: 100%;

@@ -58,6 +58,7 @@
 
 	// Friend action loading
 	let friendLoading = $state(false);
+	let actionError = $state('');
 
 	// Report modal
 	const REPORT_REASONS = ['Spam', 'Acoso o intimidación', 'Contenido inapropiado', 'Suplantación de identidad', 'Otro'];
@@ -107,6 +108,8 @@
 				localNickname = nicknameInput.trim() || null;
 				onNicknameChange?.(targetUserId, localNickname);
 				editingNickname = false;
+			} else {
+				actionError = 'Error al guardar el apodo';
 			}
 		} finally {
 			nicknameSaving = false;
@@ -116,6 +119,7 @@
 	async function handleFriendAction() {
 		if (!profile || friendLoading) return;
 		friendLoading = true;
+		actionError = '';
 		try {
 			if (profile.friendshipStatus === 'none') {
 				const res = await fetch('/api/friends/request', {
@@ -125,18 +129,21 @@
 					body: JSON.stringify({ identifier: profile.username }),
 				});
 				if (res.ok) profile = { ...profile, friendshipStatus: 'pending_sent' };
+				else actionError = 'Error al enviar solicitud';
 			} else if (profile.friendshipStatus === 'pending_received') {
 				const res = await fetch(`/api/friends/accept/${profile.friendshipId}`, {
 					method: 'POST',
 					credentials: 'include',
 				});
 				if (res.ok) profile = { ...profile, friendshipStatus: 'accepted' };
+				else actionError = 'Error al aceptar solicitud';
 			} else if (profile.friendshipStatus === 'accepted' || profile.friendshipStatus === 'pending_sent') {
 				const res = await fetch(`/api/friends/${profile.friendshipId}`, {
 					method: 'DELETE',
 					credentials: 'include',
 				});
 				if (res.ok) profile = { ...profile, friendshipStatus: 'none', friendshipId: null };
+				else actionError = 'Error al eliminar amistad';
 			}
 		} finally {
 			friendLoading = false;
@@ -146,6 +153,7 @@
 	async function handleBlock() {
 		if (!profile || friendLoading) return;
 		friendLoading = true;
+		actionError = '';
 		try {
 			if (profile.friendshipStatus === 'blocked_by_me') {
 				const res = await fetch(`/api/friends/block/${profile.id}`, {
@@ -153,12 +161,14 @@
 					credentials: 'include',
 				});
 				if (res.ok) profile = { ...profile, friendshipStatus: 'none', friendshipId: null };
+				else actionError = 'Error al desbloquear';
 			} else {
 				const res = await fetch(`/api/friends/block/${profile.id}`, {
 					method: 'POST',
 					credentials: 'include',
 				});
 				if (res.ok) profile = { ...profile, friendshipStatus: 'blocked_by_me' };
+				else actionError = 'Error al bloquear';
 			}
 		} finally {
 			friendLoading = false;
@@ -300,6 +310,7 @@
 						{/if}
 					{/if}
 				</div>
+				{#if actionError}<p class="uprofile-action-error">{actionError}</p>{/if}
 			{/if}
 
 			<!-- Scrollable sections -->
@@ -554,6 +565,7 @@
 	/* Loading / error */
 	.uprofile-loading { padding: 2rem; text-align: center; color: var(--text-muted); font-size: 0.85rem; }
 	.uprofile-error { color: var(--error); }
+	.uprofile-action-error { font-size: 0.72rem; color: var(--error); padding: 0.25rem 1rem 0; margin: 0; }
 
 	/* Report modal */
 	.report-overlay { position: fixed; inset: 0; z-index: 400; }
