@@ -22,11 +22,22 @@ Tabla viva — actualizar cada vez que se despliega o se detecta drift.
 | `apps/frontend/src/lib/livekit.ts` | commiteado | versión anterior (reconnectPolicy `as any`) | pendiente de deploy a Vercel — quedará resuelto solo al cortar a Cloudflare |
 | Backend completo (`apps/backend-workers`) | **desplegado y verificado**: `https://meado-backend.luka-lopez-j.workers.dev` | Render (`apps/backend`) sigue siendo el backend real que usa `meado.es` | REST + WS + DOs confirmados contra Cloudflare real (no solo local) |
 | Frontend completo (`apps/frontend`) | **desplegado**: `https://meado-frontend.luka-lopez-j.workers.dev` (páginas OK, proxy `/api` con bug conocido en este dominio compartido, ver entrada de hoy) | Vercel sigue sirviendo `meado.es` | nada de esto es visible para usuarios reales todavía — DNS de `meado.es` no se ha tocado |
-| `meado.es` (DNS/zona) | no añadido a Cloudflare todavía | Vercel (frontend) + Render (backend) | paso pendiente, requiere decisión explícita del usuario (cambia nameservers, afecta tráfico real) |
+| `meado.es` (DNS/zona) | **añadido a Cloudflare, nameservers cambiados en el registrador por el usuario** — pendiente de que Cloudflare confirme el cambio (puede tardar de minutos a horas) | Vercel (frontend) + Render (backend), sigue sirviendo tráfico real hasta que el cambio de nameservers se propague | ver "Próximo paso" en la entrada de hoy |
 
 ---
 
 ## Entradas
+
+## 2026-08-01 — Fase 6: dominio `meado.es` añadido a Cloudflare, nameservers cambiados — pendiente de verificación
+
+- **Qué:** El usuario añadió `meado.es` como zona en el dashboard de Cloudflare y cambió los nameservers en el registrador. Cloudflare está pendiente de detectar el cambio (estado "esperando revisión" en el dashboard) — sin código tocado en esta entrada.
+- **Próximo paso, en cuanto el dashboard diga "Activo":**
+  1. Revisar que los registros DNS que Cloudflare importó automáticamente de Vercel coincidan con los reales (puede no haber cogido el 100%) — riesgo real de caída del sitio si falta alguno antes del corte definitivo.
+  2. Añadir `meado.es`/`www.meado.es` como dominio personalizado a `meado-frontend`, y un subdominio (ej. `api.meado.es` o similar, a decidir) a `meado-backend`.
+  3. Re-verificar el hallazgo #3 de la entrada anterior (`/api/*` daba 404 en `workers.dev`) contra el dominio propio — es la pieza que falta confirmar antes de dar la fase 6 por cerrada.
+  4. Solo entonces plantear el corte real (que el DNS activo sirva Cloudflare en vez de Vercel/Render) — confirmar explícitamente antes, sigue siendo tráfico real.
+- **Por qué:** continuación de la fase 6, iniciada por el usuario fuera de esta sesión de código (acción en el dashboard de Cloudflare y en el registrador de dominio).
+- **Despliegue:** N/A (Vercel/Render siguen sirviendo `meado.es` mientras se propaga el cambio)
 
 ## 2026-08-01 — Fase 6 (parcial): backend y frontend desplegados a Cloudflare real — 3 hallazgos nuevos, ninguno bloqueante
 
