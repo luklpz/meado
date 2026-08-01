@@ -55,12 +55,12 @@ function createLiveKitStore() {
 		status.set('connecting');
 		errorMessage.set('');
 		try {
-		const { Room: LiveKitRoom, RoomEvent, Track } = await import('livekit-client');
+		const { Room: LiveKitRoom, RoomEvent, Track, DefaultReconnectPolicy } = await import('livekit-client');
 
 		const room = new LiveKitRoom({
 			dynacast: true,
 			adaptiveStream: false,
-			reconnectPolicy: { maxRetries: 5, minReconnectWait: 1000, maxReconnectWait: 5000 } as any,
+			reconnectPolicy: new DefaultReconnectPolicy([1000, 2000, 3000, 4000, 5000]),
 		});
 		await room.connect(url, token);
 		_room = room;

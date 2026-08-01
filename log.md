@@ -19,11 +19,18 @@ Tabla viva — actualizar cada vez que se despliega o se detecta drift.
 
 | Archivo | Estado local | Estado producción | Notas |
 |---|---|---|---|
-| `apps/frontend/src/lib/livekit.ts` | modificado, sin commit | versión anterior (reconnectPolicy `as any`) | cambio a `DefaultReconnectPolicy` de livekit-client, pendiente de commit y deploy |
+| `apps/frontend/src/lib/livekit.ts` | commiteado | versión anterior (reconnectPolicy `as any`) | pendiente de deploy a Vercel |
 
 ---
 
 ## Entradas
+
+## 2026-08-01 — LiveKit: reconnectPolicy tipada correctamente
+
+- **Archivo(s):** `apps/frontend/src/lib/livekit.ts`
+- **Qué:** `reconnectPolicy` pasa de objeto plano forzado con `as any` (`{ maxRetries, minReconnectWait, maxReconnectWait }`, shape no soportado por el SDK) a `new DefaultReconnectPolicy([1000, 2000, 3000, 4000, 5000])`, clase real exportada por `livekit-client` que implementa `ReconnectPolicy`. 5 reintentos con backoff creciente en ms.
+- **Por qué:** el objeto anterior no era el shape real esperado por el SDK — probablemente ignorado o roto en runtime, enmascarado por `as any`. Con `DefaultReconnectPolicy` la reconexión usa la política real soportada, sin type-cast falso.
+- **Despliegue:** pendiente (Vercel)
 
 ## 2026-08-01 — Metodología de trabajo: log.md + rename documentación
 
