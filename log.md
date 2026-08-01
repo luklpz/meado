@@ -20,10 +20,20 @@ Tabla viva — actualizar cada vez que se despliega o se detecta drift.
 | Archivo | Estado local | Estado producción | Notas |
 |---|---|---|---|
 | `apps/frontend/src/lib/livekit.ts` | commiteado | versión anterior (reconnectPolicy `as any`) | pendiente de deploy a Vercel |
+| `apps/frontend/*` (adapter, wrangler.jsonc, proxy `/api`) | commiteado, verificado local (`wrangler dev`) | sigue en Vercel con adapter-auto | falta: crear proyecto Cloudflare, env vars, cutover DNS `meado.es` |
 
 ---
 
 ## Entradas
+
+## 2026-08-01 — Frontend: código migrado a Cloudflare Workers (sin desplegar aún)
+
+- **Archivo(s):** `apps/frontend/package.json`, `apps/frontend/svelte.config.js`, `apps/frontend/wrangler.jsonc` (nuevo), `apps/frontend/src/routes/api/[...path]/+server.ts` (nuevo), `apps/frontend/vercel.json` (eliminado)
+- **Qué:** `adapter-auto` → `@sveltejs/adapter-cloudflare`. Añadido `wrangler.jsonc` (Worker + static assets desde `.svelte-kit/cloudflare`, `compatibility_flags: nodejs_compat`). El rewrite `/api/:path*` de `vercel.json` se reemplazó por una ruta catch-all de SvelteKit (`api/[...path]/+server.ts`) que hace proxy genérico (método, headers, body streamed con `duplex: half`, cookies) hacia `BACKEND_URL` — decisión deliberada en vez de `_redirects` porque el proxy transparente (status 200) de Cloudflare Pages no está confirmado en el runtime unificado de Workers assets. Scripts nuevos `cf:dev` / `cf:deploy` con wrangler.
+- **Verificación real:** `npm run build` compila OK con el nuevo adapter. `wrangler dev` levanta el Worker localmente; `GET /login` → 200. Con el backend NestJS corriendo en local (`npm run start:dev`), `GET /api/auth/me` a través del proxy del Worker devolvió el mismo body/status (401 Unauthorized) que pegarle directo al backend — proxy end-to-end confirmado, no solo razonado sobre el código.
+- **Por qué:** primer paso del plan de migración a Cloudflare (frontend, más simple que el backend).
+- **Pendiente:** no se ha probado el flujo de login completo (forward de `Set-Cookie` en una respuesta 2xx) para no crear cuentas de prueba en la DB de producción sin permiso. Falta crear el proyecto en Cloudflare, configurar env vars y cortar DNS — el sitio en producción sigue sirviéndose desde Vercel.
+- **Despliegue:** pendiente
 
 ## 2026-08-01 — Plan: migración completa a Cloudflare (frontend + backend)
 

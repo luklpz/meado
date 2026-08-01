@@ -41,7 +41,8 @@ Registro de objetivos del proyecto: qué se ha hecho ya y qué queda pendiente. 
 ### Migración completa a Cloudflare (frontend + backend)
 Objetivo: mover Vercel → Cloudflare Pages y Render → Cloudflare Workers/Durable Objects, todo en una misma plataforma.
 
-- [ ] **Frontend (Vercel → Cloudflare Pages)**: SvelteKit con `@sveltejs/adapter-cloudflare`, reemplaza `vercel.json` rewrites por `_routes.json`/Pages Functions
+- [x] **Frontend, código migrado**: `@sveltejs/adapter-cloudflare` sustituye `adapter-auto`, `wrangler.jsonc` añadido, `vercel.json` eliminado. El rewrite de `/api/*` se implementó como proxy real dentro de SvelteKit (`src/routes/api/[...path]/+server.ts`, forward genérico de método/headers/body/cookies hacia `BACKEND_URL`) en vez de `_redirects`, porque el proxy con status 200 de Pages no está confirmado como soportado en el nuevo runtime de Workers assets. Verificado local: `npm run build` OK, `wrangler dev` levanta el Worker, página `/login` responde 200, `/api/auth/me` proxied devuelve el mismo body/status (401) que pegarle directo al backend.
+- [ ] **Frontend, desplegar**: falta crear el proyecto en el dashboard de Cloudflare (Workers), configurar env vars (`BACKEND_URL`, `VITE_SOCKET_URL`, `VITE_LIVEKIT_URL`) como secrets/vars, y cortar DNS de `meado.es` desde Vercel
 - [ ] **Backend (Render → Cloudflare Workers)**: evaluar viabilidad NestJS en Workers runtime vs reescritura parcial
 - [ ] **MessagesGateway → Durable Objects**: los Maps en memoria (voz, typing, online) pasan a un Durable Object con WebSocket hibernation (sustituye tanto Render como el Redis de Fase 2 del roadmap original)
 - [ ] **Prisma en Workers**: adaptar cliente Prisma 7 al runtime (driver adapters o Prisma Accelerate — Workers no soporta el motor Node nativo de Prisma)
