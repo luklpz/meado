@@ -25,6 +25,13 @@ Tabla viva — actualizar cada vez que se despliega o se detecta drift.
 
 ## Entradas
 
+## 2026-08-01 — Plan: migración completa a Cloudflare (frontend + backend)
+
+- **Archivo(s):** `objetivos.md`
+- **Qué:** Añadida sección "En progreso" con plan de migración Vercel→Cloudflare Pages y Render→Cloudflare Workers/Durable Objects. Sustituiría también el Redis de Fase 2 del roadmap (Durable Objects reemplaza Maps en memoria de `MessagesGateway`).
+- **Por qué:** unificar frontend+backend en una plataforma, evitar sleep de Render free tier.
+- **Despliegue:** N/A (solo planificación, sin código aún)
+
 ## 2026-08-01 — LiveKit: reconnectPolicy tipada correctamente
 
 - **Archivo(s):** `apps/frontend/src/lib/livekit.ts`

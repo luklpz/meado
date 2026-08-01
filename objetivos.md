@@ -36,6 +36,24 @@ Registro de objetivos del proyecto: qué se ha hecho ya y qué queda pendiente. 
 
 ---
 
+## En progreso
+
+### Migración completa a Cloudflare (frontend + backend)
+Objetivo: mover Vercel → Cloudflare Pages y Render → Cloudflare Workers/Durable Objects, todo en una misma plataforma.
+
+- [ ] **Frontend (Vercel → Cloudflare Pages)**: SvelteKit con `@sveltejs/adapter-cloudflare`, reemplaza `vercel.json` rewrites por `_routes.json`/Pages Functions
+- [ ] **Backend (Render → Cloudflare Workers)**: evaluar viabilidad NestJS en Workers runtime vs reescritura parcial
+- [ ] **MessagesGateway → Durable Objects**: los Maps en memoria (voz, typing, online) pasan a un Durable Object con WebSocket hibernation (sustituye tanto Render como el Redis de Fase 2 del roadmap original)
+- [ ] **Prisma en Workers**: adaptar cliente Prisma 7 al runtime (driver adapters o Prisma Accelerate — Workers no soporta el motor Node nativo de Prisma)
+- [ ] **DNS/dominio**: mover `meado.es` a Cloudflare (si no está ya) y apuntar Pages + Workers
+- [ ] **Env vars**: migrar todas las variables de Render/Vercel a Cloudflare (secrets de Workers vs `.env`)
+- [ ] **LiveKit, Cloudinary, Drive, Resend, Supabase**: sin cambios, servicios externos independientes del hosting
+- [ ] Verificar límites free tier (100k req/día Workers) son suficientes para Fase 1 (≤100 usuarios)
+
+**Por qué:** tener frontend+backend en la misma plataforma (Cloudflare) simplifica gestión, y Workers no duerme por inactividad a diferencia de Render free tier.
+
+---
+
 ## Pendiente / backlog
 
 - **Redis (Fase 2 del roadmap)**: sustituir Maps en memoria de `MessagesGateway` (voz, typing, online) por Redis pub/sub para escalar a ≤1.000 usuarios
