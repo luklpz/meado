@@ -1,5 +1,6 @@
 import { DurableObject } from 'cloudflare:workers';
 import type { Env } from '../env.js';
+import type { PrismaClient } from '../../generated/prisma/client.js';
 import { createDb } from '../lib/db.js';
 import { verifyToken, type SocketTokenPayload } from '../lib/jwt.js';
 import { wsBroadcast, parseWsMessage } from '../lib/ws-protocol.js';
@@ -23,6 +24,11 @@ export class DmDO extends DurableObject<Env> {
 	private readonly typingTimers = new Map<string, ReturnType<typeof setTimeout>>();
 	private readonly typingUsersMap = new Map<string, string>();
 	private conversationId: string | null = null;
+	private _db?: PrismaClient;
+	private db(): PrismaClient {
+		if (!this._db) this._db = createDb(this.env);
+		return this._db;
+	}
 
 	async fetch(request: Request): Promise<Response> {
 		const url = new URL(request.url);
@@ -33,7 +39,7 @@ export class DmDO extends DurableObject<Env> {
 		const payload = await verifyToken<SocketTokenPayload>(this.env.JWT_SECRET, token);
 		if (!payload || payload.type !== 'socket') return new Response('Unauthorized', { status: 401 });
 
-		const db = createDb(this.env);
+		const db = this.db();
 		if (!(await isDmMember(db, conversationId, payload.id))) return new Response('Forbidden', { status: 403 });
 
 		this.conversationId = conversationId;
@@ -50,7 +56,7 @@ export class DmDO extends DurableObject<Env> {
 		const attachment = ws.deserializeAttachment() as Attachment | null;
 		if (!attachment) return;
 
-		const db = createDb(this.env);
+		const db = this.db();
 		const registry = this.env.USER_REGISTRY_DO.get(this.env.USER_REGISTRY_DO.idFromName(attachment.userId));
 
 		if (msg.type === 'dm:send') {
@@ -119,7 +125,7 @@ export class DmDO extends DurableObject<Env> {
 
 	private async pushToOfflineMembers(type: string, payload: unknown): Promise<void> {
 		if (!this.conversationId) return;
-		const db = createDb(this.env);
+		const db = this.db();
 		const memberIds = await getDmMembers(db, this.conversationId);
 		const connected = this.connectedUserIds();
 		await Promise.all(

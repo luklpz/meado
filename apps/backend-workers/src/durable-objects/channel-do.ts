@@ -1,5 +1,6 @@
 import { DurableObject } from 'cloudflare:workers';
 import type { Env } from '../env.js';
+import type { PrismaClient } from '../../generated/prisma/client.js';
 import { createDb } from '../lib/db.js';
 import { verifyToken, type SocketTokenPayload } from '../lib/jwt.js';
 import { wsSend, wsBroadcast, parseWsMessage } from '../lib/ws-protocol.js';
@@ -31,6 +32,11 @@ export class ChannelDO extends DurableObject<Env> {
 	// la primera conexión aceptada y se reutiliza (todas las conexiones de
 	// esta instancia son, por construcción, del mismo channelId).
 	private channelId: string | null = null;
+	private _db?: PrismaClient;
+	private db(): PrismaClient {
+		if (!this._db) this._db = createDb(this.env);
+		return this._db;
+	}
 
 	async fetch(request: Request): Promise<Response> {
 		const url = new URL(request.url);
@@ -41,7 +47,7 @@ export class ChannelDO extends DurableObject<Env> {
 		const payload = await verifyToken<SocketTokenPayload>(this.env.JWT_SECRET, token);
 		if (!payload || payload.type !== 'socket') return new Response('Unauthorized', { status: 401 });
 
-		const db = createDb(this.env);
+		const db = this.db();
 		const channel = await db.channel.findUnique({ where: { id: channelId } });
 		if (!channel) return new Response('Channel not found', { status: 404 });
 		if (!(await verifyChannelMember(db, channelId, payload.id))) return new Response('Forbidden', { status: 403 });
@@ -81,7 +87,7 @@ export class ChannelDO extends DurableObject<Env> {
 		const attachment = ws.deserializeAttachment() as Attachment | null;
 		if (!attachment) return;
 
-		const db = createDb(this.env);
+		const db = this.db();
 		const registry = this.env.USER_REGISTRY_DO.get(this.env.USER_REGISTRY_DO.idFromName(attachment.userId));
 
 		if (msg.type === 'message:send') {

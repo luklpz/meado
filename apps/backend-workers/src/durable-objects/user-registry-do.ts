@@ -1,5 +1,6 @@
 import { DurableObject } from 'cloudflare:workers';
 import type { Env } from '../env.js';
+import type { PrismaClient } from '../../generated/prisma/client.js';
 import { createDb } from '../lib/db.js';
 import { getFriendIds } from '../lib/friends.js';
 import { verifyToken, type SocketTokenPayload } from '../lib/jwt.js';
@@ -26,6 +27,11 @@ type RateLimitKind = keyof typeof RATE_LIMITS;
 export class UserRegistryDO extends DurableObject<Env> {
 	private userId: string | null = null;
 	private readonly rateLimitTimestamps = new Map<RateLimitKind, number>();
+	private _db?: PrismaClient;
+	private db(): PrismaClient {
+		if (!this._db) this._db = createDb(this.env);
+		return this._db;
+	}
 
 	async fetch(request: Request): Promise<Response> {
 		const url = new URL(request.url);
@@ -51,19 +57,22 @@ export class UserRegistryDO extends DurableObject<Env> {
 		// la conexión de sesión no recibe eventos del cliente en este diseño (solo push del servidor)
 	}
 
-	async webSocketClose(ws: WebSocket): Promise<void> {
-		ws.close();
+	async webSocketClose(): Promise<void> {
+		// No llamar a ws.close() aquí — la API de hibernación invoca este
+		// handler DESPUÉS de que el socket ya se cerró; volver a cerrarlo
+		// puede lanzar y abortar el resto de la función antes de notificar
+		// a los amigos (bug real encontrado en la verificación de fase 5).
 		const stillOnline = this.ctx.getWebSockets().length > 0;
 		if (!stillOnline) await this.notifyFriendsPresence(false);
 	}
 
-	async webSocketError(ws: WebSocket): Promise<void> {
-		await this.webSocketClose(ws);
+	async webSocketError(): Promise<void> {
+		await this.webSocketClose();
 	}
 
 	private async notifyFriendsPresence(online: boolean): Promise<void> {
 		if (!this.userId) return;
-		const db = createDb(this.env);
+		const db = this.db();
 		const friendIds = await getFriendIds(db, this.userId);
 		await Promise.all(
 			friendIds.map((fid) => {
