@@ -26,6 +26,13 @@ Tabla viva — actualizar cada vez que se despliega o se detecta drift.
 
 ## Entradas
 
+## 2026-08-01 — Plan detallado: backend a Hono + Durable Objects
+
+- **Archivo(s):** `objetivos.md`, `C:\Users\luka\.claude\plans\wiggly-swinging-tulip.md` (fuera del repo, plan de Claude Code)
+- **Qué:** Diseño completo del backend nuevo tras investigación exhaustiva de `messages.gateway.ts` (439 líneas, Maps en memoria, rate limits, auth) y del uso de socket.io en el frontend. Decisiones cerradas: Hono como framework HTTP (NestJS no corre en Workers), Cloudflare Hyperdrive delante de Supabase (sin migrar de proveedor de DB), `jose` reemplaza `jsonwebtoken`, `bcryptjs` reemplaza `bcrypt` (mismo formato de hash, sin romper contraseñas de usuarios existentes), `googleapis` reemplazado por `fetch` + JWT firmado. Sharding de Durable Objects: `ChannelDO` (uno por canal), `DmDO` (uno por conversación), `UserRegistryDO` (sharded, presencia + rate limits globales + puntero de voz activa). Modelo de conexión frontend corregido tras pregunta del usuario: no es "un WS por sala" puro — es 1 socket de sesión (presencia, friend requests, previews/badges de *todas* las DMs) + 1 socket por sala realmente abierta en pantalla; si no se separa así, el modelo ingenuo abriría una conexión por cada DM del usuario (crece con nº de conversaciones, no con lo que hay en pantalla). Fuera de alcance: juego espacial 2D/Phaser (confirmado sin handler en el backend actual, no funcional).
+- **Por qué:** Socket.io no corre en Cloudflare Workers (no hay proceso Node persistente) — migrar el backend no es un cambio de host, es una reescritura de la capa realtime. Se investigó a fondo antes de escribir código dado el riesgo (real-time reliability es prioridad no negociable del proyecto) y que hay usuarios reales con hashes bcrypt en producción.
+- **Despliegue:** N/A (solo planificación)
+
 ## 2026-08-01 — Frontend: código migrado a Cloudflare Workers (sin desplegar aún)
 
 - **Archivo(s):** `apps/frontend/package.json`, `apps/frontend/svelte.config.js`, `apps/frontend/wrangler.jsonc` (nuevo), `apps/frontend/src/routes/api/[...path]/+server.ts` (nuevo), `apps/frontend/vercel.json` (eliminado)

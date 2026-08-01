@@ -42,16 +42,18 @@ Registro de objetivos del proyecto: qué se ha hecho ya y qué queda pendiente. 
 Objetivo: mover Vercel → Cloudflare Pages y Render → Cloudflare Workers/Durable Objects, todo en una misma plataforma.
 
 - [x] **Frontend, código migrado**: `@sveltejs/adapter-cloudflare` sustituye `adapter-auto`, `wrangler.jsonc` añadido, `vercel.json` eliminado. El rewrite de `/api/*` se implementó como proxy real dentro de SvelteKit (`src/routes/api/[...path]/+server.ts`, forward genérico de método/headers/body/cookies hacia `BACKEND_URL`) en vez de `_redirects`, porque el proxy con status 200 de Pages no está confirmado como soportado en el nuevo runtime de Workers assets. Verificado local: `npm run build` OK, `wrangler dev` levanta el Worker, página `/login` responde 200, `/api/auth/me` proxied devuelve el mismo body/status (401) que pegarle directo al backend.
-- [ ] **Frontend, desplegar**: falta crear el proyecto en el dashboard de Cloudflare (Workers), configurar env vars (`BACKEND_URL`, `VITE_SOCKET_URL`, `VITE_LIVEKIT_URL`) como secrets/vars, y cortar DNS de `meado.es` desde Vercel
-- [ ] **Backend (Render → Cloudflare Workers)**: evaluar viabilidad NestJS en Workers runtime vs reescritura parcial
-- [ ] **MessagesGateway → Durable Objects**: los Maps en memoria (voz, typing, online) pasan a un Durable Object con WebSocket hibernation (sustituye tanto Render como el Redis de Fase 2 del roadmap original)
-- [ ] **Prisma en Workers**: adaptar cliente Prisma 7 al runtime (driver adapters o Prisma Accelerate — Workers no soporta el motor Node nativo de Prisma)
-- [ ] **DNS/dominio**: mover `meado.es` a Cloudflare (si no está ya) y apuntar Pages + Workers
-- [ ] **Env vars**: migrar todas las variables de Render/Vercel a Cloudflare (secrets de Workers vs `.env`)
-- [ ] **LiveKit, Cloudinary, Drive, Resend, Supabase**: sin cambios, servicios externos independientes del hosting
-- [ ] Verificar límites free tier (100k req/día Workers) son suficientes para Fase 1 (≤100 usuarios)
+- [ ] **Frontend, desplegar**: falta crear el proyecto en el dashboard de Cloudflare (Workers), configurar env vars (`BACKEND_URL`, `VITE_SOCKET_URL`, `VITE_LIVEKIT_URL`) como secrets/vars, y cortar DNS de `meado.es` desde Vercel — se hace junto al deploy del backend (fase 6), no antes
 
-**Por qué:** tener frontend+backend en la misma plataforma (Cloudflare) simplifica gestión, y Workers no duerme por inactividad a diferencia de Render free tier.
+**Backend — plan aprobado, reescritura completa a Hono + Durable Objects (no Socket.io, no NestJS en Workers). Detalle completo del diseño en `C:\Users\luka\.claude\plans\wiggly-swinging-tulip.md`. Decisiones clave: fuera de alcance el juego espacial 2D (sin uso real hoy); modelo de conexión = 1 socket de sesión (presencia/DMs en background) + 1 socket por sala realmente abierta en pantalla; invariante dura de una sola sala de voz activa por usuario, enforced server-side vía `UserRegistryDO`.**
+
+- [ ] **Fase 1 — scaffold + slice vertical de auth**: proyecto Workers nuevo (`apps/backend-workers`), Hono, Hyperdrive+Prisma, `jose` (reemplaza `jsonwebtoken`), `bcryptjs` (reemplaza `bcrypt`, mismo formato de hash — sin migración de contraseñas existentes), middleware de auth, ruta `auth.ts` completa
+- [ ] **Fase 2 — resto de controllers REST**: `servers`, `channels`, `dm`, `friends`, `users`, `upload` (Cloudinary), `drive` (Google Drive, reemplaza `googleapis` por `fetch` + JWT firmado con `jose`)
+- [ ] **Fase 3 — Durable Objects (gateway realtime)**: `ChannelDO` (voz+typing+mensajes por canal), `DmDO` (por conversación), `UserRegistryDO` (sharded, presencia + rate limits globales + puntero de voz activa). Handshake de expulsión de voz entre DOs, fan-out de DM hacia `UserRegistryDO` de cada miembro
+- [ ] **Fase 4 — reescritura `lib/socket.ts`**: wrapper `WebSocket` nativo con superficie `.on()/.off()/.emit()`, modelo sesión+salas, reconexión/backoff propio (Socket.io lo daba gratis)
+- [ ] **Fase 5 — verificación end-to-end local**: `wrangler dev` frontend+backend contra Hyperdrive+Supabase real, recorrido completo de eventos y edge cases
+- [ ] **Fase 6 — deploy conjunto**: `wrangler deploy` de ambos a la vez, secrets, DNS `meado.es`, smoke test con cuenta de prueba, actualizar roadmap de `CLAUDE.md`, apagar Render
+
+**Por qué:** tener frontend+backend en la misma plataforma (Cloudflare) simplifica gestión, y Workers no duerme por inactividad a diferencia de Render free tier. Socket.io no corre en Workers (no hay proceso Node persistente) — de ahí la reescritura a WebSocket nativo + Durable Objects en vez de un simple cambio de host.
 
 ---
 
