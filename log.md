@@ -29,6 +29,14 @@ Tabla viva — actualizar cada vez que se despliega o se detecta drift.
 
 ## Entradas
 
+## 2026-08-01 — Fase 5 (parcial): rate limiting REST portado, cierra hueco de fase 1
+
+- **Archivo(s):** `apps/backend-workers/src/durable-objects/rate-limiter-do.ts` (nuevo), `src/middleware/rate-limit.ts` (nuevo), `src/index.ts` (rate limit global 120/60s por IP, exporta `RateLimiterDO`), `src/routes/auth.ts` (límites específicos en register/login/forgot-password/reset-password), `src/env.ts` + `wrangler.jsonc` (binding + migración)
+- **Qué:** Reemplaza `@nestjs/throttler` (`ThrottlerModule`, en memoria de un proceso único) — Workers no tiene ese proceso. Un `RateLimiterDO` por clave (`kind:ip`) implementa ventana fija persistida en `ctx.storage` (no solo memoria — estos límites son de minutos/horas, tienen que sobrevivir si el DO hiberna entre intentos, a diferencia de los límites de milisegundos del gateway WS de la fase 3). Límites idénticos a los originales: global 120/60s (excepto `/ws/*`, equivalente a `@SkipThrottle()`), register 5/1h, login 8/60s, forgot-password 3/1h, reset-password 5/1h — estas 4 rutas quedan excluidas del límite global (el específico sustituye, no se suma, igual que `@Throttle()` en NestJS).
+- **Verificación real:** `tsc --noEmit` limpio. Con `wrangler dev`: 122 peticiones rápidas a `/` → las últimas devuelven 429 (el conteo exacto de corte varió por peticiones previas ya consumidas en la misma ventana de 60s, comportamiento esperado). 10 intentos de login con credenciales incorrectas → exactamente los primeros 8 devuelven 401 (rechazo normal), 9º y 10º devuelven 429 — corte preciso confirmado.
+- **Por qué:** cierra el hueco explícito registrado en la entrada de fase 1 de este log.
+- **Despliegue:** N/A
+
 ## 2026-08-01 — Fase 4: frontend reescrito a WebSocket nativo, verificado en navegador real
 
 - **Archivo(s):** `apps/frontend/src/lib/socket.ts` (reescrito completo), `src/lib/voiceStore.ts` (handle de socket de voz), `src/routes/+layout.svelte`, `src/routes/servers/[slug]/+page.svelte`, `src/routes/(app)/home/+page.svelte`, `src/routes/(app)/home/dm/[id]/+page.svelte`, `src/lib/game/PhaserGame.svelte` (desactivado, fuera de alcance), `vite.config.ts` (proxy `/api`+`/ws` apuntan a `apps/backend-workers`, se quita `/socket.io`), `.env` (`BACKEND_URL` → `apps/backend-workers` local)

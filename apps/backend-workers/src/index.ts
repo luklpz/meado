@@ -11,10 +11,12 @@ import { dm } from './routes/dm.js';
 import { friends } from './routes/friends.js';
 import { users } from './routes/users.js';
 import { ws } from './routes/ws.js';
+import { rateLimit } from './middleware/rate-limit.js';
 
 export { ChannelDO } from './durable-objects/channel-do.js';
 export { DmDO } from './durable-objects/dm-do.js';
 export { UserRegistryDO } from './durable-objects/user-registry-do.js';
+export { RateLimiterDO } from './durable-objects/rate-limiter-do.js';
 
 const app = new Hono<HonoEnv>();
 
@@ -45,6 +47,18 @@ app.use('*', async (c, next) => {
 	c.res.headers.set('X-Content-Type-Options', 'nosniff');
 	c.res.headers.set('X-Frame-Options', 'DENY');
 	c.res.headers.set('Referrer-Policy', 'no-referrer');
+});
+
+// Equivalente a ThrottlerModule.forRoot([{ ttl: 60000, limit: 120 }]) global
+// de NestJS — /ws/* excluido (equivalente a @SkipThrottle() del gateway) y
+// las 4 rutas de auth con límite propio más estricto excluidas también (ahí
+// el límite específico sustituye al global, no se suman, igual que con
+// @Throttle() en NestJS).
+const STRICTER_AUTH_PATHS = new Set(['/auth/register', '/auth/login', '/auth/forgot-password', '/auth/reset-password']);
+const globalRateLimit = rateLimit('global', 120, 60_000);
+app.use('*', async (c, next) => {
+	if (c.req.path.startsWith('/ws/') || STRICTER_AUTH_PATHS.has(c.req.path)) return next();
+	return globalRateLimit(c, next);
 });
 
 app.get('/', (c) => c.text('meado backend (workers)'));

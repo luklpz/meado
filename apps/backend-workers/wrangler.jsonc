@@ -16,13 +16,17 @@
 		"bindings": [
 			{ "name": "CHANNEL_DO", "class_name": "ChannelDO" },
 			{ "name": "DM_DO", "class_name": "DmDO" },
-			{ "name": "USER_REGISTRY_DO", "class_name": "UserRegistryDO" }
+			{ "name": "USER_REGISTRY_DO", "class_name": "UserRegistryDO" },
+			{ "name": "RATE_LIMITER_DO", "class_name": "RateLimiterDO" }
 		]
 	},
 	"migrations": [
 		{
+			// Todavía sin desplegar a Cloudflare real — se puede seguir
+			// añadiendo a "v1" en vez de una migración "v2" separada mientras
+			// no haya nada en producción que migrar.
 			"tag": "v1",
-			"new_sqlite_classes": ["ChannelDO", "DmDO", "UserRegistryDO"]
+			"new_sqlite_classes": ["ChannelDO", "DmDO", "UserRegistryDO", "RateLimiterDO"]
 		}
 	]
 }

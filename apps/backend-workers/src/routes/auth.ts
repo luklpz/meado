@@ -8,6 +8,7 @@ import { signLoginToken, signVerifyToken, signResetToken, signSocketToken, verif
 import { sendVerificationEmail, sendPasswordResetEmail } from '../lib/email.js';
 import { uploadImageToCloudinary } from '../lib/cloudinary.js';
 import { requireAuth } from '../middleware/auth.js';
+import { rateLimit } from '../middleware/rate-limit.js';
 
 const DISPOSABLE_DOMAINS = new Set(disposableDomainsList);
 const USERNAME_RE = /^[a-zA-Z0-9]+$/;
@@ -38,13 +39,8 @@ function setSessionCookie(c: import('hono').Context<HonoEnv>, token: string) {
 
 export const auth = new Hono<HonoEnv>();
 
-// NOTA: rate limiting de estos endpoints (register 5/h, login 8/60s, forgot/reset
-// password 3-5/h en NestJS via @nestjs/throttler) todavía no está portado — Workers
-// no tiene un ThrottlerGuard en proceso equivalente. Pendiente antes de fase 6
-// (deploy): usar el binding nativo de Rate Limiting de Cloudflare o una lógica
-// similar a la de UserRegistryDO (fase 3). Registrado en log.md como hueco conocido.
-
-auth.post('/register', async (c) => {
+// Mismos límites que @Throttle() en el NestJS original — vía RateLimiterDO (ver middleware/rate-limit.ts)
+auth.post('/register', rateLimit('auth:register', 5, 60 * 60_000), async (c) => {
 	const dto = await c.req.json<{ username?: string; name?: string; email?: string; password?: string }>();
 	if (!dto.username || !dto.email || !dto.password) {
 		return c.json({ message: 'Se requiere nombre de usuario, email y contraseña' }, 400);
@@ -121,7 +117,7 @@ auth.get('/verify-email', async (c) => {
 	return c.redirect(`${c.env.FRONTEND_URL}/login?verified=1`);
 });
 
-auth.post('/login', async (c) => {
+auth.post('/login', rateLimit('auth:login', 8, 60_000), async (c) => {
 	const dto = await c.req.json<{ email?: string; password?: string }>();
 	if (!dto.email || !dto.password) return c.json({ message: 'Credenciales incorrectas' }, 401);
 
@@ -143,7 +139,7 @@ auth.post('/login', async (c) => {
 	});
 });
 
-auth.post('/forgot-password', async (c) => {
+auth.post('/forgot-password', rateLimit('auth:forgot-password', 3, 60 * 60_000), async (c) => {
 	const body = await c.req.json<{ email?: string }>();
 	const generic = { message: 'If that email exists, a reset link has been sent.' };
 	if (!body.email) return c.json(generic);
@@ -162,7 +158,7 @@ auth.post('/forgot-password', async (c) => {
 	return c.json(generic);
 });
 
-auth.post('/reset-password', async (c) => {
+auth.post('/reset-password', rateLimit('auth:reset-password', 5, 60 * 60_000), async (c) => {
 	const body = await c.req.json<{ token?: string; password?: string }>();
 	const payload = body.token ? await verifyToken<ResetTokenPayload>(c.env.JWT_SECRET, body.token) : null;
 
