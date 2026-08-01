@@ -5,15 +5,22 @@ export default defineConfig({
 	plugins: [sveltekit()],
 	server: {
 		proxy: {
-			// HTTP API — proxied so the cookie es same-origin en desarrollo
+			// apps/backend-workers (Hono + Durable Objects), no apps/backend
+			// (NestJS) — desde la fase 4 el frontend ya no habla socket.io, así
+			// que solo funciona en dev contra el backend nuevo (`wrangler dev`
+			// en apps/backend-workers, puerto por defecto 8787 de wrangler; en
+			// este repo se ha usado 8789 durante las pruebas de las fases 1-4).
+			// IMPORTANTE: este proxy de Vite intercepta ANTES que la ruta
+			// src/routes/api/[...path]/+server.ts de SvelteKit — en `vite dev`
+			// manda este target, no BACKEND_URL (esa env var solo aplica bajo
+			// `wrangler dev`/producción, donde no existe el proxy de Vite).
 			'/api': {
-				target: 'http://localhost:3000',
+				target: 'http://127.0.0.1:8789',
 				changeOrigin: true,
 				rewrite: (path) => path.replace(/^\/api/, ''),
 			},
-			// Socket.io WebSocket — proxied también para que funcionen las cookies lax
-			'/socket.io': {
-				target: 'http://localhost:3000',
+			'/ws': {
+				target: 'http://127.0.0.1:8789',
 				ws: true,
 			},
 		},

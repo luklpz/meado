@@ -3,7 +3,6 @@
 	import { goto } from '$app/navigation';
 	import { authStore } from '$lib/auth.js';
 	import { socketStore } from '$lib/socket.js';
-	import type { ChatSocket } from '$lib/socket.js';
 	import { dmUnread } from '$lib/dmStore.js';
 	import { conversationsStore, type Conversation } from '$lib/conversationsStore.js';
 	import { Users, MessageSquare, X, Check, Plus, Search, Menu } from 'lucide-svelte';
@@ -42,8 +41,6 @@
 	// New DM modal
 	let showNewDm = $state(false);
 
-	let sock: ChatSocket | null = null;
-
 	$effect(() => { conversationsStore.seed(data.conversations); });
 
 	function handlePresence(data: { userId: string; online: boolean }) {
@@ -64,15 +61,15 @@
 			token = authStore.getSocketToken();
 		}
 		if (token) {
-			sock = socketStore.connect(token);
-			sock.on('presence:update', handlePresence);
-			sock.on('friend:request', handleFriendRequest);
+			socketStore.connect(token);
+			socketStore.on('presence:update', handlePresence);
+			socketStore.on('friend:request', handleFriendRequest);
 		}
 	});
 
 	onDestroy(() => {
-		sock?.off('presence:update', handlePresence);
-		sock?.off('friend:request', handleFriendRequest);
+		socketStore.off('presence:update', handlePresence);
+		socketStore.off('friend:request', handleFriendRequest);
 	});
 
 	const onlineFriends = $derived(friends.filter(f => f.user.online));

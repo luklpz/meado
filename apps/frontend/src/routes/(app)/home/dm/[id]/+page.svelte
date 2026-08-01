@@ -3,7 +3,7 @@
 	import { goto } from '$app/navigation';
 	import { authStore } from '$lib/auth.js';
 	import { socketStore } from '$lib/socket.js';
-	import type { ChatSocket } from '$lib/socket.js';
+	import type { RoomSocket } from '$lib/socket.js';
 	import { clearUnread } from '$lib/dmStore.js';
 	import { conversationsStore } from '$lib/conversationsStore.js';
 	import { playPing } from '$lib/ping.js';
@@ -80,9 +80,48 @@
 	let addMemberLoading = $state(false);
 	let addMemberError = $state('');
 
-	let sock: ChatSocket | null = null;
+	// Modelo de conexión (fase 4): la conversación abierta es su propia
+	// conexión WebSocket (RoomSocket) — conectarla es el join, cerrarla el
+	// leave. Ya no hace falta emitir dm:join/dm:leave/dm:typing:stop a mano
+	// (el servidor limpia el estado de typing en el propio cierre de la
+	// conexión, ver DmDO.webSocketClose).
+	let dmRoom: RoomSocket | null = null;
+	let dmToken: string | null = null;
+	let dmRoomHadDrop = false;
 	// svelte-ignore state_referenced_locally
 	let currentConvId = data.conversation.id;
+
+	function wireDmRoom(room: RoomSocket, conversationId: string) {
+		room.on('dm:message:created', handleNewMessage);
+		room.on('dm:typing:update', handleTypingUpdate);
+		room.on('dm:message:updated', handleDmUpdated);
+		room.on('dm:message:deleted', handleDmDeleted);
+		room.on('dm:reaction:updated', handleDmReactionUpdated);
+		room.on('dm:member:added', handleMemberAdded);
+		room.connected.subscribe((v) => {
+			if (v && dmRoomHadDrop && conversation.id === conversationId) {
+				// Reconexión tras un corte — refresca por si se perdió algún mensaje
+				fetch(`/api/dm/${conversationId}/messages?limit=50`, { credentials: 'include' })
+					.then((r) => r.ok ? r.json() : null)
+					.then((fresh: DmMessage[] | null) => { if (fresh && conversation.id === conversationId) { messages = fresh; scrollToBottom(true); } })
+					.catch(() => {});
+			}
+			if (!v) dmRoomHadDrop = true;
+		});
+	}
+
+	function closeDmRoom() {
+		dmRoom?.close();
+		dmRoom = null;
+		dmRoomHadDrop = false;
+	}
+
+	function openDmRoom(conversationId: string) {
+		if (!dmToken) return;
+		closeDmRoom();
+		dmRoom = socketStore.joinDm(conversationId, dmToken);
+		wireDmRoom(dmRoom, conversationId);
+	}
 
 	$effect(() => {
 		conversationsStore.seed(data.conversations);
@@ -91,12 +130,9 @@
 	$effect(() => {
 		const newConvId = (data.conversation as Conversation).id;
 		if (newConvId === currentConvId) return;
-		const oldConvId = currentConvId;
 		currentConvId = newConvId;
 
 		if (typingTimeout) { clearTimeout(typingTimeout); typingTimeout = null; }
-		sock?.emit('dm:typing:stop', { conversationId: oldConvId });
-		sock?.emit('dm:leave', { conversationId: oldConvId });
 
 		conversation = data.conversation as Conversation;
 		messages = [...(data.messages as DmMessage[])];
@@ -109,7 +145,7 @@
 		profileCardUserId = null;
 
 		clearUnread(newConvId);
-		if (sock) sock.emit('dm:join', { conversationId: newConvId });
+		openDmRoom(newConvId);
 		tick().then(() => scrollToBottom(true));
 	});
 
@@ -201,12 +237,7 @@
 	}
 
 	function toggleDmReaction(msg: DmMessage, emoji: string) {
-		if (!sock) return;
-		sock.emit('dm:reaction:toggle', { messageId: msg.id, emoji });
-	}
-
-	function handleReconnect() {
-		sock?.emit('dm:join', { conversationId: conversation.id });
+		dmRoom?.emit('dm:reaction:toggle', { messageId: msg.id, emoji });
 	}
 
 	onMount(async () => {
@@ -217,38 +248,26 @@
 			token = authStore.getSocketToken();
 		}
 		if (token) {
-			sock = socketStore.connect(token);
-			sock.emit('dm:join', { conversationId: conversation.id });
-			sock.on('connect', handleReconnect);
-			sock.on('dm:message:created', handleNewMessage);
-			sock.on('dm:typing:update', handleTypingUpdate);
-			sock.on('dm:message:updated', handleDmUpdated);
-			sock.on('dm:message:deleted', handleDmDeleted);
-			sock.on('dm:reaction:updated', handleDmReactionUpdated);
-			sock.on('dm:member:added', handleMemberAdded);
+			dmToken = token;
+			socketStore.connect(token);
+			openDmRoom(conversation.id);
 		}
 		scrollToBottom(true);
 	});
 
 	onDestroy(() => {
 		if (typingTimeout) { clearTimeout(typingTimeout); typingTimeout = null; }
-		sock?.off('connect', handleReconnect);
-		sock?.off('dm:message:created', handleNewMessage);
-		sock?.off('dm:typing:update', handleTypingUpdate);
-		sock?.off('dm:message:updated', handleDmUpdated);
-		sock?.off('dm:message:deleted', handleDmDeleted);
-		sock?.off('dm:reaction:updated', handleDmReactionUpdated);
-		sock?.off('dm:member:added', handleMemberAdded);
+		closeDmRoom();
 	});
 
 	async function sendMessage() {
 		const content = msgInput.trim();
-		if (!content || sending || !sock) return;
+		if (!content || sending || !dmRoom) return;
 		msgInput = '';
 		sending = true;
 		stopTyping();
 		try {
-			sock.emit('dm:send', { conversationId: conversation.id, content });
+			dmRoom.emit('dm:send', { conversationId: conversation.id, content });
 		} finally {
 			sending = false;
 		}
@@ -314,15 +333,15 @@
 	}
 
 	function startTyping() {
-		if (!sock) return;
-		sock.emit('dm:typing:start', { conversationId: conversation.id });
+		if (!dmRoom) return;
+		dmRoom.emit('dm:typing:start', { conversationId: conversation.id });
 		if (typingTimeout) clearTimeout(typingTimeout);
 		typingTimeout = setTimeout(stopTyping, 3000);
 	}
 
 	function stopTyping() {
 		if (typingTimeout) { clearTimeout(typingTimeout); typingTimeout = null; }
-		sock?.emit('dm:typing:stop', { conversationId: conversation.id });
+		dmRoom?.emit('dm:typing:stop', { conversationId: conversation.id });
 	}
 
 	async function openAddMember() {

@@ -1,94 +1,52 @@
 <script lang="ts">
-	import { onMount, onDestroy } from 'svelte';
-	import { get } from 'svelte/store';
+	import { onMount } from 'svelte';
 	import { socketStore } from '$lib/socket.js';
-	import { livekitStore } from '$lib/livekit.js';
 	import { authStore } from '$lib/auth.js';
-
-	const CANVAS_W = 800;
-	const CANVAS_H = 600;
-	const LIVEKIT_URL = import.meta.env.VITE_LIVEKIT_URL ?? '';
 
 	interface Props {
 		roomSlug: string;
 		username: string;
 	}
-	let { roomSlug, username }: Props = $props();
+	let { roomSlug: _roomSlug, username: _username }: Props = $props();
 
-	let container: HTMLDivElement;
-	let game: import('phaser').Game | null = null;
-
+	// El mapa 2D/Phaser (room:join, player:move, player:moved, etc.) está
+	// fuera de alcance de la migración a Cloudflare (plan de migración,
+	// fase 3) — confirmado que el backend nunca implementó esos eventos, ni
+	// antes (Socket.io) ni ahora (Durable Objects). No es una regresión de
+	// esta fase, ya estaba roto (protocolo "Phase 2" sin servidor real
+	// detrás). Se deja sin construir el juego para no fallar de forma
+	// confusa contra el socket de sesión nuevo, que no tiene el mismo
+	// contrato (.id, .once, eventos room:*) que ese código esperaba.
 	onMount(async () => {
-		// Asegurar que el auth store está inicializado y tenemos socketToken
 		let socketToken = authStore.getSocketToken();
 		if (!socketToken) {
 			await authStore.init();
 			socketToken = authStore.getSocketToken();
 		}
-		if (!socketToken) {
-			console.error('No socket token — ¿sesión expirada?');
-			return;
-		}
-
-		const [Phaser, { createGameScene }] = await Promise.all([
-			import('phaser'),
-			import('./GameScene.js'),
-		]);
-
-		const socket = socketStore.connect(socketToken);
-
-		let livekitRoom: import('livekit-client').Room | undefined;
-		if (LIVEKIT_URL) {
-			try {
-				const res = await fetch(`/api/servers/${roomSlug}/livekit-token`, {
-					credentials: 'include',
-				});
-				if (!res.ok) throw new Error(`Token endpoint: ${res.status}`);
-				const { token } = await res.json();
-				livekitRoom = await livekitStore.connect(LIVEKIT_URL, token);
-			} catch (e) {
-				livekitStore.setError(e instanceof Error ? e.message : String(e));
-				console.error('LiveKit connection failed:', e);
-			}
-		} else {
-			livekitStore.setError('VITE_LIVEKIT_URL no configurada');
-		}
-
-		const SceneClass = createGameScene(Phaser, socket, {
-			canvasW: CANVAS_W,
-			canvasH: CANVAS_H,
-			roomId: roomSlug,
-			username,
-			emitIntervalMs: 50,
-			lerpStiffness: 0.001,
-			playerSpeed: 200,
-			livekitRoom,
-			proximityRadius: 500,
-			getOutputVolume: () => get(livekitStore.outputVolume),
-		});
-
-		game = new Phaser.Game({
-			type: Phaser.AUTO,
-			width: CANVAS_W,
-			height: CANVAS_H,
-			backgroundColor: '#0a1a0f',
-			parent: container,
-			scene: [SceneClass],
-		});
-	});
-
-	onDestroy(() => {
-		livekitStore.disconnect();
-		game?.destroy(true);
+		if (socketToken) socketStore.connect(socketToken);
+		console.warn('Servidor espacial (Phaser): funcionalidad no implementada en el backend — ver objetivos.md');
 	});
 </script>
 
-<div bind:this={container} class="game-container"></div>
+<div class="game-container">
+	<p class="game-unavailable">Mapa 2D no disponible todavía.</p>
+</div>
 
 <style>
-	.game-container :global(canvas) {
-		display: block;
+	.game-container {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 800px;
+		max-width: 100%;
+		height: 600px;
 		border: 1px solid #1a3320;
 		border-radius: 4px;
+		background: #0a1a0f;
+	}
+
+	.game-unavailable {
+		color: var(--text-muted, #6b7280);
+		font-size: 0.9rem;
 	}
 </style>

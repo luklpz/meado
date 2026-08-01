@@ -10,19 +10,21 @@
 	import UserStatusBar from '$lib/components/UserStatusBar.svelte';
 	import { serverUnread, setServerUnread } from '$lib/serverUnread.js';
 	import { socketStore } from '$lib/socket.js';
-	import type { ChatSocket } from '$lib/socket.js';
 	import { playPing } from '$lib/ping.js';
 	import { uploadStore, formatSpeed } from '$lib/uploadStore.svelte.js';
-	import { activeVoice } from '$lib/voiceStore.js';
+	import { activeVoice, closeActiveVoiceSocket } from '$lib/voiceStore.js';
 	import { livekitStore } from '$lib/livekit.js';
 	import { get } from 'svelte/store';
 	import { X, Check, MessageSquare, Map, Globe, Lock, ClipboardList, PhoneOff, Volume2, Search, Users } from 'lucide-svelte';
 
 	let { data, children } = $props();
 
-	let _activeSock: ChatSocket | null = null;
-	let _socketUnsub: (() => void) | null = null;
-
+	// Nota arquitectura: con el modelo de Durable Objects, la conexión de
+	// sesión recibe automáticamente dm:message:created/dm:conversation:joined
+	// para TODAS las conversaciones del usuario (el servidor las descubre por
+	// su cuenta consultando los miembros) — ya no hace falta re-unirse a cada
+	// sala de DM en cada conexión/reconexión (antes: joinAllDmRooms +
+	// onSocketReconnect). Esa parte del gateway anterior desaparece.
 	function handleGlobalDm(msg: any) {
 		if (!user) return;
 		// Always update sidebar last message (own + others)
@@ -47,28 +49,13 @@
 	}
 
 	function handleConversationJoined(d: { conversationId: string; conversation: any }) {
-		if (_activeSock) _activeSock.emit('dm:join', { conversationId: d.conversationId });
 		if (d.conversation) conversationsStore.add(d.conversation);
-	}
-
-	async function joinAllDmRooms(s: ChatSocket) {
-		try {
-			const res = await fetch('/api/dm', { credentials: 'include' });
-			if (!res.ok) return;
-			const convs: { id: string }[] = await res.json();
-			for (const c of convs) s.emit('dm:join', { conversationId: c.id });
-		} catch { /* non-critical */ }
-	}
-
-	function onSocketReconnect() {
-		if (_activeSock && user) joinAllDmRooms(_activeSock);
 	}
 
 	function leaveActiveVoice() {
 		const av = get(activeVoice);
 		if (!av) return;
-		const socket = _activeSock;
-		socket?.emit('voice:leave', { channelId: av.channelId });
+		closeActiveVoiceSocket();
 		livekitStore.disconnect();
 		activeVoice.set(null);
 	}
@@ -85,32 +72,13 @@
 		if (initialUnread) {
 			for (const [id, count] of Object.entries(initialUnread)) setServerUnread(id, count);
 		}
-		_socketUnsub = socketStore.socket.subscribe(s => {
-			if (s === _activeSock) return;
-			if (_activeSock) {
-				_activeSock.off('dm:message:created', handleGlobalDm);
-				_activeSock.off('dm:conversation:joined', handleConversationJoined);
-				_activeSock.off('connect', onSocketReconnect);
-			}
-			_activeSock = s;
-			if (s) {
-				s.on('dm:message:created', handleGlobalDm);
-				s.on('dm:conversation:joined', handleConversationJoined);
-				s.on('connect', onSocketReconnect);
-				// Join DM rooms regardless of connection state — socket.io buffers pre-connect emits.
-				// If already connected (socket was created by another page's onMount first), call now.
-				if (user) joinAllDmRooms(s);
-			}
-		});
+		socketStore.on('dm:message:created', handleGlobalDm);
+		socketStore.on('dm:conversation:joined', handleConversationJoined);
 	});
 
 	onDestroy(() => {
-		_socketUnsub?.();
-		if (_activeSock) {
-			_activeSock.off('dm:message:created', handleGlobalDm);
-			_activeSock.off('dm:conversation:joined', handleConversationJoined);
-			_activeSock.off('connect', onSocketReconnect);
-		}
+		socketStore.off('dm:message:created', handleGlobalDm);
+		socketStore.off('dm:conversation:joined', handleConversationJoined);
 		if (browser) window.removeEventListener('beforeunload', leaveActiveVoice);
 	});
 

@@ -4,8 +4,9 @@
 	import { goto } from '$app/navigation';
 	import { authStore } from '$lib/auth.js';
 	import { socketStore } from '$lib/socket.js';
+	import type { RoomSocket } from '$lib/socket.js';
 	import { livekitStore } from '$lib/livekit.js';
-	import { activeVoice } from '$lib/voiceStore.js';
+	import { activeVoice, setActiveVoiceSocket, closeActiveVoiceSocket } from '$lib/voiceStore.js';
 	import { clearServerUnread, setServerUnread } from '$lib/serverUnread.js';
 	import type { MessagePayload, VoiceMember, MessageReaction } from '$lib/types/socket-events.types.js';
 	import { PERMISSION_LABELS, PERMISSION_CATEGORIES } from '$lib/permissions.js';
@@ -235,9 +236,80 @@
 	}
 
 	// ── Socket setup ───────────────────────────────────────────────────────
-	onMount(() => {
-		let _socket: ReturnType<typeof socketStore.connect> | null = null;
+	// Modelo de conexión (fase 4 de la migración a Durable Objects): ya no
+	// hay UN socket con "rooms" — cada canal de texto que se ve y cada canal
+	// de voz al que te unes es su propia conexión WebSocket (RoomSocket).
+	// channel:join/channel:leave/voice:leave desaparecen: abrir la conexión
+	// ES el join, cerrarla ES el leave. server:subscribe desaparece también
+	// — el roster de voz se carga una vez por REST (GET .../voice-state).
+	let socketToken: string | null = null;
+	let textRoom: RoomSocket | null = null;
+	let textRoomHadDrop = false;
 
+	function wireTextRoom(room: RoomSocket, channelId: string) {
+		room.on('message:created', (msg) => {
+			if (msg.channelId === selectedChannel?.id) {
+				messages = [...messages, msg];
+				scrollToBottom();
+				fetch(`/api/channels/${msg.channelId}/read`, { method: 'PATCH', credentials: 'include' }).catch(() => {});
+			} else {
+				unread = new Map(unread).set(msg.channelId, (unread.get(msg.channelId) ?? 0) + 1);
+				const _u = authStore.currentUser();
+				if (_u?.notifSounds !== false) playNotificationSound();
+				if (document.hidden) showBrowserNotification(msg);
+			}
+		});
+		room.on('message:updated', (msg) => {
+			if (msg.channelId !== selectedChannel?.id) return;
+			messages = messages.map((m) => (m.id === msg.id ? msg : m));
+		});
+		room.on('message:deleted', ({ messageId, channelId: cid }) => {
+			if (cid !== selectedChannel?.id) return;
+			messages = messages.filter((m) => m.id !== messageId);
+		});
+		room.on('typing:update', ({ channelId: cid, usernames }) => {
+			if (cid !== selectedChannel?.id) return;
+			typingUsernames = usernames.filter((u) => u !== user.username);
+		});
+		room.on('reaction:updated', ({ messageId, reactions }) => {
+			messages = messages.map((m) => m.id === messageId ? { ...m, reactions } : m);
+		});
+		room.connected.subscribe((v) => {
+			socketConnected = v;
+			if (v && textRoomHadDrop && selectedChannel?.id === channelId) loadMessages(channelId);
+			if (!v) textRoomHadDrop = true;
+		});
+	}
+
+	function closeTextRoom() {
+		textRoom?.close();
+		textRoom = null;
+		textRoomHadDrop = false;
+	}
+
+	function openTextRoom(channelId: string) {
+		if (!socketToken) return;
+		closeTextRoom();
+		textRoom = socketStore.joinChannel(channelId, socketToken);
+		wireTextRoom(textRoom, channelId);
+	}
+
+	function wireVoiceRoom(room: RoomSocket) {
+		room.on('voice:state', ({ channelId, members: m }) => {
+			voiceMembers = new Map(voiceMembers).set(channelId, m);
+		});
+		room.on('voice:joined', ({ channelId, member }) => {
+			const prev = voiceMembers.get(channelId) ?? [];
+			if (prev.find((m) => m.userId === member.userId)) return;
+			voiceMembers = new Map(voiceMembers).set(channelId, [...prev, member]);
+		});
+		room.on('voice:left', ({ channelId, userId }) => {
+			const prev = voiceMembers.get(channelId) ?? [];
+			voiceMembers = new Map(voiceMembers).set(channelId, prev.filter((m) => m.userId !== userId));
+		});
+	}
+
+	onMount(() => {
 		(async () => {
 			let token = authStore.getSocketToken();
 			if (!token) {
@@ -245,8 +317,8 @@
 				token = authStore.getSocketToken();
 			}
 			if (!token) { goto('/login'); return; }
-			const socket = socketStore.connect(token);
-			_socket = socket;
+			socketToken = token;
+			socketStore.connect(token);
 
 			// Load persisted unread counts and clear this server's rail badge
 			clearServerUnread(server.id);
@@ -260,70 +332,15 @@
 				})
 				.catch(() => {});
 
-			socket.on('message:created', (msg) => {
-				if (msg.channelId === selectedChannel?.id) {
-					messages = [...messages, msg];
-					scrollToBottom();
-					fetch(`/api/channels/${msg.channelId}/read`, { method: 'PATCH', credentials: 'include' }).catch(() => {});
-				} else {
-					unread = new Map(unread).set(msg.channelId, (unread.get(msg.channelId) ?? 0) + 1);
-					const _u = authStore.currentUser();
-					if (_u?.notifSounds !== false) playNotificationSound();
-					if (document.hidden) showBrowserNotification(msg);
-				}
-			});
-			socket.on('message:updated', (msg) => {
-				if (msg.channelId !== selectedChannel?.id) return;
-				messages = messages.map((m) => (m.id === msg.id ? msg : m));
-			});
-			socket.on('message:deleted', ({ messageId, channelId }) => {
-				if (channelId !== selectedChannel?.id) return;
-				messages = messages.filter((m) => m.id !== messageId);
-			});
-			socket.on('voice:state', ({ channelId, members: m }) => {
-				voiceMembers = new Map(voiceMembers).set(channelId, m);
-			});
-			socket.on('voice:joined', ({ channelId, member }) => {
-				const prev = voiceMembers.get(channelId) ?? [];
-				if (prev.find((m) => m.userId === member.userId)) return;
-				voiceMembers = new Map(voiceMembers).set(channelId, [...prev, member]);
-			});
-			socket.on('voice:left', ({ channelId, userId }) => {
-				const prev = voiceMembers.get(channelId) ?? [];
-				voiceMembers = new Map(voiceMembers).set(channelId, prev.filter((m) => m.userId !== userId));
-			});
-			socket.on('typing:update', ({ channelId, usernames }) => {
-				if (channelId !== selectedChannel?.id) return;
-				typingUsernames = usernames.filter((u) => u !== user.username);
-			});
-			socket.on('reaction:updated', ({ messageId, reactions }) => {
-				messages = messages.map((m) => m.id === messageId ? { ...m, reactions } : m);
-			});
-			socket.on('disconnect', () => { socketConnected = false; });
-			socket.on('connect', () => {
-				socketConnected = true;
-				voiceMembers = new Map();
-				socket.emit('server:subscribe', {
-					serverId: server.id,
-					channelIds: channels.filter((c) => c.type === 'VOICE').map((c) => c.id),
-				});
-				if (selectedChannel) {
-					socket.emit('channel:join', { channelId: selectedChannel.id });
-					if (selectedChannel.type === 'TEXT') loadMessages(selectedChannel.id);
-				}
-				// Only signal voice presence if LiveKit is still connected.
-				// If LiveKit is in error state the auto-reconnect timer handles a full rejoin
-				// (including LiveKit reconnect). Emitting voice:join here while LiveKit is down
-				// would show the user as "in channel" to peers but with no audio.
-				if (voiceChannelId && get(livekitStatus) !== 'error') {
-					socket.emit('voice:join', { channelId: voiceChannelId });
-				}
-			});
-
-			socket.emit('server:subscribe', {
-				serverId: server.id,
-				channelIds: channels.filter((c) => c.type === 'VOICE').map((c) => c.id),
-			});
+			// Ocupación de voz inicial (reemplaza el antiguo server:subscribe)
+			fetch(`/api/servers/${server.slug}/voice-state`, { credentials: 'include' })
+				.then((r) => r.ok ? r.json() : [])
+				.then((entries: { channelId: string; members: VoiceMember[] }[]) => {
+					const m = new Map(voiceMembers);
+					for (const e of entries) m.set(e.channelId, e.members);
+					voiceMembers = m;
+				})
+				.catch(() => {});
 
 			// Restore voice state if returning to this server while a call is active
 			const av = get(activeVoice);
@@ -335,30 +352,15 @@
 		})();
 
 		return () => {
-			const socket = _socket;
-			if (!socket) return;
-			socket.off('message:created');
-			socket.off('message:updated');
-			socket.off('message:deleted');
-			socket.off('voice:state');
-			socket.off('voice:joined');
-			socket.off('voice:left');
-			socket.off('typing:update');
-			socket.off('reaction:updated');
-			socket.off('disconnect');
-			socket.off('connect');
 			clearTimeout(typingTimer);
 			if (_reconnectTimer) { clearTimeout(_reconnectTimer); _reconnectTimer = null; }
-			// Only leave the TEXT channel socket room — voice persists until user explicitly leaves
-			if (selectedChannel?.type === 'TEXT') socket.emit('channel:leave', { channelId: selectedChannel.id });
+			// Solo se cierra la conexión del canal de TEXTO — la de voz persiste hasta que el usuario sale explícitamente
+			closeTextRoom();
 		};
 	});
 
 	// ── Channel selection ─────────────────────────────────────────────────
 	async function selectChannel(ch: Channel) {
-		const socket = socketStore.raw();
-		if (!socket) return;
-		if (selectedChannel && selectedChannel.id !== ch.id) socket.emit('channel:leave', { channelId: selectedChannel.id });
 		if (ch.type === 'TEXT') prevTextChannel = ch;
 		selectedChannel = ch;
 		unread = new Map(unread).set(ch.id, 0);
@@ -366,8 +368,8 @@
 		setServerUnread(server.id, totalUnread);
 		typingUsernames = [];
 		sidebarOpen = false;
-		socket.emit('channel:join', { channelId: ch.id });
 		if (ch.type === 'TEXT') {
+			openTextRoom(ch.id);
 			await loadMessages(ch.id);
 			fetch(`/api/channels/${ch.id}/read`, { method: 'PATCH', credentials: 'include' }).catch(() => {});
 		}
@@ -467,22 +469,18 @@
 	async function sendMessage(e?: Event) {
 		e?.preventDefault();
 		const content = msgInput.trim();
-		if (!content || !selectedChannel || sendingMsg) return;
-		const socket = socketStore.raw();
-		if (!socket) return;
+		if (!content || !selectedChannel || sendingMsg || !textRoom) return;
 		sendingMsg = true;
 		msgInput = '';
 		clearTimeout(typingTimer);
-		socket.emit('typing:stop', { channelId: selectedChannel.id });
+		textRoom.emit('typing:stop', { channelId: selectedChannel.id });
 		lastTypingEmit = 0;
-		socket.emit('message:send', { channelId: selectedChannel.id, content });
+		textRoom.emit('message:send', { channelId: selectedChannel.id, content });
 		sendingMsg = false;
 	}
 
 	function toggleReaction(msg: MessagePayload, emoji: string) {
-		const socket = socketStore.raw();
-		if (!socket) return;
-		socket.emit('reaction:toggle', { messageId: msg.id, emoji });
+		textRoom?.emit('reaction:toggle', { messageId: msg.id, emoji });
 	}
 
 	async function sendFile(file: File) {
@@ -559,9 +557,8 @@
 	}
 
 	function onTyping() {
-		if (!selectedChannel) return;
-		const socket = socketStore.raw();
-		if (!socket) return;
+		if (!selectedChannel || !textRoom) return;
+		const socket = textRoom;
 		const now = Date.now();
 		if (now - lastTypingEmit > 2000) {
 			lastTypingEmit = now;
@@ -620,8 +617,13 @@
 	}
 
 	// ── Voice ─────────────────────────────────────────────────────────────
+	// Ya no se emite voice:join/voice:leave como mensajes — conectar el
+	// RoomSocket a /ws/channel/:voiceChannelId ES el join. El servidor ya
+	// garantiza en el propio ChannelDO que solo puede haber una sala de voz
+	// activa a la vez (expulsa la anterior); aquí además se cierra la
+	// conexión vieja del lado del cliente por limpieza, no por necesidad.
 	async function joinVoiceChannel(ch: Channel) {
-		if (joiningVoice) return;
+		if (joiningVoice || !socketToken) return;
 		joiningVoice = true;
 		// Consume mic-restore flag BEFORE disconnect() clears it internally
 		const shouldRestoreMic = livekitStore.consumeWasEnabled();
@@ -629,8 +631,7 @@
 			// Leave any active voice call (including one on a different server)
 			const currentVoice = get(activeVoice);
 			if (currentVoice) {
-				const socket = socketStore.raw();
-				socket?.emit('voice:leave', { channelId: currentVoice.channelId });
+				closeActiveVoiceSocket();
 				livekitStore.disconnect();
 				activeVoice.set(null);
 				voiceChannelId = null;
@@ -644,8 +645,9 @@
 				showToast('Error al conectar con el canal de voz');
 				return;
 			}
-			const socket = socketStore.raw();
-			socket?.emit('voice:join', { channelId: ch.id });
+			const voiceRoom = socketStore.joinChannel(ch.id, socketToken);
+			wireVoiceRoom(voiceRoom);
+			setActiveVoiceSocket(voiceRoom);
 			voiceChannelId = ch.id;
 			selectedChannel = ch;
 			activeVoice.set({ channelId: ch.id, channelName: ch.name, serverId: server.id, serverSlug: server.slug, serverName: server.name });
@@ -661,8 +663,7 @@
 
 	async function leaveVoice() {
 		if (!voiceChannelId) return;
-		const socket = socketStore.raw();
-		socket?.emit('voice:leave', { channelId: voiceChannelId });
+		closeActiveVoiceSocket();
 		livekitStore.disconnect();
 		voiceChannelId = null;
 		activeVoice.set(null);
