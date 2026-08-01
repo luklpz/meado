@@ -4,8 +4,18 @@
 	"compatibility_date": "2026-08-01",
 	"compatibility_flags": ["nodejs_compat"],
 	"main": ".svelte-kit/cloudflare/_worker.js",
+	// run_worker_first: por defecto Cloudflare intenta servir peticiones como
+	// asset estático ANTES de invocar el Worker — /api/* no tiene archivo
+	// estático, así que el propio Cloudflare devolvía su 404 genérico sin
+	// llegar nunca a la ruta [...path]/+server.ts. Encontrado en el smoke
+	// test real de la fase 6 (curl a /api/servers devolvía el 404 de marca
+	// Cloudflare, no el JSON de Hono/SvelteKit).
 	"assets": {
 		"binding": "ASSETS",
-		"directory": ".svelte-kit/cloudflare"
+		"directory": ".svelte-kit/cloudflare",
+		"run_worker_first": ["/*"]
+	},
+	"vars": {
+		"BACKEND_URL": "https://meado-backend.luka-lopez-j.workers.dev"
 	}
 }

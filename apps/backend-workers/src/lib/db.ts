@@ -4,8 +4,9 @@ import type { Env } from '../env.js';
 
 // Workers = un isolate por request, no un proceso Node persistente:
 // no hay singleton de conexión como en apps/backend/src/prisma/prisma.service.ts.
-// Se crea un client nuevo por request; Hyperdrive (fase 6) hace el pooling real
-// por debajo. En fase 1 connectionString apunta directo a env.DATABASE_URL.
+// Se crea un client nuevo por request; Hyperdrive hace el pooling real por
+// debajo. env.DATABASE_URL queda como fallback si por lo que sea no hay
+// binding de Hyperdrive disponible (no debería pasar una vez desplegado).
 //
 // Los Durable Objects SÍ son instancias persistentes en memoria entre
 // llamadas (a diferencia de un handler REST normal aquí) — cada clase DO
@@ -14,6 +15,7 @@ import type { Env } from '../env.js';
 // durante la verificación de fase 5 (latencia de varios cientos de ms en
 // operaciones DM que deberían ser casi instantáneas).
 export function createDb(env: Env): PrismaClient {
-	const adapter = new PrismaPg({ connectionString: env.DATABASE_URL });
+	const connectionString = env.HYPERDRIVE?.connectionString ?? env.DATABASE_URL;
+	const adapter = new PrismaPg({ connectionString });
 	return new PrismaClient({ adapter });
 }

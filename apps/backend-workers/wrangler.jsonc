@@ -5,12 +5,24 @@
 	"compatibility_date": "2026-08-01",
 	"compatibility_flags": ["nodejs_compat"],
 
-	// Fase 1-2: pg.Pool conecta directo a env.DATABASE_URL (secret) para poder
-	// verificar en local sin depender de una cuenta Cloudflare. En Fase 6
-	// (deploy) sustituir por un binding "hyperdrive" real:
-	//   "hyperdrive": [{ "binding": "HYPERDRIVE", "id": "<id de wrangler hyperdrive create>" }]
-	// y cambiar en src/lib/db.ts connectionString: env.DATABASE_URL -> env.HYPERDRIVE.connectionString
-	// (requiere `wrangler login`, cuenta del usuario — no se puede provisionar desde aquí)
+	// Fase 6: Hyperdrive real, apunta a la misma Supabase de siempre (no
+	// cambia el proveedor de DB, solo cómo Workers se conecta a él).
+	// env.DATABASE_URL sigue existiendo como secret separado, usado solo
+	// como fallback local en wrangler dev cuando no hay binding real.
+	"hyperdrive": [
+		{ "binding": "HYPERDRIVE", "id": "9ea8ba718f374ff080aacf2ab092d1f6" }
+	],
+
+	// Vars no sensibles (los secrets van vía `wrangler secret put`, no aquí)
+	"vars": {
+		"NODE_ENV": "production",
+		"FRONTEND_URL": "https://meado.es",
+		"CORS_ORIGIN": "https://meado.es,https://www.meado.es",
+		"RESEND_FROM": "noreply@meado.es",
+		"CLOUDINARY_CLOUD_NAME": "dgmfwo7rj",
+		"GOOGLE_DRIVE_FOLDER_ID": "1fsNEXf41LCm7zVZmK74VWyw6BWYsBNZQ",
+		"LIVEKIT_URL": "wss://meado-s8fy59to.livekit.cloud"
+	},
 
 	"durable_objects": {
 		"bindings": [

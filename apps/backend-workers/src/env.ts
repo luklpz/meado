@@ -8,6 +8,7 @@ export interface Env {
 	DM_DO: DurableObjectNamespace<DmDO>;
 	USER_REGISTRY_DO: DurableObjectNamespace<UserRegistryDO>;
 	RATE_LIMITER_DO: DurableObjectNamespace<RateLimiterDO>;
+	HYPERDRIVE?: Hyperdrive;
 	DATABASE_URL: string;
 	JWT_SECRET: string;
 	FRONTEND_URL: string;
