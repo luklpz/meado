@@ -21,10 +21,20 @@ Tabla viva — actualizar cada vez que se despliega o se detecta drift.
 |---|---|---|---|
 | `apps/frontend/src/lib/livekit.ts` | commiteado | versión anterior (reconnectPolicy `as any`) | pendiente de deploy a Vercel |
 | `apps/frontend/*` (adapter, wrangler.jsonc, proxy `/api`) | commiteado, verificado local (`wrangler dev`) | sigue en Vercel con adapter-auto | falta: crear proyecto Cloudflare, env vars, cutover DNS `meado.es` |
+| `apps/backend-workers/*` (proyecto nuevo, solo módulo auth) | commiteado, verificado local (`wrangler dev` + Supabase real) | no existe en producción | backend real sigue siendo `apps/backend` en Render — `apps/backend-workers` es build-en-paralelo, no reemplaza nada hasta fase 6 |
 
 ---
 
 ## Entradas
+
+## 2026-08-01 — Fase 1: scaffold backend Workers + módulo auth completo, verificado contra Supabase real
+
+- **Archivo(s):** `apps/backend-workers/` (proyecto nuevo completo: `package.json`, `wrangler.jsonc`, `tsconfig.json`, `prisma/schema.prisma` copiado, `prisma.config.ts`, `src/index.ts`, `src/env.ts`, `src/hono-env.ts`, `src/lib/{db,jwt,password,cloudinary,email}.ts`, `src/middleware/auth.ts`, `src/routes/auth.ts`, `src/types/disposable-email-domains.d.ts`, `.gitignore`)
+- **Qué:** Primer slice vertical del plan de migración (`C:\Users\luka\.claude\plans\wiggly-swinging-tulip.md`). Hono como framework HTTP. `jose` reemplaza `jsonwebtoken` (4 tipos de token: login/socket/verify/reset, mismos claims). `bcryptjs` reemplaza `bcrypt`. Cloudinary: SDK Node reemplazado por subida firmada vía `fetch` + SHA-1 (WebCrypto) contra la API REST — el SDK usa `upload_stream` (Node streams), no se asumió compatible con Workers. `disposable-email-domains` requiere un `.d.ts` ambient propio (sin tipos publicados). DB: `pg.Pool` conecta directo a `env.DATABASE_URL` (fase 1, sin Hyperdrive todavía — Hyperdrive requiere `wrangler login`/cuenta Cloudflare, se añade en fase 6 cambiando una línea en `lib/db.ts`). Prisma schema duplicado desde `apps/backend/prisma/schema.prisma` (migraciones siguen viviendo solo ahí, este proyecto no migra, solo genera client).
+- **Verificación real:** `tsc --noEmit` limpio. `wrangler dev` levanta el Worker contra Supabase de producción real (no mock). `bcryptjs` confirmado byte-compatible con `bcrypt` nativo (hash con uno, compara con el otro, caso positivo y negativo) sin tocar la DB. Con permiso explícito del usuario, se cambió la contraseña de la cuenta de prueba existente `losreales@meado.com` (username `TestAccount`) a una conocida y se probó el flujo completo real: `POST /auth/login` (200, `Set-Cookie` httpOnly/7d correcto) → `GET /auth/me` con esa cookie (200, incluye `socketToken` bien firmado) → `GET /auth/privacy`, `GET /auth/notifications`, `PATCH /auth/profile` (200 cada uno) → `POST /auth/logout` (limpia cookie) → `GET /auth/me` sin cookie (401). Efecto secundario de la prueba (`bio` de test) revertido a `null` después.
+- **Hueco conocido, pendiente antes de fase 6:** rate limiting de estos endpoints (register/login/forgot/reset-password) no está portado — NestJS lo hacía con `@nestjs/throttler` en proceso, Workers no tiene ese equivalente en memoria. Se resolverá con el binding nativo de Rate Limiting de Cloudflare o reutilizando el patrón de `UserRegistryDO` de la fase 3.
+- **Por qué:** fase 1 del plan aprobado — probar las piezas de infraestructura más arriesgadas (Hyperdrive/pg, jose, bcryptjs, patrón Hono) sobre el módulo más pequeño antes de portar el resto.
+- **Despliegue:** N/A (proyecto nuevo, no se despliega hasta fase 6 — build en paralelo a `apps/backend`, que sigue siendo el backend real en producción)
 
 ## 2026-08-01 — Plan detallado: backend a Hono + Durable Objects
 

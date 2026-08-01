@@ -1,0 +1,14 @@
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "meado-backend",
+	"main": "src/index.ts",
+	"compatibility_date": "2026-08-01",
+	"compatibility_flags": ["nodejs_compat"]
+
+	// Fase 1: pg.Pool conecta directo a env.DATABASE_URL (secret) para poder
+	// verificar en local sin depender de una cuenta Cloudflare. En Fase 6
+	// (deploy) sustituir por un binding "hyperdrive" real:
+	//   "hyperdrive": [{ "binding": "HYPERDRIVE", "id": "<id de wrangler hyperdrive create>" }]
+	// y cambiar en src/lib/db.ts connectionString: env.DATABASE_URL -> env.HYPERDRIVE.connectionString
+	// (requiere `wrangler login`, cuenta del usuario — no se puede provisionar desde aquí)
+}

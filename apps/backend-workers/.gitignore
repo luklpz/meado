@@ -1,0 +1,21 @@
+node_modules
+/generated/prisma
+/dist
+
+# Env / secrets
+.env
+.env.*
+.dev.vars
+.dev.vars.*
+
+# Wrangler local state
+.wrangler
+
+# Prisma config compiled artifacts
+prisma.config.js
+prisma.config.d.ts
+prisma.config.js.map
+
+# OS
+.DS_Store
+Thumbs.db
