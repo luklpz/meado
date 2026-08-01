@@ -21,11 +21,20 @@ Tabla viva — actualizar cada vez que se despliega o se detecta drift.
 |---|---|---|---|
 | `apps/frontend/src/lib/livekit.ts` | commiteado | versión anterior (reconnectPolicy `as any`) | pendiente de deploy a Vercel |
 | `apps/frontend/*` (adapter, wrangler.jsonc, proxy `/api`) | commiteado, verificado local (`wrangler dev`) | sigue en Vercel con adapter-auto | falta: crear proyecto Cloudflare, env vars, cutover DNS `meado.es` |
-| `apps/backend-workers/*` (auth + servers + upload + drive) | commiteado, verificado local (`wrangler dev` + Supabase real) | no existe en producción | backend real sigue siendo `apps/backend` en Render — `apps/backend-workers` es build-en-paralelo, no reemplaza nada hasta fase 6 |
+| `apps/backend-workers/*` (fase 2 REST completa) | commiteado, verificado local (`wrangler dev` + Supabase real) | no existe en producción | backend real sigue siendo `apps/backend` en Render — `apps/backend-workers` es build-en-paralelo, no reemplaza nada hasta fase 6 |
 
 ---
 
 ## Entradas
+
+## 2026-08-01 — Fase 2 completa: channels, dm, friends, users portados a Hono
+
+- **Archivo(s):** `apps/backend-workers/src/routes/{channels,dm,friends,users}.ts`, `src/lib/{friends,broadcast}.ts` (broadcast ampliado con `notifyUser`/`getOnlineUserIds`), `src/index.ts` (montaje de rutas)
+- **Qué:** Puerto completo de `messages.controller/service` (mensajes de canal, lectura, LiveKit token), `dm.controller/service` (conversaciones, mensajes, añadir miembro — solo amigos), `friends.controller/service` (solicitudes, aceptar, alias, bloqueo) y `users.controller` (búsqueda, perfil público con amigos/servidores mutuos, reportes). El puente REST→Durable Object (`broadcastMessageCreated`, `broadcastDmMessageCreated`, etc.) queda en `lib/broadcast.ts` como no-ops explícitos hasta la fase 3 — los call sites ya están cableados, solo falta la implementación real. `gateway.onlineUsers` (presencia para `GET /friends`) también stub (`getOnlineUserIds` devuelve vacío) hasta que exista `UserRegistryDO`.
+- **Verificación real:** `tsc --noEmit` limpio. `wrangler dev` contra Supabase real, todo de solo lectura (sin mutar datos): `GET /friends` y `/friends/pending` vacíos (correcto, la cuenta de prueba no tiene amigos), `GET /users/search?q=lu` devuelve usuarios reales, `GET /users/:id/profile` con un id real devuelve friendshipStatus/mutuals correctos, `GET /dm` vacío (correcto), `GET /channels/:id/messages` sin ser miembro → 403 correcto.
+- **Pendiente:** escrituras (enviar mensaje, request de amistad, crear DM) sin probar en caliente todavía — fase 5. Presencia (`online: true/false` en `/friends`) siempre `false` hasta fase 3.
+- **Por qué:** cierra la fase 2 del plan — toda la superficie REST portada a Hono.
+- **Despliegue:** N/A
 
 ## 2026-08-01 — Fase 2 (parcial): módulos servers, upload, drive portados a Hono
 

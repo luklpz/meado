@@ -6,6 +6,10 @@ import { auth } from './routes/auth.js';
 import { upload } from './routes/upload.js';
 import { drive } from './routes/drive.js';
 import { servers } from './routes/servers.js';
+import { channels } from './routes/channels.js';
+import { dm } from './routes/dm.js';
+import { friends } from './routes/friends.js';
+import { users } from './routes/users.js';
 
 const app = new Hono<HonoEnv>();
 
@@ -37,5 +41,9 @@ app.route('/auth', auth);
 app.route('/upload', upload);
 app.route('/drive', drive);
 app.route('/servers', servers);
+app.route('/channels', channels);
+app.route('/dm', dm);
+app.route('/friends', friends);
+app.route('/users', users);
 
 export default app;
