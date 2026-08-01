@@ -213,7 +213,7 @@ meado/
 │       └── prisma.config.ts        # URL de Prisma (fuera de schema, v7)
 │
 ├── CLAUDE.md                       # Instrucciones para Claude Code
-└── DOCUMENTACIÓN.md                # Este archivo
+└── documentacion.md                 # Este archivo
 ```
 
 ---
