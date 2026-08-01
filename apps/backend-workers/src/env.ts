@@ -9,4 +9,11 @@ export interface Env {
 	CLOUDINARY_CLOUD_NAME: string;
 	CLOUDINARY_API_KEY: string;
 	CLOUDINARY_API_SECRET: string;
+	GOOGLE_CLIENT_ID: string;
+	GOOGLE_CLIENT_SECRET: string;
+	GOOGLE_REFRESH_TOKEN: string;
+	GOOGLE_DRIVE_FOLDER_ID?: string;
+	LIVEKIT_URL: string;
+	LIVEKIT_API_KEY: string;
+	LIVEKIT_API_SECRET: string;
 }

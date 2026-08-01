@@ -21,11 +21,20 @@ Tabla viva — actualizar cada vez que se despliega o se detecta drift.
 |---|---|---|---|
 | `apps/frontend/src/lib/livekit.ts` | commiteado | versión anterior (reconnectPolicy `as any`) | pendiente de deploy a Vercel |
 | `apps/frontend/*` (adapter, wrangler.jsonc, proxy `/api`) | commiteado, verificado local (`wrangler dev`) | sigue en Vercel con adapter-auto | falta: crear proyecto Cloudflare, env vars, cutover DNS `meado.es` |
-| `apps/backend-workers/*` (proyecto nuevo, solo módulo auth) | commiteado, verificado local (`wrangler dev` + Supabase real) | no existe en producción | backend real sigue siendo `apps/backend` en Render — `apps/backend-workers` es build-en-paralelo, no reemplaza nada hasta fase 6 |
+| `apps/backend-workers/*` (auth + servers + upload + drive) | commiteado, verificado local (`wrangler dev` + Supabase real) | no existe en producción | backend real sigue siendo `apps/backend` en Render — `apps/backend-workers` es build-en-paralelo, no reemplaza nada hasta fase 6 |
 
 ---
 
 ## Entradas
+
+## 2026-08-01 — Fase 2 (parcial): módulos servers, upload, drive portados a Hono
+
+- **Archivo(s):** `apps/backend-workers/src/routes/{servers,upload,drive}.ts`, `src/lib/{google-auth,drive,storage}.ts`, `src/lib/cloudinary.ts` (extendido: delete + upload genérico), `src/shared/permissions.ts` (copia), `src/index.ts` (montaje de rutas + `onError` global con `HTTPException`)
+- **Qué:** Puerto completo de `servers.controller.ts`+`servers.service.ts` (CRUD servidor, icono, membership, bans, canales, whitelist, roles, LiveKit token, unread) y de `upload`/`drive` controllers. `googleapis` reemplazado por flujo OAuth2 refresh-token plano vía `fetch` (más simple de lo previsto en el plan — no hace falta JWT de service account, la app ya usaba refresh_token). Nonce de confirmación de subida a Drive: el original lo guardaba en un `Set` en memoria de un proceso único; en Workers no hay proceso único garantizado (dos isolates distintos pueden atender init-upload y confirm), así que se sustituyó por un JWT firmado de 2h — pierde la garantía de "uso único" pero mantiene la de "emitido legítimamente", que es equivalente a lo que el diseño original garantizaba en la práctica (el nonce tampoco estaba atado a un `fileId` concreto). `cloudinary.api.ping()` del endpoint `/upload/ping` se simplificó a solo devolver config (no hace ping real) — endpoint de debug, bajo riesgo.
+- **Verificación real:** `tsc --noEmit` limpio. `wrangler dev` contra Supabase real: `GET /servers` lista los 2 servidores reales correctamente (`isMember` calculado bien), `GET /servers/servidor-prueba` devuelve canales/roles reales, `GET /servers/servidor-prueba/roles` → 403 correcto (no soy miembro), `GET /servers/los-reales/members` → 403 correcto, slug inexistente → 404. Comportamiento idéntico al backend NestJS actual en cada caso.
+- **Pendiente:** operaciones de escritura (join/leave/crear canal/rol/ban) no probadas todavía en caliente — se dejan para la fase 5 (verificación end-to-end), evitar mutar datos reales sin necesidad ahora.
+- **Por qué:** continuación mecánica de la fase 2 del plan — mismo patrón que el módulo auth de la fase 1.
+- **Despliegue:** N/A (build en paralelo, no reemplaza producción hasta fase 6)
 
 ## 2026-08-01 — Fase 1: scaffold backend Workers + módulo auth completo, verificado contra Supabase real
 
