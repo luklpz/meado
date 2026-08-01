@@ -84,6 +84,29 @@ servers.get('/:slug', async (c) => {
 	return c.json(await getServer(db, c.req.param('slug')));
 });
 
+// Reemplaza el evento WS server:subscribe de hoy (el gateway leía su propio
+// Map en memoria voiceRooms[channelId]). Aquí cada ChannelDO de voz deriva
+// su roster de sus WebSockets reales — se pregunta a cada uno por RPC. Patrón
+// N+1 aceptado a esta escala (mismo trade-off que el resto del plan).
+servers.get('/:slug/voice-state', async (c) => {
+	const slug = c.req.param('slug');
+	const me = c.get('user');
+	const db = createDb(c.env);
+	const isMember = (await db.serverMember.count({ where: { server: { slug }, userId: me.id } })) > 0;
+	if (!isMember) throw new HTTPException(403, { message: 'Not a member' });
+
+	const server = await db.server.findUnique({ where: { slug }, select: { id: true } });
+	if (!server) throw new HTTPException(404, { message: 'Server not found' });
+	const voiceChannels = await db.channel.findMany({ where: { serverId: server.id, type: 'VOICE' }, select: { id: true } });
+
+	const entries = await Promise.all(voiceChannels.map(async (ch) => {
+		const stub = c.env.CHANNEL_DO.get(c.env.CHANNEL_DO.idFromName(ch.id));
+		const members = await stub.getVoiceRoster().catch(() => []);
+		return { channelId: ch.id, members };
+	}));
+	return c.json(entries.filter((e) => e.members.length > 0));
+});
+
 servers.get('/:slug/unread', async (c) => {
 	const db = createDb(c.env);
 	const slug = c.req.param('slug');

@@ -6,35 +6,13 @@ import { createDb } from '../lib/db.js';
 import { deleteManyByUrls } from '../lib/storage.js';
 import { getFriendIds } from '../lib/friends.js';
 import { broadcastDmMessageCreated, broadcastDmMessageUpdated, broadcastDmMessageDeleted, broadcastDmMemberAdded } from '../lib/broadcast.js';
-import type { PrismaClient } from '../../generated/prisma/client.js';
-
-const DM_MSG_SELECT = {
-	id: true, content: true, createdAt: true, editedAt: true, conversationId: true,
-	author: { select: { id: true, username: true, name: true, avatarUrl: true } },
-	attachments: { select: { id: true, url: true, name: true, size: true, mimeType: true } },
-	reactions: { select: { userId: true, emoji: true } },
-} as const;
-
-function formatReactions(raw: { userId: string; emoji: string }[], userId: string) {
-	const map = new Map<string, { count: number; me: boolean }>();
-	for (const r of raw) {
-		const entry = map.get(r.emoji) ?? { count: 0, me: false };
-		entry.count++;
-		if (r.userId === userId) entry.me = true;
-		map.set(r.emoji, entry);
-	}
-	return Array.from(map.entries()).map(([emoji, { count, me }]) => ({ emoji, count, me }));
-}
+import { formatReactions } from '../lib/messages.js';
+import { DM_MSG_SELECT, isDmMember as isMember } from '../lib/dm-messages.js';
 
 function parseCursor(cursor: string): Date {
 	const d = new Date(cursor);
 	if (isNaN(d.getTime())) throw new HTTPException(400, { message: 'Invalid cursor' });
 	return d;
-}
-
-async function isMember(db: PrismaClient, conversationId: string, userId: string): Promise<boolean> {
-	const m = await db.directConversationMember.findUnique({ where: { userId_conversationId: { userId, conversationId } } });
-	return !!m;
 }
 
 const CLOUDINARY_PREFIX = 'https://res.cloudinary.com/';

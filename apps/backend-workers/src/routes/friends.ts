@@ -4,7 +4,7 @@ import type { HonoEnv } from '../hono-env.js';
 import { requireAuth } from '../middleware/auth.js';
 import { createDb } from '../lib/db.js';
 import { getFriendIds } from '../lib/friends.js';
-import { notifyUser, getOnlineUserIds } from '../lib/broadcast.js';
+import { notifyUser, getOnlineFlags } from '../lib/broadcast.js';
 
 const USER_SELECT = { id: true, username: true, name: true, avatarUrl: true } as const;
 
@@ -18,7 +18,8 @@ friends.get('/', async (c) => {
 		where: { status: 'ACCEPTED', OR: [{ senderId: me.id }, { receiverId: me.id }] },
 		include: { sender: { select: USER_SELECT }, receiver: { select: USER_SELECT } },
 	});
-	const online = getOnlineUserIds(c.env);
+	const friendIds = rows.map((f) => (f.senderId === me.id ? f.receiverId : f.senderId));
+	const online = await getOnlineFlags(c.env, friendIds);
 	const result = rows.map((f) => {
 		const isSender = f.senderId === me.id;
 		const friend = isSender ? f.receiver : f.sender;

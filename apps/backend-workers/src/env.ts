@@ -1,4 +1,11 @@
+import type { ChannelDO } from './durable-objects/channel-do.js';
+import type { DmDO } from './durable-objects/dm-do.js';
+import type { UserRegistryDO } from './durable-objects/user-registry-do.js';
+
 export interface Env {
+	CHANNEL_DO: DurableObjectNamespace<ChannelDO>;
+	DM_DO: DurableObjectNamespace<DmDO>;
+	USER_REGISTRY_DO: DurableObjectNamespace<UserRegistryDO>;
 	DATABASE_URL: string;
 	JWT_SECRET: string;
 	FRONTEND_URL: string;

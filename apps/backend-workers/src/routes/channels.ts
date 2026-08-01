@@ -7,40 +7,15 @@ import { requireAuth } from '../middleware/auth.js';
 import { createDb } from '../lib/db.js';
 import { deleteManyByUrls } from '../lib/storage.js';
 import { broadcastMessageCreated, broadcastMessageUpdated, broadcastMessageDeleted } from '../lib/broadcast.js';
-import type { PrismaClient } from '../../generated/prisma/client.js';
+import { MSG_SELECT, formatReactions, verifyChannelMember } from '../lib/messages.js';
 
 export const channels = new Hono<HonoEnv>();
 channels.use('*', requireAuth);
-
-const MSG_SELECT = {
-	id: true, content: true, createdAt: true, editedAt: true, channelId: true,
-	author: { select: { id: true, username: true, name: true, avatarUrl: true } },
-	attachments: { select: { id: true, url: true, name: true, size: true, mimeType: true } },
-	reactions: { select: { userId: true, emoji: true } },
-} as const;
-
-function formatReactions(raw: { userId: string; emoji: string }[], userId: string) {
-	const map = new Map<string, { count: number; me: boolean }>();
-	for (const r of raw) {
-		const entry = map.get(r.emoji) ?? { count: 0, me: false };
-		entry.count++;
-		if (r.userId === userId) entry.me = true;
-		map.set(r.emoji, entry);
-	}
-	return Array.from(map.entries()).map(([emoji, { count, me }]) => ({ emoji, count, me }));
-}
 
 function parseCursor(cursor: string): Date {
 	const d = new Date(cursor);
 	if (isNaN(d.getTime())) throw new HTTPException(400, { message: 'Invalid cursor' });
 	return d;
-}
-
-export async function verifyChannelMember(db: PrismaClient, channelId: string, userId: string): Promise<boolean> {
-	const channel = await db.channel.findUnique({ where: { id: channelId }, select: { serverId: true } });
-	if (!channel) return false;
-	const member = await db.serverMember.findUnique({ where: { userId_serverId: { userId, serverId: channel.serverId } } });
-	return !!member;
 }
 
 const CLOUDINARY_PREFIX = 'https://res.cloudinary.com/';

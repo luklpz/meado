@@ -1,26 +1,64 @@
-// Puente REST -> Durable Object. Stub hasta la fase 3: hoy no hay
-// ChannelDO/DmDO/UserRegistryDO todavía, así que estas funciones no
-// hacen nada. En fase 3 se implementan de verdad vía
-// env.CHANNEL_DO.idFromName(channelId).get(id).broadcastX(payload) (RPC).
-// Los call sites en routes/{channels,dm}.ts ya están preparados para
-// no necesitar cambios cuando esto se implemente.
+// Puente REST -> Durable Object. Los controllers REST (routes/channels.ts,
+// routes/dm.ts, routes/friends.ts) llaman a estas funciones tras escribir en
+// Prisma, igual que hoy MessagesController/DmController/FriendsController
+// llaman a métodos de MessagesGateway inyectado directamente.
 import type { Env } from '../env.js';
 
-export function broadcastMessageCreated(_env: Env, _channelId: string, _message: unknown): void {}
-export function broadcastMessageUpdated(_env: Env, _channelId: string, _message: unknown): void {}
-export function broadcastMessageDeleted(_env: Env, _channelId: string, _messageId: string): void {}
-export function broadcastReactionUpdated(_env: Env, _channelId: string, _payload: unknown): void {}
+export function broadcastMessageCreated(env: Env, channelId: string, message: unknown): void {
+	const stub = env.CHANNEL_DO.get(env.CHANNEL_DO.idFromName(channelId));
+	stub.broadcastMessageCreated(message).catch((e) => console.error('broadcastMessageCreated', e));
+}
 
-export function broadcastDmMessageCreated(_env: Env, _conversationId: string, _message: unknown): void {}
-export function broadcastDmMessageUpdated(_env: Env, _conversationId: string, _message: unknown): void {}
-export function broadcastDmMessageDeleted(_env: Env, _conversationId: string, _messageId: string): void {}
-export function broadcastDmReactionUpdated(_env: Env, _conversationId: string, _payload: unknown): void {}
-export function broadcastDmMemberAdded(_env: Env, _conversationId: string, _newMember: unknown, _conversation: unknown): void {}
+export function broadcastMessageUpdated(env: Env, channelId: string, message: unknown): void {
+	const stub = env.CHANNEL_DO.get(env.CHANNEL_DO.idFromName(channelId));
+	stub.broadcastMessageUpdated(message).catch((e) => console.error('broadcastMessageUpdated', e));
+}
 
-// Equivalente a gateway.emitToUser(userId, event, payload) — push genérico a un usuario (ej. friend:request)
-export function notifyUser(_env: Env, _userId: string, _event: string, _payload: unknown): void {}
+export function broadcastMessageDeleted(env: Env, channelId: string, messageId: string): void {
+	const stub = env.CHANNEL_DO.get(env.CHANNEL_DO.idFromName(channelId));
+	stub.broadcastMessageDeleted(messageId, channelId).catch((e) => console.error('broadcastMessageDeleted', e));
+}
 
-// Equivalente a gateway.onlineUsers — hasta la fase 3 (UserRegistryDO) no hay presencia real, todos offline
-export function getOnlineUserIds(_env: Env): Set<string> {
-	return new Set();
+export function broadcastDmMessageCreated(env: Env, conversationId: string, message: { conversationId: string }): void {
+	const stub = env.DM_DO.get(env.DM_DO.idFromName(conversationId));
+	stub.broadcastDmMessageCreated(message).catch((e) => console.error('broadcastDmMessageCreated', e));
+}
+
+export function broadcastDmMessageUpdated(env: Env, conversationId: string, message: unknown): void {
+	const stub = env.DM_DO.get(env.DM_DO.idFromName(conversationId));
+	stub.broadcastDmMessageUpdated(message).catch((e) => console.error('broadcastDmMessageUpdated', e));
+}
+
+export function broadcastDmMessageDeleted(env: Env, conversationId: string, messageId: string): void {
+	const stub = env.DM_DO.get(env.DM_DO.idFromName(conversationId));
+	stub.broadcastDmMessageDeleted(messageId, conversationId).catch((e) => console.error('broadcastDmMessageDeleted', e));
+}
+
+export function broadcastDmMemberAdded(env: Env, conversationId: string, newMember: { id: string }, conversation: unknown): void {
+	const stub = env.DM_DO.get(env.DM_DO.idFromName(conversationId));
+	stub.broadcastDmMemberAdded(newMember, conversation).catch((e) => console.error('broadcastDmMemberAdded', e));
+}
+
+// Equivalente a gateway.emitToUser(userId, event, payload) — push genérico a la conexión de sesión de un usuario
+export function notifyUser(env: Env, userId: string, event: string, payload: unknown): void {
+	const stub = env.USER_REGISTRY_DO.get(env.USER_REGISTRY_DO.idFromName(userId));
+	stub.pushEvent(event, payload).catch((e) => console.error('notifyUser', e));
+}
+
+// Equivalente a gateway.onlineUsers.has(id) — un RPC por candidato (aceptable a esta escala, igual que el resto de patrones N+1 del plan)
+export async function isUserOnline(env: Env, userId: string): Promise<boolean> {
+	const stub = env.USER_REGISTRY_DO.get(env.USER_REGISTRY_DO.idFromName(userId));
+	try {
+		return await stub.isOnline();
+	} catch {
+		return false;
+	}
+}
+
+export async function getOnlineFlags(env: Env, userIds: string[]): Promise<Set<string>> {
+	const online = new Set<string>();
+	await Promise.all(userIds.map(async (id) => {
+		if (await isUserOnline(env, id)) online.add(id);
+	}));
+	return online;
 }
