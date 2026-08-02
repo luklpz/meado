@@ -28,6 +28,13 @@ Tabla viva — actualizar cada vez que se despliega o se detecta drift.
 
 ## Entradas
 
+## 2026-08-02 — Confirmado: `/api/*` sigue roto en `meado-frontend.workers.dev`
+
+- **Qué:** al comparar `https://meado.es/api/auth/me` (401, correcto) contra `https://meado-frontend.luka-lopez-j.workers.dev/api/auth/me` (404, página genérica de Cloudflare) se confirmó que el hallazgo de fase 6 ("`/api/*` da 404 en el dominio compartido") **no estaba resuelto** — la entrada anterior de `objetivos.md` lo daba por zanjado ("era del dominio compartido, no del código") sin dejar claro que seguía sin funcionar ahí. Corregido el texto de esa entrada para reflejar que es una limitación permanente confirmada, no un hallazgo cerrado.
+- **Impacto práctico:** login/registro y cualquier llamada a `/api/*` no funcionan en `meado-frontend.workers.dev` — esa URL solo sirve para comprobar que el Worker despliega y sirve HTML/assets, no para probar la app funcionando de verdad. `meado.es`/`www.meado.es` son los únicos dominios fiables.
+- **Por qué:** el usuario preguntó si ambas URLs eran equivalentes; al verificar con curl salió a la luz que la nota de cierre de fase 6 era optimista/incorrecta.
+- **Despliegue:** N/A (solo verificación y corrección de docs, sin cambio de código — no se ha investigado la causa raíz ni intentado arreglarlo)
+
 ## 2026-08-02 — `README.md` alineado con la reescritura de `documentacion.md`
 
 - **Archivo(s):** `README.md`
