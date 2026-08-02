@@ -28,6 +28,13 @@ Tabla viva — actualizar cada vez que se despliega o se detecta drift.
 
 ## Entradas
 
+## 2026-08-02 — `README.md` alineado con la reescritura de `documentacion.md`
+
+- **Archivo(s):** `README.md`
+- **Qué:** stack (frontend/backend/servicios), diagrama de arquitectura, sección de autenticación y hoja de ruta actualizados al mismo contenido que `documentacion.md` (Hono + Durable Objects, WebSocket nativo, `jose`/`bcryptjs`, Hyperdrive). Estado del modo Spatial corregido de "en desarrollo" a "código presente, sin conectar" — no es trabajo activo, es una pausa explícita.
+- **Por qué:** README ya tenía las rutas/comandos corregidos de una entrada anterior, pero el resto (stack, diagrama, roadmap) seguía describiendo NestJS/Socket.io — pedido explícito de alinear con la reescritura de `documentacion.md`.
+- **Despliegue:** N/A (solo documentación)
+
 ## 2026-08-02 — Reescritura completa de `documentacion.md`
 
 - **Archivo(s):** `documentacion.md`
