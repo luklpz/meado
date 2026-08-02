@@ -28,6 +28,19 @@ Tabla viva — actualizar cada vez que se despliega o se detecta drift.
 
 ## Entradas
 
+## 2026-08-02 — Bug real: WebSocket de producción sin destino, dominio `api.meado.es` añadido
+
+- **Archivo(s):** `apps/backend-workers/wrangler.jsonc`, `apps/frontend/wrangler.jsonc`, `apps/frontend/.env.production` (nuevo, gitignored)
+- **Qué:** al investigar si `meado-frontend.workers.dev` era necesaria, se encontró que `src/lib/socket.ts` cae a mismo-origen (`meado.es`) cuando `VITE_SOCKET_URL` está vacío — y esa variable estaba vacía en `apps/frontend/.env` desde siempre. `meado.es` no tiene ninguna ruta `/ws/*` (solo `/api/*` está proxeado por SvelteKit), así que el WebSocket llevaba fallando en silencio desde el corte de DNS — confirmado con `fetch('https://meado.es/ws/session')` → 404 de SvelteKit, vs `fetch('.../ws/session')` directo al backend → 401 real.
+  - Añadido dominio propio al backend en Cloudflare (`api.meado.es`, custom domain, hecho por el usuario desde el dashboard)
+  - `apps/backend-workers/wrangler.jsonc`: añadida `routes: [{ pattern: "api.meado.es", custom_domain: true }]` para que el config-as-code refleje lo ya creado en dashboard
+  - `apps/frontend/wrangler.jsonc`: `BACKEND_URL` → `https://api.meado.es` (antes apuntaba a la URL `workers.dev` del backend)
+  - `apps/frontend/.env.production` (nuevo): `VITE_SOCKET_URL=https://api.meado.es` — Vite lo carga solo en `npm run build` (modo production), `.env` de dev queda intacto (proxy local sigue igual)
+  - Redeploy de ambos Workers. Efecto colateral encontrado en el redeploy del backend: `wrangler deploy` desactiva `workers_dev` por defecto si no está declarado explícito en `wrangler.jsonc` (mismo comportamiento ya visto con el frontend en el corte de DNS) — quedó desactivado antes de que el usuario llegara a hacerlo desde el dashboard como planeaba; añadido `"workers_dev": false` explícito para que el config-as-code no mienta
+  - Verificado con curl: `api.meado.es/ws/session` → 401 (ruta real), no el 404 de antes. Verificación completa (mensaje/voz en vivo) pendiente de confirmación del usuario en navegador — no se puede probar sin sus credenciales
+- **Por qué:** el usuario pidió una URL más "intuitiva" para el backend en vez de `workers.dev`; al investigar cómo cablear `api.meado.es` salió a la luz que resolvía, de paso, un bug de producción real y silencioso.
+- **Despliegue:** subido — `apps/backend-workers` y `apps/frontend` redeployados con la config nueva
+
 ## 2026-08-02 — Confirmado: `/api/*` sigue roto en `meado-frontend.workers.dev`
 
 - **Qué:** al comparar `https://meado.es/api/auth/me` (401, correcto) contra `https://meado-frontend.luka-lopez-j.workers.dev/api/auth/me` (404, página genérica de Cloudflare) se confirmó que el hallazgo de fase 6 ("`/api/*` da 404 en el dominio compartido") **no estaba resuelto** — la entrada anterior de `objetivos.md` lo daba por zanjado ("era del dominio compartido, no del código") sin dejar claro que seguía sin funcionar ahí. Corregido el texto de esa entrada para reflejar que es una limitación permanente confirmada, no un hallazgo cerrado.

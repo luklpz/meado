@@ -24,6 +24,11 @@
 		"LIVEKIT_URL": "wss://meado-s8fy59to.livekit.cloud"
 	},
 
+	// api.meado.es reemplaza la URL workers.dev expuesta al cliente (WS directo
+	// y proxy /api/* del frontend).
+	"routes": [{ "pattern": "api.meado.es", "custom_domain": true }],
+	"workers_dev": false,
+
 	"durable_objects": {
 		"bindings": [
 			{ "name": "CHANNEL_DO", "class_name": "ChannelDO" },

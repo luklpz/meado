@@ -58,6 +58,8 @@ Objetivo: mover Vercel → Cloudflare Pages y Render → Cloudflare Workers/Dura
 
 **Migración a Cloudflare completa.** `meado.es` en producción real sirve desde Cloudflare Workers, Vercel eliminado, Render suspendido.
 
+- [x] **Bug real encontrado y corregido: WS en producción apuntaba a un 404** (2026-08-02): `VITE_SOCKET_URL` vacío en el build de producción hacía que el cliente conectase el WebSocket al mismo origen (`meado.es`), que no tiene ruta `/ws/*` — solo `/api/*` está proxeado. Mensajes en vivo, voz y presencia llevaban rotos desde el corte de DNS sin que nadie lo notara (la UI carga bien, el fallo es silencioso). Corregido añadiendo dominio propio al backend (`api.meado.es`, custom domain), `.env.production` con `VITE_SOCKET_URL=https://api.meado.es`, `BACKEND_URL` actualizado. `workers_dev` desactivado en ambos Workers (frontend por dashboard, backend como efecto colateral de `wrangler deploy` sin `workers_dev` declarado — ahora explícito en `wrangler.jsonc`). Verificado con curl (`api.meado.es/ws/session` → 401 real, no 404) — **pendiente confirmación del usuario en vivo** (mandar mensaje / entrar a voz de verdad)
+
 - [x] **`documentacion.md` reescrito por completo** (2026-08-02): reflejaba la arquitectura NestJS/Socket.io/Render vieja al 100%, nunca se sincronizó durante la migración. Ahora describe Hono + Durable Objects, el modelo WS de 3 tipos de conexión, rate limiting real, y deja constancia explícita de que el modo Spatial/Phaser está presente en código pero desconectado (no es regresión de esta migración, nunca se implementó el protocolo de movimiento ni en el backend viejo)
 
 ---
