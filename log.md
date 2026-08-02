@@ -20,13 +20,21 @@ Tabla viva — actualizar cada vez que se despliega o se detecta drift.
 | Archivo | Estado local | Estado producción | Notas |
 |---|---|---|---|
 | `apps/frontend/src/lib/livekit.ts` | commiteado | versión anterior (reconnectPolicy `as any`) | pendiente de deploy a Vercel — quedará resuelto solo al cortar a Cloudflare |
-| Backend completo (`apps/backend-workers`) | **desplegado y verificado**: `https://meado-backend.luka-lopez-j.workers.dev` | Render (`apps/backend`) sigue siendo el backend real que usa `meado.es` | REST + WS + DOs confirmados contra Cloudflare real (no solo local) |
-| Frontend completo (`apps/frontend`) | **desplegado**: `https://meado-frontend.luka-lopez-j.workers.dev` (páginas OK, proxy `/api` con bug conocido en este dominio compartido, ver entrada de hoy) | Vercel sigue sirviendo `meado.es` | nada de esto es visible para usuarios reales todavía — DNS de `meado.es` no se ha tocado |
-| `meado.es` (DNS/zona) | **añadido a Cloudflare, nameservers cambiados en el registrador por el usuario** — pendiente de que Cloudflare confirme el cambio (puede tardar de minutos a horas) | Vercel (frontend) + Render (backend), sigue sirviendo tráfico real hasta que el cambio de nameservers se propague | ver "Próximo paso" en la entrada de hoy |
+| Backend completo (`apps/backend-workers`) | **desplegado, verificado y ahora es el backend real** de `meado.es` (vía proxy `/api/*` del frontend) | Render (`apps/backend`) sin tráfico real, pendiente de apagar | REST + WS + DOs confirmados contra Cloudflare real |
+| Frontend completo (`apps/frontend`) | **desplegado y cortado**: `meado.es`/`www.meado.es` como dominio personalizado de `meado-frontend`, proxy `/api` verificado funcionando en dominio propio (404 de `workers.dev` era cosa de ese dominio compartido, no del código) | Vercel sin tráfico real, pendiente de apagar | verificado con curl + navegador real |
+| `meado.es` (DNS/zona) | **cortado**: `meado.es` y `www.meado.es` sirven desde `meado-frontend` (Cloudflare Worker), verificado con curl (sin headers Vercel) y navegador real (login carga) | — | Render (backend) y Vercel (frontend) ya no reciben tráfico de `meado.es`, quedan solo como fallback sin cortar todavía (ver pendiente de apagarlos) |
 
 ---
 
 ## Entradas
+
+## 2026-08-02 — Fase 6: corte de DNS, `meado.es` sirve desde Cloudflare Workers
+
+- **Archivo(s):** `apps/frontend/wrangler.jsonc`
+- **Qué:** zona `meado.es` confirmada "Active" en Cloudflare (nameservers verificados con `nslookup -type=NS`). Se encontraron 11 registros DNS auto-importados de Vercel al añadir la zona; el usuario borró los 6 registros A (apex `meado.es`, `www.meado.es` y wildcard `*.meado.es`, todos apuntando a IPs de Vercel) que bloqueaban el custom domain de Cloudflare Workers (error 100117 "externally managed DNS records"). Se dejaron intactos los 3 CAA (`sectigo.com`/`pki.goog`/`letsencrypt.org`, no interfieren) y el TXT `resend._domainkey` (DKIM de Resend, crítico para email saliente — no tocar). Añadidas rutas `custom_domain: true` para `meado.es` y `www.meado.es` en `wrangler.jsonc` de `meado-frontend`, `wrangler deploy` las ató sin error tras el borrado. Nota: durante el primer intento fallido, `wrangler deploy` desactivó `workers_dev` por defecto (al añadir `routes` sin declarar `workers_dev: true` explícito) y tumbó momentáneamente `meado-frontend.luka-lopez-j.workers.dev` — corregido añadiendo `"workers_dev": true` de vuelta antes de reintentar.
+- **Verificación:** curl a `https://meado.es` y `https://www.meado.es` sin headers `x-vercel-*` (antes presentes), `curl https://meado.es/api/auth/me` → 401 (proxy al backend real funcionando), navegador real → `/login` carga correctamente con dominio propio.
+- **Por qué:** cierre del corte de DNS de fase 6, pendiente desde la entrada anterior — confirmado explícitamente por el usuario antes de tocar el dominio real.
+- **Despliegue:** subido y verificado en producción real (`meado.es`)
 
 ## 2026-08-01 — Fase 6: dominio `meado.es` añadido a Cloudflare, nameservers cambiados — pendiente de verificación
 

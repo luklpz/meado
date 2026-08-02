@@ -17,5 +17,10 @@
 	},
 	"vars": {
 		"BACKEND_URL": "https://meado-backend.luka-lopez-j.workers.dev"
-	}
+	},
+	"workers_dev": true,
+	"routes": [
+		{ "pattern": "meado.es", "custom_domain": true },
+		{ "pattern": "www.meado.es", "custom_domain": true }
+	]
 }
