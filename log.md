@@ -28,6 +28,14 @@ Tabla viva — actualizar cada vez que se despliega o se detecta drift.
 
 ## Entradas
 
+## 2026-08-02 — Borrado `apps/backend` (NestJS viejo), migraciones movidas a `backend-workers`
+
+- **Archivo(s):** `apps/backend` (borrado completo, 60 archivos), `apps/backend-workers/prisma/migrations/` (15 archivos, movidos), `README.md`
+- **Qué:** con `meado-backend` (Hono + DO en Cloudflare) siendo el backend real desde el corte de DNS, `apps/backend` (NestJS/Socket.io, ya no desplegado en ningún sitio) quedó como código muerto — borrado a petición del usuario. Detectado al borrar: `apps/backend-workers` genera su Prisma client desde un `schema.prisma` propio pero **no tenía carpeta `prisma/migrations`** — solo existía bajo `apps/backend/prisma/migrations`, que se estaba a punto de perder. Restauradas las 15 migraciones desde el commit anterior (`git checkout HEAD --`) y movidas a `apps/backend-workers/prisma/migrations/` antes de confirmar el borrado — git las reconoció como rename, no como delete+add. `README.md` actualizado (comandos, rutas `.env`, tabla de despliegue) para apuntar a `backend-workers` en vez de `apps/backend`.
+- **Hallazgo sin resolver, no tocado:** `documentacion.md` sigue describiendo la arquitectura NestJS/Socket.io/Render entera como si fuera la actual — nunca se sincronizó durante las fases 1-6 de migración a Cloudflare. Añadido a backlog en `objetivos.md`, reescritura grande fuera de alcance de esta entrada.
+- **Por qué:** limpieza de código muerto pedida explícitamente por el usuario tras confirmar que Render/Vercel ya no reciben tráfico.
+- **Despliegue:** N/A (solo repo local, nada desplegable cambió — `apps/backend` nunca se volvió a desplegar tras el corte de DNS)
+
 ## 2026-08-02 — Fase 6 cierre: Vercel eliminado, Render suspendido, `CLAUDE.md` actualizado
 
 - **Archivo(s):** `CLAUDE.md`

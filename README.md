@@ -105,11 +105,11 @@ JWT con cookies httpOnly (7 días). Sin Passport — implementado directamente c
 ### Backend
 
 ```bash
-cd apps/backend
-cp .env.example .env        # completa las variables
+cd apps/backend-workers
+cp .env.example .env        # completa las variables (DATABASE_URL, JWT_SECRET, etc.)
 npm install
 npx prisma migrate dev
-npm run start:dev            # localhost:3000
+npm run dev                  # wrangler dev, localhost:8787
 ```
 
 ### Frontend
@@ -121,27 +121,28 @@ npm install
 npm run dev                  # localhost:5173
 ```
 
-Ver [`apps/backend/.env.example`](apps/backend/.env.example) y [`apps/frontend/.env.example`](apps/frontend/.env.example) para la lista completa de variables.
+Ver [`apps/frontend/.env.example`](apps/frontend/.env.example) para la lista completa de variables de frontend; backend no tiene `.env.example` todavía (ver `CLAUDE.md` para las variables necesarias).
 
-Servicios necesarios: **PostgreSQL**, **LiveKit**, **Resend**, **Cloudinary**. Google Drive es opcional.
+Servicios necesarios: **PostgreSQL**, **LiveKit**, **Resend**, **Cloudinary**, **Cloudflare** (Workers + Hyperdrive). Google Drive es opcional.
 
 ---
 
 ## Comandos
 
 ```bash
-# Backend
-npm run start:dev        # desarrollo con hot reload
-npm run build            # compilar (incluye prisma generate)
-npm run test             # tests unitarios Jest
+# Backend (apps/backend-workers)
+npm run dev               # wrangler dev, hot reload
+npm run build              # prisma generate
+npm run deploy              # build + wrangler deploy
+npm run typecheck          # tsc --noEmit
 
 # Frontend
 npm run dev              # desarrollo
 npm run build            # build de producción
 npm run check            # type check (svelte-check)
-npm run lint             # Prettier + ESLint
+npm run lint              # Prettier + ESLint
 
-# Prisma (desde apps/backend)
+# Prisma (desde apps/backend-workers)
 npx prisma migrate dev   # crear y aplicar migración
 npx prisma studio        # explorador visual de la base de datos
 ```
@@ -152,8 +153,8 @@ npx prisma studio        # explorador visual de la base de datos
 
 | App | Plataforma | Notas |
 |---|---|---|
-| Frontend | Vercel | `vercel.json` reescribe `/api/*` al backend |
-| Backend | Render / Railway | `railway.toml` incluido |
+| Frontend | Cloudflare Workers | dominio propio `meado.es`, proxy `/api/*` a `BACKEND_URL` vía ruta SvelteKit |
+| Backend | Cloudflare Workers | Durable Objects (WS realtime) + Hyperdrive delante de PostgreSQL |
 
 ---
 

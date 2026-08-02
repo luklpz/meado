@@ -68,7 +68,7 @@ Objetivo: mover Vercel → Cloudflare Pages y Render → Cloudflare Workers/Dura
 - **Rail badges de servidor en tiempo real**: no se actualizan al recibir mensajes en otro servidor sin recargar (falta evento socket a nivel de servidor)
 - **Invite links**: falta endpoint `POST/GET /servers/:slug/invite` y UI asociada
 - Verificar que las vars de Cloudinary estén correctamente configuradas en Render (producción)
-- Limpieza de directorio basura `apps/backend/apps/backend/` si sigue existiendo
+- **Reescribir `documentacion.md`**: sigue describiendo la arquitectura vieja al 100% (NestJS, Socket.io, `MessagesGateway`, Render) — nunca se actualizó durante la migración a `backend-workers` (fases 1-6 de Cloudflare). Reescritura grande, no un parche puntual
 
 ---
 
