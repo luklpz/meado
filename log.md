@@ -28,6 +28,13 @@ Tabla viva — actualizar cada vez que se despliega o se detecta drift.
 
 ## Entradas
 
+## 2026-08-02 — Fase 6 cierre: Vercel eliminado, Render suspendido, `CLAUDE.md` actualizado
+
+- **Archivo(s):** `CLAUDE.md`
+- **Qué:** proyecto Vercel eliminado por el usuario (dashboard). Servicio Render suspendido, no borrado — se deja como red de seguridad por si hace falta rollback rápido. `CLAUDE.md` actualizado: sección "API URL Strategy" ahora describe el proxy `/api/[...path]/+server.ts` sobre Cloudflare en vez de `vercel.json`; bloques de env vars de Render/Vercel sustituidos por nota apuntando a `wrangler.jsonc`/`wrangler secret put` como fuente de verdad (evita duplicar y desincronizar valores) + URLs de producción reales.
+- **Por qué:** cierre definitivo de fase 6 — infra vieja (Vercel/Render) ya no recibe tráfico desde el corte de DNS de hoy, y `CLAUDE.md` seguía documentando el flujo de despliegue antiguo.
+- **Despliegue:** N/A (solo limpieza de infra y documentación, sin cambio de código desplegable)
+
 ## 2026-08-02 — Fase 6: corte de DNS, `meado.es` sirve desde Cloudflare Workers
 
 - **Archivo(s):** `apps/frontend/wrangler.jsonc`
