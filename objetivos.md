@@ -58,6 +58,8 @@ Objetivo: mover Vercel → Cloudflare Pages y Render → Cloudflare Workers/Dura
 
 **Migración a Cloudflare completa.** `meado.es` en producción real sirve desde Cloudflare Workers, Vercel eliminado, Render suspendido.
 
+- [x] **`documentacion.md` reescrito por completo** (2026-08-02): reflejaba la arquitectura NestJS/Socket.io/Render vieja al 100%, nunca se sincronizó durante la migración. Ahora describe Hono + Durable Objects, el modelo WS de 3 tipos de conexión, rate limiting real, y deja constancia explícita de que el modo Spatial/Phaser está presente en código pero desconectado (no es regresión de esta migración, nunca se implementó el protocolo de movimiento ni en el backend viejo)
+
 ---
 
 ## Pendiente / backlog
@@ -68,7 +70,6 @@ Objetivo: mover Vercel → Cloudflare Pages y Render → Cloudflare Workers/Dura
 - **Rail badges de servidor en tiempo real**: no se actualizan al recibir mensajes en otro servidor sin recargar (falta evento socket a nivel de servidor)
 - **Invite links**: falta endpoint `POST/GET /servers/:slug/invite` y UI asociada
 - Verificar que las vars de Cloudinary estén correctamente configuradas en Render (producción)
-- **Reescribir `documentacion.md`**: sigue describiendo la arquitectura vieja al 100% (NestJS, Socket.io, `MessagesGateway`, Render) — nunca se actualizó durante la migración a `backend-workers` (fases 1-6 de Cloudflare). Reescritura grande, no un parche puntual
 
 ---
 

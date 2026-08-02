@@ -28,6 +28,18 @@ Tabla viva — actualizar cada vez que se despliega o se detecta drift.
 
 ## Entradas
 
+## 2026-08-02 — Reescritura completa de `documentacion.md`
+
+- **Archivo(s):** `documentacion.md`
+- **Qué:** el documento describía la arquitectura vieja (NestJS, Socket.io, `MessagesGateway` único, Render/Vercel) al 100% — nunca se sincronizó durante las 6 fases de migración a Cloudflare. Reescrito de cabo a rabo tras investigar el código real (`apps/backend-workers/src` completo: los 4 Durable Objects, rutas Hono, `jose`/`bcryptjs`, `ws-protocol.ts`; `apps/frontend/src/lib/socket.ts` nuevo). Cambios de contenido más relevantes:
+  - Sección 11 (tiempo real) reescrita entera: ya no hay 1 Gateway, hay 3 tipos de WS (`/ws/channel/:id`, `/ws/dm/:id`, `/ws/session`) cada uno resuelto por un DO distinto; el WS abierto/cerrado ES el join/leave (no hay eventos `channel:join` etc. — confirmado por grep, cero call sites)
+  - Documentado que el modo Spatial/Phaser está **presente en código pero desconectado**: `GameScene.ts` es código muerto (nada lo importa), `PhaserGame.svelte` es un placeholder. Aclarado explícitamente que esto no es una regresión de la migración — el protocolo de movimiento nunca se implementó ni en el backend NestJS viejo (confirmado por comentario en el propio código)
+  - Tabla de fases de crecimiento (roadmap Redis) marcada como premisa obsoleta: los Durable Objects ya resuelven el problema que motivaba la fase 2 (Redis pub/sub) — no hay plan de fase 2/3 nuevo todavía
+  - Rate limits, endpoints REST y variables de entorno actualizados a los valores reales de `backend-workers`
+  - `src/lib/types/socket-events.types.ts` señalado como tipado muerto (declara eventos que ya no existen en runtime)
+- **Por qué:** pedido explícito del usuario tras una explicación conceptual de qué es un Cloudflare Worker — al mirar el código de cerca quedó claro que la doc llevaba toda la migración desincronizada (violación de la regla dura de metodología: cambio de arquitectura sin reflejo en `documentacion.md` = tarea no terminada).
+- **Despliegue:** N/A (solo documentación)
+
 ## 2026-08-02 — Borrado `apps/backend` (NestJS viejo), migraciones movidas a `backend-workers`
 
 - **Archivo(s):** `apps/backend` (borrado completo, 60 archivos), `apps/backend-workers/prisma/migrations/` (15 archivos, movidos), `README.md`
